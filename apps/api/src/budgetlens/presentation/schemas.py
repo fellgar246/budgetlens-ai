@@ -8,9 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from budgetlens.domain.budget_version import BudgetVersion
 from budgetlens.domain.dimensions import Account, CostCenter, Department
-from budgetlens.domain.enums import Permission, Role
+from budgetlens.domain.enums import Capability, Permission, Role
 from budgetlens.domain.organization import Membership, Organization, User
-from budgetlens.domain.permissions import permissions_for
+from budgetlens.domain.permissions import capabilities_for as domain_capabilities
+from budgetlens.domain.permissions import granted_permissions, persona_for
 
 
 class PageInfo(BaseModel):
@@ -57,10 +58,17 @@ class PatchOrganizationRequest(BaseModel):
 
 class Capabilities(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    can_view_dashboard: bool
     can_import: bool
+    can_publish_budget: bool
+    can_create_scenario: bool
+    can_use_copilot: bool
+    can_manage_members: bool
+    can_view_technical_metrics: bool
+    can_deploy_rollback: bool
+    can_export: bool
     can_manage_versions: bool
     can_manage_dimensions: bool
-    can_manage_members: bool
     can_manage_organization: bool
 
 
@@ -71,6 +79,8 @@ class MeResponse(BaseModel):
     display_name: str
     status: str
     auth_mode: str
+    role: str | None = None
+    persona: str | None = None
     capabilities: Capabilities
 
 
@@ -243,6 +253,7 @@ class DevIdentity(BaseModel):
     id: UUID
     email: str
     display_name: str
+    platform_role: str | None = None
     memberships: list[DevMembership]
 
 
@@ -333,23 +344,34 @@ def budget_version_response(version: BudgetVersion) -> BudgetVersionResponse:
     )
 
 
-def capabilities_for(role: Role | None) -> Capabilities:
-    granted: frozenset[Permission] = permissions_for(role) if role is not None else frozenset()
+def session_capabilities(user: User, role: Role | None) -> Capabilities:
+    granted = granted_permissions(role=role, platform_role=user.platform_role)
+    product = domain_capabilities(role=role, platform_role=user.platform_role)
     return Capabilities(
-        can_import=Permission.IMPORT in granted,
+        can_view_dashboard=Capability.VIEW_DASHBOARD in product,
+        can_import=Capability.IMPORT_ACTUALS in product,
+        can_publish_budget=Capability.PUBLISH_BUDGET in product,
+        can_create_scenario=Capability.CREATE_SCENARIO in product,
+        can_use_copilot=Capability.USE_COPILOT in product,
+        can_manage_members=Capability.MANAGE_MEMBERS in product,
+        can_view_technical_metrics=Capability.VIEW_TECHNICAL_METRICS in product,
+        can_deploy_rollback=Capability.DEPLOY_ROLLBACK in product,
+        can_export=Permission.EXPORT in granted,
         can_manage_versions=Permission.MANAGE_VERSIONS in granted,
         can_manage_dimensions=Permission.MANAGE_DIMENSIONS in granted,
-        can_manage_members=Permission.MANAGE_MEMBERS in granted,
         can_manage_organization=Permission.MANAGE_ORGANIZATION in granted,
     )
 
 
 def me_response(user: User, *, auth_mode: str, role: Role | None) -> MeResponse:
+    persona = persona_for(role=role, platform_role=user.platform_role)
     return MeResponse(
         id=user.id,
         email=user.email,
         display_name=user.display_name,
         status=user.status.value,
         auth_mode=auth_mode,
-        capabilities=capabilities_for(role),
+        role=role.value if role is not None else None,
+        persona=persona.value if persona is not None else None,
+        capabilities=session_capabilities(user, role),
     )

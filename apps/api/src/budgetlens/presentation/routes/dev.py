@@ -34,6 +34,7 @@ def list_dev_identities(settings: SettingsDep, session: DbSession) -> DevIdentit
                 id=user.id,
                 email=user.email,
                 display_name=user.display_name,
+                platform_role=user.platform_role.value if user.platform_role else None,
                 memberships=[
                     DevMembership(
                         organization_id=org.id,

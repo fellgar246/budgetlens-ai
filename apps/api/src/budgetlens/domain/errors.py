@@ -76,3 +76,8 @@ class PermissionDeniedError(DomainError):
 class UnauthenticatedError(DomainError):
     def __init__(self, message: str = "Debes iniciar sesión para continuar.") -> None:
         super().__init__(code="UNAUTHENTICATED", message=message, status_code=401)
+
+
+class PayloadTooLargeError(DomainError):
+    def __init__(self, message: str = "El archivo excede el tamaño permitido.") -> None:
+        super().__init__(code="FILE_TOO_LARGE", message=message, status_code=413)

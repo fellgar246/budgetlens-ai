@@ -33,6 +33,11 @@ def test_upgrade_from_empty_creates_domain_tables(migrated_database: str) -> Non
         "budget_versions",
         "audit_events",
         "idempotency_records",
+        "import_jobs",
+        "import_errors",
+        "financial_entries",
+        "scenarios",
+        "conversations",
     }.issubset(tables)
 
 

@@ -13,11 +13,16 @@ from budgetlens.adapters.persistence.repositories import (
     SqlOrganizationRepository,
     SqlUserRepository,
 )
+from budgetlens.adapters.storage import LocalObjectStorage, ObjectStorage
+from budgetlens.application.ai import ConversationService, DeterministicAIProvider
+from budgetlens.application.analytics import AnalyticsService
 from budgetlens.application.budget_versions import BudgetVersionService
 from budgetlens.application.context import TenantContext
 from budgetlens.application.dimensions import DimensionService
+from budgetlens.application.imports import ImportService
 from budgetlens.application.memberships import MembershipService
 from budgetlens.application.organizations import OrganizationService
+from budgetlens.application.scenarios import ScenarioService
 from budgetlens.config import Settings, get_settings
 from budgetlens.domain.errors import NotFoundError, PermissionDeniedError, UnauthenticatedError
 from budgetlens.domain.identities import Clock, IdFactory, SystemClock, Uuid4Factory
@@ -97,7 +102,7 @@ def get_tenant_context(
         raise PermissionDeniedError("Selecciona una organización válida.")
     membership = SqlMembershipRepository(session, organization_id).get_for_user(user.id)
     if membership is None or not membership.is_active():
-        raise PermissionDeniedError("No perteneces a esta organización.")
+        raise PermissionDeniedError()
     organization = SqlOrganizationRepository(session).get(organization_id)
     if organization is None:
         raise NotFoundError()
@@ -142,6 +147,56 @@ def get_budget_version_service(
     return BudgetVersionService(session, clock, ids)
 
 
+def get_object_storage(settings: Annotated[Settings, Depends(get_settings)]) -> ObjectStorage:
+    return LocalObjectStorage(settings.local_storage_path)
+
+
+def get_import_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    clock: Annotated[Clock, Depends(get_clock)],
+    ids: Annotated[IdFactory, Depends(get_ids)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ImportService:
+    return ImportService(session, clock, ids, storage, settings)
+
+
+def get_analytics_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    clock: Annotated[Clock, Depends(get_clock)],
+    ids: Annotated[IdFactory, Depends(get_ids)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+) -> AnalyticsService:
+    return AnalyticsService(session, clock, ids, storage)
+
+
+def get_scenario_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    clock: Annotated[Clock, Depends(get_clock)],
+    ids: Annotated[IdFactory, Depends(get_ids)],
+) -> ScenarioService:
+    return ScenarioService(session, clock, ids)
+
+
+def get_conversation_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    clock: Annotated[Clock, Depends(get_clock)],
+    ids: Annotated[IdFactory, Depends(get_ids)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    analytics: Annotated[AnalyticsService, Depends(get_analytics_service)],
+    scenarios: Annotated[ScenarioService, Depends(get_scenario_service)],
+) -> ConversationService:
+    return ConversationService(
+        session,
+        clock,
+        ids,
+        settings,
+        analytics,
+        scenarios,
+        DeterministicAIProvider(),
+    )
+
+
 DbSession = Annotated[Session, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentTenant = Annotated[TenantContext, Depends(get_tenant_context)]
@@ -151,3 +206,7 @@ OrgServiceDep = Annotated[OrganizationService, Depends(get_organization_service)
 MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_service)]
 DimensionServiceDep = Annotated[DimensionService, Depends(get_dimension_service)]
 BudgetVersionServiceDep = Annotated[BudgetVersionService, Depends(get_budget_version_service)]
+ImportServiceDep = Annotated[ImportService, Depends(get_import_service)]
+AnalyticsServiceDep = Annotated[AnalyticsService, Depends(get_analytics_service)]
+ScenarioServiceDep = Annotated[ScenarioService, Depends(get_scenario_service)]
+ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]

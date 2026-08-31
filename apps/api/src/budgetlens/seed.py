@@ -23,6 +23,7 @@ from budgetlens.dev_identities import (
     BETA_ANALYST_ID,
     BETA_ORG_ID,
     BOTH_USER_ID,
+    OPERATOR_ID,
 )
 from budgetlens.domain.dimensions import (
     Account,
@@ -35,6 +36,7 @@ from budgetlens.domain.enums import (
     DimensionStatus,
     MembershipStatus,
     OrganizationStatus,
+    PlatformRole,
     Role,
     UserStatus,
 )
@@ -143,6 +145,19 @@ def run_seed() -> None:
                 updated_at=now,
             ),
         )
+        _upsert_user(
+            users,
+            User(
+                id=OPERATOR_ID,
+                email="oli.operator@platform.local",
+                display_name="Oli Operator",
+                status=UserStatus.ACTIVE,
+                external_subject=None,
+                created_at=now,
+                updated_at=now,
+                platform_role=PlatformRole.OPERATOR,
+            ),
+        )
 
         alpha = Organization(
             id=ALPHA_ORG_ID,
@@ -207,6 +222,7 @@ def _upsert_user(users: SqlUserRepository, user: User) -> None:
             external_subject=existing.external_subject,
             created_at=existing.created_at,
             updated_at=user.updated_at,
+            platform_role=user.platform_role,
         )
     )
 
@@ -327,6 +343,46 @@ def _seed_org(
                 updated_at=now,
             )
         )
+    extra_departments = (
+        ("SALES", "Sales"),
+        ("PEO", "People"),
+    )
+    for code, name in extra_departments:
+        if departments.get_by_code(code) is None:
+            departments.add(
+                Department(
+                    id=_stable_id(f"dept:{organization.slug}:{code}"),
+                    organization_id=organization.id,
+                    code=code,
+                    name=name,
+                    status=DimensionStatus.ACTIVE,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+    extra_accounts = (
+        ("4100", "Revenue", AccountType.REVENUE),
+        ("6110", "Maintenance", AccountType.EXPENSE),
+        ("6120", "Contractors", AccountType.EXPENSE),
+        ("6200", "Payroll", AccountType.EXPENSE),
+        ("6300", "Emergency", AccountType.EXPENSE),
+        ("6400", "Unused", AccountType.EXPENSE),
+    )
+    for code, name, account_type in extra_accounts:
+        if accounts.get_by_code(code) is None:
+            accounts.add(
+                Account(
+                    id=_stable_id(f"acct:{organization.slug}:{code}"),
+                    organization_id=organization.id,
+                    code=code,
+                    name=name,
+                    account_type=account_type,
+                    parent_id=None,
+                    status=DimensionStatus.ACTIVE,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
     if cost_centers.get_by_code("CC-GEN") is None:
         cost_centers.add(
             CostCenter(

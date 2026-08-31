@@ -23,6 +23,7 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { personaLabel } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
 import { readDevOrganizationId, readDevUserId } from "@/lib/dev-session";
 import { apiBaseUrl } from "@/lib/env";
@@ -156,8 +157,7 @@ export function CatalogPage() {
       {state.kind === "ready" ? (
         <div className="mt-8 space-y-8">
           <p className="text-sm text-secondary">
-            {state.me.display_name} · {copy.roleLabel}:{" "}
-            {state.me.capabilities.can_manage_dimensions ? "analyst/admin" : "viewer"} ·{" "}
+            {state.me.display_name} · {copy.roleLabel}: {personaLabel(state.me.persona)} ·{" "}
             {copy.currencyLabel} en totales de la organización
           </p>
           <CatalogTable

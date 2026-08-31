@@ -88,9 +88,11 @@ The browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`). 
 
 ## Local identity
 
-`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, and admin users. The web header lists those identities. Publish, activate, and archive require `Idempotency-Key`.
+`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. The web header lists those identities. Publish, activate, and archive require `Idempotency-Key`.
 
-The catalog page at `/catalogo` is a local harness for dimensions and budget versions. Amounts stay as four-decimal values; the API never returns infinity or `NaN` for variance.
+`GET /me` returns the active role, persona, and capability matrix. Changing organization clears incompatible filters and cached view state. A forged `organization_id` in the URL, payload, or `X-Organization-Id` header returns `403` or `404` without saying whether the other tenant exists. The operator can open `/estado` and never receives financial rows by default.
+
+The web shell follows the product journeys: summary, variances, imports, scenarios, copilot, settings, and operation. Those views load live tenant data when a local session is selected; empty, loading, and error states stay visible when there is nothing to show. `/catalogo` remains a harness for dimensions and budget versions. Amounts stay as four-decimal values; the API never returns infinity or `NaN` for variance.
 
 If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env`.
 

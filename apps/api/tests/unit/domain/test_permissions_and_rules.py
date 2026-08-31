@@ -10,7 +10,15 @@ from budgetlens.domain.dimensions import (
     assert_account_hierarchy,
     resolve_cost_center_code,
 )
-from budgetlens.domain.enums import DimensionStatus, Permission, Role, ScenarioType
+from budgetlens.domain.enums import (
+    Capability,
+    DimensionStatus,
+    Permission,
+    Persona,
+    PlatformRole,
+    Role,
+    ScenarioType,
+)
 from budgetlens.domain.errors import ConflictError, PermissionDeniedError, ValidationError
 from budgetlens.domain.evidence import (
     Evidence,
@@ -20,7 +28,14 @@ from budgetlens.domain.evidence import (
 )
 from budgetlens.domain.idempotency import import_idempotency_fingerprint, sha256_hex
 from budgetlens.domain.money import Currency, MoneyAmount
-from budgetlens.domain.permissions import can_create_missing_dimensions, require_permission
+from budgetlens.domain.permissions import (
+    can_create_missing_dimensions,
+    capabilities_for,
+    capabilities_for_persona,
+    persona_for,
+    require_capability,
+    require_permission,
+)
 
 
 def test_viewer_cannot_create() -> None:
@@ -36,6 +51,65 @@ def test_analyst_and_admin_follow_matrix() -> None:
     with pytest.raises(PermissionDeniedError):
         require_permission(Role.ANALYST, Permission.MANAGE_MEMBERS)
     require_permission(Role.ADMIN, Permission.MANAGE_MEMBERS)
+
+
+def test_persona_capability_matrix() -> None:
+    owner = capabilities_for(role=Role.VIEWER)
+    analyst = capabilities_for(role=Role.ANALYST)
+    admin = capabilities_for(role=Role.ADMIN)
+    operator = capabilities_for(role=None, platform_role=PlatformRole.OPERATOR)
+
+    assert persona_for(role=Role.VIEWER) is Persona.BUDGET_OWNER
+    assert persona_for(role=Role.ANALYST) is Persona.FPNA_ANALYST
+    assert persona_for(role=Role.ADMIN) is Persona.ORGANIZATION_ADMIN
+    assert persona_for(role=None, platform_role=PlatformRole.OPERATOR) is Persona.PLATFORM_OPERATOR
+
+    assert Capability.VIEW_DASHBOARD in owner
+    assert Capability.USE_COPILOT in owner
+    assert Capability.IMPORT_ACTUALS not in owner
+    assert Capability.PUBLISH_BUDGET not in owner
+    assert Capability.CREATE_SCENARIO not in owner
+    assert Capability.MANAGE_MEMBERS not in owner
+    assert Capability.VIEW_TECHNICAL_METRICS not in owner
+
+    assert {
+        Capability.VIEW_DASHBOARD,
+        Capability.IMPORT_ACTUALS,
+        Capability.PUBLISH_BUDGET,
+        Capability.CREATE_SCENARIO,
+        Capability.USE_COPILOT,
+    }.issubset(analyst)
+    assert Capability.MANAGE_MEMBERS not in analyst
+
+    assert Capability.MANAGE_MEMBERS in admin
+    assert Capability.VIEW_TECHNICAL_METRICS not in admin
+
+    assert Capability.VIEW_DASHBOARD not in operator
+    assert Capability.USE_COPILOT not in operator
+    assert Capability.VIEW_TECHNICAL_METRICS in operator
+    assert Capability.DEPLOY_ROLLBACK in operator
+
+
+def test_owner_scenario_capability_is_optional() -> None:
+    assert Capability.CREATE_SCENARIO not in capabilities_for_persona(Persona.BUDGET_OWNER)
+    assert Capability.CREATE_SCENARIO in capabilities_for_persona(
+        Persona.BUDGET_OWNER,
+        owner_can_create_scenarios=True,
+    )
+
+
+def test_operator_cannot_use_financial_capabilities() -> None:
+    with pytest.raises(PermissionDeniedError):
+        require_capability(
+            role=None,
+            platform_role=PlatformRole.OPERATOR,
+            capability=Capability.VIEW_DASHBOARD,
+        )
+    require_capability(
+        role=None,
+        platform_role=PlatformRole.OPERATOR,
+        capability=Capability.VIEW_TECHNICAL_METRICS,
+    )
 
 
 def test_missing_dimensions_require_admin_flag() -> None:

@@ -9,7 +9,7 @@ import { HealthCard } from "./HealthCard";
 import { loadHealth } from "./loadHealth";
 import type { HealthViewState } from "./types";
 
-export function StatusPage() {
+export function StatusPage({ embedded = false }: { embedded?: boolean }) {
   const [state, setState] = useState<HealthViewState>({ kind: "loading" });
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
@@ -37,11 +37,17 @@ export function StatusPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
-      <p className="text-sm font-medium text-secondary">{copy.appName}</p>
-      <h1 className="mt-2 text-[28px] font-semibold leading-9 text-primary">{copy.statusTitle}</h1>
-      <p className="mt-2 max-w-2xl text-base text-secondary">{copy.statusDescription}</p>
-      <div className="mt-8">
+    <div className={embedded ? "w-full" : "mx-auto w-full max-w-3xl"}>
+      {embedded ? null : (
+        <>
+          <p className="text-sm font-medium text-secondary">{copy.appName}</p>
+          <h1 className="mt-2 text-[28px] font-semibold leading-9 text-primary">
+            {copy.statusTitle}
+          </h1>
+          <p className="mt-2 max-w-2xl text-base text-secondary">{copy.statusDescription}</p>
+        </>
+      )}
+      <div className={embedded ? "" : "mt-8"}>
         <HealthCard
           state={state}
           onRetry={() => {

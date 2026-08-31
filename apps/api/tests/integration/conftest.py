@@ -26,6 +26,7 @@ def migrated_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("AUTH_MODE", "dev")
     monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("LOCAL_STORAGE_PATH", str(API_ROOT / "var" / "test-storage" / name))
     reset_settings_cache()
     reset_engine()
     config = Config(str(API_ROOT / "alembic.ini"))

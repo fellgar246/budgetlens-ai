@@ -14,8 +14,19 @@ from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
 from budgetlens.domain.dimensions import build_unassigned_cost_center
-from budgetlens.domain.enums import MembershipStatus, OrganizationStatus, Permission, Role
-from budgetlens.domain.errors import ConflictError, NotFoundError, UnauthenticatedError
+from budgetlens.domain.enums import (
+    MembershipStatus,
+    OrganizationStatus,
+    Permission,
+    PlatformRole,
+    Role,
+)
+from budgetlens.domain.errors import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthenticatedError,
+)
 from budgetlens.domain.fiscal import validate_fiscal_year_start_month
 from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.domain.money import Currency
@@ -61,6 +72,8 @@ class OrganizationService:
         fiscal_year_start_month: int,
         trace_id: str,
     ) -> Organization:
+        if user.platform_role is PlatformRole.OPERATOR:
+            raise PermissionDeniedError()
         now = self._clock.now()
         organization = Organization(
             id=self._ids.new_id(),

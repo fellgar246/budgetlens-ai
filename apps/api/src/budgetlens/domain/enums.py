@@ -57,6 +57,28 @@ class Role(StrEnum):
     ADMIN = "admin"
 
 
+class PlatformRole(StrEnum):
+    OPERATOR = "operator"
+
+
+class Persona(StrEnum):
+    BUDGET_OWNER = "budget_owner"
+    FPNA_ANALYST = "fpna_analyst"
+    ORGANIZATION_ADMIN = "organization_admin"
+    PLATFORM_OPERATOR = "platform_operator"
+
+
+class Capability(StrEnum):
+    VIEW_DASHBOARD = "view_dashboard"
+    IMPORT_ACTUALS = "import_actuals"
+    PUBLISH_BUDGET = "publish_budget"
+    CREATE_SCENARIO = "create_scenario"
+    USE_COPILOT = "use_copilot"
+    MANAGE_MEMBERS = "manage_members"
+    VIEW_TECHNICAL_METRICS = "view_technical_metrics"
+    DEPLOY_ROLLBACK = "deploy_rollback"
+
+
 class ScenarioOperation(StrEnum):
     PERCENTAGE_CHANGE = "percentage_change"
     ABSOLUTE_CHANGE = "absolute_change"
@@ -65,6 +87,73 @@ class ScenarioOperation(StrEnum):
 class ScenarioType(StrEnum):
     BUDGET = "budget"
     ACTUAL = "actual"
+
+
+class ImportJobStatus(StrEnum):
+    CREATED = "created"
+    UPLOADED = "uploaded"
+    READY = "ready"
+    INVALID = "invalid"
+    APPLIED = "applied"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class ImportErrorSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class ExportJobStatus(StrEnum):
+    READY = "ready"
+    EXPIRED = "expired"
+
+
+class ExportType(StrEnum):
+    VARIANCE_BREAKDOWN = "variance_breakdown"
+    IMPORT_ERRORS = "import_errors"
+
+
+class ScenarioStatus(StrEnum):
+    DRAFT = "draft"
+    SAVED = "saved"
+    ARCHIVED = "archived"
+
+
+class AnalyticsGroupBy(StrEnum):
+    PERIOD = "period"
+    ACCOUNT = "account"
+    DEPARTMENT = "department"
+    COST_CENTER = "cost_center"
+
+
+class AnalyticsSort(StrEnum):
+    VARIANCE_AMOUNT = "variance_amount"
+    ABSOLUTE_VARIANCE = "absolute_variance"
+    BUDGET_AMOUNT = "budget_amount"
+    ACTUAL_AMOUNT = "actual_amount"
+
+
+class SortDirection(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
+
+
+class MessageRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class AiRunStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    LIMITED = "limited"
+
+
+class ToolExecutionStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    REJECTED = "rejected"
+    FAILED = "failed"
 
 
 class Permission(StrEnum):
@@ -77,6 +166,8 @@ class Permission(StrEnum):
     MANAGE_DIMENSIONS = "manage_dimensions"
     MANAGE_MEMBERS = "manage_members"
     MANAGE_ORGANIZATION = "manage_organization"
+    VIEW_TECHNICAL_METRICS = "view_technical_metrics"
+    DEPLOY_ROLLBACK = "deploy_rollback"
 
 
 PNL_ACCOUNT_TYPES: frozenset[AccountType] = frozenset({AccountType.REVENUE, AccountType.EXPENSE})

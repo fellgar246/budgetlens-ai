@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from budgetlens.domain.enums import ScenarioOperation
-from budgetlens.domain.errors import ValidationError
+from budgetlens.domain.enums import ScenarioOperation, ScenarioStatus, ScenarioType
+from budgetlens.domain.errors import ConflictError, ValidationError
 from budgetlens.domain.money import MoneyAmount
+from budgetlens.domain.organization import normalize_name
 from budgetlens.domain.variance import parse_ratio
 
 
@@ -93,3 +94,56 @@ def apply_scenario_rules(
         breakdown=tuple(steps),
         created_at=created_at,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    id: UUID
+    organization_id: UUID
+    created_by: UUID
+    name: str
+    baseline_type: ScenarioType
+    budget_version_id: UUID | None
+    fiscal_year: int
+    status: ScenarioStatus
+    created_at: datetime
+    updated_at: datetime
+    rules: tuple[ScenarioRule, ...]
+
+    def with_draft_update(
+        self,
+        *,
+        now: datetime,
+        name: str | None = None,
+        rules: Sequence[ScenarioRule] | None = None,
+    ) -> Scenario:
+        if self.status is ScenarioStatus.ARCHIVED:
+            raise ConflictError("SCENARIO_ARCHIVED", "Un escenario archivado no se puede editar.")
+        return replace(
+            self,
+            name=normalize_name(name, field="name", max_length=160)
+            if name is not None
+            else self.name,
+            rules=tuple(rules) if rules is not None else self.rules,
+            status=ScenarioStatus.SAVED,
+            updated_at=now,
+        )
+
+    def archive(self, *, now: datetime) -> Scenario:
+        if self.status is ScenarioStatus.ARCHIVED:
+            return self
+        return replace(self, status=ScenarioStatus.ARCHIVED, updated_at=now)
+
+
+def rule_applies(
+    rule: ScenarioRule, *, period: date, account_id: UUID, department_id: UUID, cost_center_id: UUID
+) -> bool:
+    if period < rule.scope.period_from or period > rule.scope.period_to:
+        return False
+    if rule.scope.account_ids and account_id not in rule.scope.account_ids:
+        return False
+    if rule.scope.department_ids and department_id not in rule.scope.department_ids:
+        return False
+    if rule.scope.cost_center_ids and cost_center_id not in rule.scope.cost_center_ids:
+        return False
+    return True

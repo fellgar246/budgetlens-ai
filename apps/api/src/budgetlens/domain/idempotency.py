@@ -23,14 +23,16 @@ def import_idempotency_fingerprint(
     organization_id: UUID,
     scenario_type: ScenarioType,
     budget_version_id: UUID | None,
+    replacement_scope: str = "append",
 ) -> str:
     payload = canonical_json(
         {
+            "budget_version_id": str(budget_version_id) if budget_version_id else "",
             "file_sha256": file_sha256.lower(),
             "mapping": mapping,
             "organization_id": str(organization_id),
+            "replacement_scope": replacement_scope,
             "scenario_type": scenario_type.value,
-            "budget_version_id": str(budget_version_id) if budget_version_id else None,
         }
     )
     return sha256_hex(payload.encode("utf-8"))

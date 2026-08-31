@@ -5,7 +5,13 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from uuid import UUID
 
-from budgetlens.domain.enums import MembershipStatus, OrganizationStatus, Role, UserStatus
+from budgetlens.domain.enums import (
+    MembershipStatus,
+    OrganizationStatus,
+    PlatformRole,
+    Role,
+    UserStatus,
+)
 from budgetlens.domain.errors import ConflictError, ValidationError
 from budgetlens.domain.fiscal import FiscalPeriod, validate_fiscal_year_start_month
 from budgetlens.domain.money import Currency
@@ -116,6 +122,7 @@ class User:
     external_subject: str | None
     created_at: datetime
     updated_at: datetime
+    platform_role: PlatformRole | None = None
 
     def assert_active(self) -> None:
         if self.status is UserStatus.DISABLED:

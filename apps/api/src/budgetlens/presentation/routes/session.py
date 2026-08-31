@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Request
 
 from budgetlens.adapters.persistence.repositories import SqlMembershipRepository
 from budgetlens.domain.enums import OrganizationStatus
-from budgetlens.domain.errors import NotFoundError, PermissionDeniedError
+from budgetlens.domain.errors import NotFoundError
 from budgetlens.presentation.deps import (
     CurrentTenant,
     CurrentUser,
@@ -98,7 +98,7 @@ def get_organization(
     service: OrgServiceDep,
 ) -> OrganizationResponse:
     if organization_id != context.organization_id:
-        raise PermissionDeniedError("La organización del encabezado no coincide.")
+        raise NotFoundError()
     organization = service.get(context, organization_id)
     return organization_response(organization, role=context.role.value)
 

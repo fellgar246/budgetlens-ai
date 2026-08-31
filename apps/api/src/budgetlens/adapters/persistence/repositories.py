@@ -555,6 +555,55 @@ class SqlAuditRepository:
         ).all()
         return [audit_from_row(row) for row in rows]
 
+    def list_page(
+        self,
+        *,
+        organization_id: UUID,
+        cursor: str | None,
+        limit: int,
+        action: str | None = None,
+        actor_id: UUID | None = None,
+        resource_type: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> Page[AuditEvent]:
+        stmt = select(AuditEventRow).where(AuditEventRow.organization_id == organization_id)
+        if action:
+            stmt = stmt.where(AuditEventRow.action == action)
+        if actor_id:
+            stmt = stmt.where(AuditEventRow.actor_id == actor_id)
+        if resource_type:
+            stmt = stmt.where(AuditEventRow.resource_type == resource_type)
+        if date_from:
+            stmt = stmt.where(AuditEventRow.created_at >= date_from)
+        if date_to:
+            stmt = stmt.where(AuditEventRow.created_at <= date_to)
+        stmt = stmt.order_by(AuditEventRow.created_at.desc(), AuditEventRow.id.desc())
+        parsed = decode_cursor(cursor)
+        if parsed is not None:
+            created_at = datetime.fromisoformat(parsed["created_at"])
+            last_id = UUID(parsed["id"])
+            stmt = stmt.where(
+                or_(
+                    AuditEventRow.created_at < created_at,
+                    and_(AuditEventRow.created_at == created_at, AuditEventRow.id < last_id),
+                )
+            )
+        rows = list(self._session.scalars(stmt.limit(limit + 1)).all())
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+        next_cursor = None
+        if has_more and page_rows:
+            last = page_rows[-1]
+            next_cursor = encode_cursor(
+                {"created_at": last.created_at.isoformat(), "id": str(last.id)}
+            )
+        return Page(
+            items=[audit_from_row(row) for row in page_rows],
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
+
 
 class SqlIdempotencyRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
