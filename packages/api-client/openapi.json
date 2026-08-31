@@ -5068,6 +5068,55 @@
         }
       }
     },
+    "/api/v1/ops/metrics": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Ops Metrics",
+        "operationId": "get_ops_metrics",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsMetricsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dev/identities": {
       "get": {
         "tags": [
@@ -6698,6 +6747,64 @@
           "updated_at"
         ],
         "title": "MembershipResponse"
+      },
+      "OpsMetricsResponse": {
+        "properties": {
+          "requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Requests"
+          },
+          "active_requests": {
+            "type": "integer",
+            "title": "Active Requests"
+          },
+          "db_pool": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Db Pool"
+          },
+          "db_rollbacks": {
+            "type": "integer",
+            "title": "Db Rollbacks"
+          },
+          "jobs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Jobs"
+          },
+          "ai": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Ai"
+          },
+          "rate_limited": {
+            "type": "integer",
+            "title": "Rate Limited"
+          },
+          "cost_estimate_configured": {
+            "type": "boolean",
+            "title": "Cost Estimate Configured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requests",
+          "active_requests",
+          "db_pool",
+          "db_rollbacks",
+          "jobs",
+          "ai",
+          "rate_limited",
+          "cost_estimate_configured"
+        ],
+        "title": "OpsMetricsResponse"
       },
       "OrganizationListResponse": {
         "properties": {

@@ -7,8 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from budgetlens.adapters.db import reset_engine
+from budgetlens.application.rate_limit import limiter
 from budgetlens.config import reset_settings_cache
+from budgetlens.observability import reset_metrics
 from budgetlens.presentation.app import create_app
+from budgetlens.runtime import reset_runtime
 
 DEFAULT_DATABASE_URL = (
     "postgresql+psycopg://budgetlens:budgetlens_local_only@127.0.0.1:5433/budgetlens"
@@ -28,9 +31,15 @@ def env_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("BUILD_TIME", "2026-08-31T00:00:00Z")
     reset_settings_cache()
     reset_engine()
+    reset_metrics()
+    reset_runtime()
+    limiter().reset()
     yield
     reset_settings_cache()
     reset_engine()
+    reset_metrics()
+    reset_runtime()
+    limiter().reset()
 
 
 @pytest.fixture

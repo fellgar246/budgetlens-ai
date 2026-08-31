@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   cancelImport,
   commitImport,
@@ -19,6 +19,7 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -47,7 +48,7 @@ export function ImportsPage() {
     functional_currency: "MXN",
     fiscal_year_start_month: "1",
   });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | string | null>(null);
   const [importType, setImportType] = useState<"budget" | "actual">("actual");
   const [versionId, setVersionId] = useState("");
   const [job, setJob] = useState<ImportJob | null>(null);
@@ -55,6 +56,7 @@ export function ImportsPage() {
   const [errors, setErrors] = useState<ImportErrorItem[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [working, setWorking] = useState(false);
   const hasUser = Boolean(userId);
   const canImport = capabilities.can_import;
   const commitEnabled = job?.status === "ready" && job.error_count === 0 && canImport;
@@ -65,6 +67,15 @@ export function ImportsPage() {
       : hasUser;
   const auth = useMemo(() => ({ token: userId, organizationId }), [organizationId, userId]);
   const draftVersions = catalog.versions.filter((item) => item.status === "draft");
+
+  useEffect(() => {
+    if (!busy) {
+      setWorking(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setWorking(true), 1000);
+    return () => window.clearTimeout(timer);
+  }, [busy]);
 
   return (
     <CapabilityGate allowed={allowed} hasSession={hasUser} needsSession>
@@ -92,7 +103,7 @@ export function ImportsPage() {
               },
             )
               .then((result) => setOrganizationId(result.data.id))
-              .catch((err: Error) => setError(err.message));
+              .catch((err: Error) => setError(err));
           }}
         >
           <h2 className="md:col-span-2 text-lg font-semibold text-primary">
@@ -136,7 +147,9 @@ export function ImportsPage() {
               setForm((current) => ({ ...current, fiscal_year_start_month: event.target.value }))
             }
           />
-          {error ? <p className="md:col-span-2 text-sm text-danger">{error}</p> : null}
+          <div className="md:col-span-2">
+            <ErrorBanner error={error} />
+          </div>
           <Button type="submit">{copy.createOrganization}</Button>
         </form>
       ) : (
@@ -219,7 +232,7 @@ export function ImportsPage() {
                     setPreview(nextPreview.data);
                     setMapping(nextPreview.data.proposed_mapping);
                   })
-                  .catch((err: Error) => setError(err.message))
+                  .catch((err: Error) => setError(err))
                   .finally(() => setBusy(false));
               }}
             />
@@ -268,7 +281,7 @@ export function ImportsPage() {
                         setPreview(nextPreview.data);
                         setErrors(nextErrors.data.items);
                       })
-                      .catch((err: Error) => setError(err.message))
+                      .catch((err: Error) => setError(err))
                       .finally(() => setBusy(false));
                   }}
                 >
@@ -331,7 +344,12 @@ export function ImportsPage() {
               ) : null}
             </div>
           ) : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {working ? (
+            <p className="text-sm text-secondary" aria-live="polite">
+              {copy.importWorking}
+            </p>
+          ) : null}
+          <ErrorBanner error={error} />
           <div className="flex flex-wrap gap-2">
             <Button
               disabled={!commitEnabled || busy}
@@ -341,7 +359,7 @@ export function ImportsPage() {
                 setBusy(true);
                 void commitImport(apiBaseUrl(), auth, job.id)
                   .then((result) => setJob(result.data))
-                  .catch((err: Error) => setError(err.message))
+                  .catch((err: Error) => setError(err))
                   .finally(() => setBusy(false));
               }}
             >

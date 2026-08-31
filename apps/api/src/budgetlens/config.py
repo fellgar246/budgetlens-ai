@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
     cors_origins: str = "http://localhost:3000"
     db_ready_timeout_seconds: float = Field(default=2.0, gt=0)
+    job_timeout_seconds: int = Field(default=600, ge=1)
+    original_file_retention_days: int = Field(default=90, ge=1)
+    rate_limit_upload_per_minute: int = Field(default=20, ge=1)
+    rate_limit_export_per_minute: int = Field(default=20, ge=1)
+    rate_limit_ai_per_minute: int = Field(default=10, ge=1)
+    ai_input_unit_cost_micros: int = Field(default=0, ge=0)
+    ai_output_unit_cost_micros: int = Field(default=0, ge=0)
 
     @field_validator("database_url")
     @classmethod

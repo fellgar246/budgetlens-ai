@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import UUID, uuid5
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from budgetlens.domain.errors import DomainError
+from budgetlens.application.audit import record_access_denied
+from budgetlens.domain.errors import DomainError, PermissionDeniedError
 from budgetlens.presentation.middleware import TRACE_HEADER
 
 logger = logging.getLogger("budgetlens.errors")
+_DENIED_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 
 def _trace_id(request: Request) -> str:
@@ -63,6 +66,28 @@ async def domain_handler(request: Request, exc: Exception) -> JSONResponse:
             retryable=True,
         )
     )
+    if isinstance(exc, PermissionDeniedError):
+        actor_raw = getattr(request.state, "user_id", None)
+        org_raw = request.headers.get("X-Organization-Id")
+        actor_id = None
+        organization_id = None
+        if isinstance(actor_raw, str):
+            try:
+                actor_id = UUID(actor_raw)
+            except ValueError:
+                actor_id = None
+        if org_raw:
+            try:
+                organization_id = UUID(org_raw)
+            except ValueError:
+                organization_id = None
+        record_access_denied(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource_id=uuid5(_DENIED_NAMESPACE, request.url.path),
+            trace_id=trace_id,
+            metadata={"route": request.url.path, "method": request.method},
+        )
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(

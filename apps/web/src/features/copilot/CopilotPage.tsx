@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createConversation,
   sendConversationMessage,
@@ -8,6 +8,7 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCatalogOptions } from "@/features/analysis/useCatalogOptions";
@@ -23,9 +24,10 @@ export function CopilotPage() {
   const catalog = useCatalogOptions();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<CopilotMessage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<"hidden" | "working" | "long">("hidden");
   const hasSession = Boolean(userId && organizationId);
   const query = queryFromFilters(
     filters,
@@ -43,6 +45,19 @@ export function CopilotPage() {
         currency: selectedOrganization?.functional_currency,
       }
     : {};
+  useEffect(() => {
+    if (!busy) {
+      setProgress("hidden");
+      return;
+    }
+    const first = window.setTimeout(() => setProgress("working"), 1000);
+    const second = window.setTimeout(() => setProgress("long"), 10000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(second);
+    };
+  }, [busy]);
+
   const contextChips = [
     selectedOrganization
       ? `${copy.currencyLabel}: ${selectedOrganization.functional_currency}`
@@ -104,14 +119,24 @@ export function CopilotPage() {
                   setAnswer(result.data);
                   setEvidenceOpen(false);
                 })
-                .catch((err: Error) => setError(err.message))
+                .catch((err: Error) => setError(err))
                 .finally(() => setBusy(false));
             }}
           >
             {copy.askCopilot}
           </Button>
         </div>
-        {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+        {progress === "working" ? (
+          <p className="mt-4 text-sm text-secondary" aria-live="polite">
+            {copy.copilotWorking}
+          </p>
+        ) : null}
+        {progress === "long" ? (
+          <p className="mt-4 text-sm text-secondary" aria-live="polite">
+            {copy.copilotStillWorking}
+          </p>
+        ) : null}
+        <ErrorBanner error={error} />
         {answer ? (
           <div className="mt-6 space-y-3">
             <p className="text-sm text-primary">{answer.answer}</p>

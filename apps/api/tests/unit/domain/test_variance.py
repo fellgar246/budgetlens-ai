@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from budgetlens.domain.enums import AccountType, Favorability, VarianceState
 from budgetlens.domain.money import MoneyAmount
-from budgetlens.domain.variance import compute_variance, favorability_for_account_types
+from budgetlens.domain.variance import (
+    compute_variance,
+    favorability_for_account_types,
+    is_pnl_account_type,
+)
 
 
 def test_positive_budget_variance_amount() -> None:
@@ -116,3 +120,9 @@ def test_mixed_account_types_do_not_sum_row_labels() -> None:
     assert favorability_for_account_types(
         MoneyAmount("0"), [AccountType.REVENUE, AccountType.EXPENSE]
     ) is (Favorability.NEUTRAL)
+    assert (
+        favorability_for_account_types(MoneyAmount("20"), [AccountType.EXPENSE])
+        is Favorability.UNFAVORABLE
+    )
+    assert is_pnl_account_type(AccountType.EXPENSE) is True
+    assert is_pnl_account_type(AccountType.ASSET) is False

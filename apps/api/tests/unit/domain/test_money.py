@@ -53,3 +53,44 @@ def test_foreign_currency_is_rejected_by_row() -> None:
     with pytest.raises(ValidationError) as exc:
         reject_foreign_currency(row_currency="USD", functional=Currency("MXN"))
     assert exc.value.code == "CURRENCY_MISMATCH"
+
+
+def test_money_parses_int_and_rejects_empty_or_unknown_types() -> None:
+    assert MoneyAmount(12).as_text() == "12.0000"
+    with pytest.raises(ValidationError) as empty:
+        MoneyAmount("   ")
+    assert empty.value.code == "INVALID_AMOUNT"
+    with pytest.raises(ValidationError) as invalid:
+        MoneyAmount("12,00")
+    assert invalid.value.code == "INVALID_AMOUNT"
+    with pytest.raises(TypeError, match="unsupported"):
+        MoneyAmount(None)  # type: ignore[arg-type]
+
+
+def test_money_arithmetic_and_comparisons() -> None:
+    left = MoneyAmount("-2.5")
+    right = MoneyAmount("1.5")
+    assert left.is_negative()
+    assert (left + right).as_text() == "-1.0000"
+    assert (right - left).as_text() == "4.0000"
+    assert abs(left).as_text() == "2.5000"
+    assert left.apply_percentage("0.1000").as_text() == "-2.7500"
+    assert left < right
+    assert left != right
+    assert hash(left) == hash(MoneyAmount("-2.5000"))
+    assert left.__add__(1) is NotImplemented
+    assert left.__sub__(1) is NotImplemented
+    assert left.__eq__(1) is NotImplemented
+    assert left.__lt__(1) is NotImplemented
+    assert "MoneyAmount" in repr(left)
+
+
+def test_currency_matches_and_equality() -> None:
+    mxn = Currency("MXN")
+    assert mxn.matches("mxn")
+    assert mxn.matches(Currency("MXN"))
+    assert mxn == Currency("MXN")
+    assert mxn.__eq__("MXN") is NotImplemented
+    assert hash(mxn) == hash(Currency("mxn"))
+    assert str(mxn) == "MXN"
+    assert "Currency" in repr(mxn)

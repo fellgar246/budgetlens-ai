@@ -27,6 +27,7 @@ from budgetlens.config import Settings, get_settings
 from budgetlens.domain.errors import NotFoundError, PermissionDeniedError, UnauthenticatedError
 from budgetlens.domain.identities import Clock, IdFactory, SystemClock, Uuid4Factory
 from budgetlens.domain.organization import User
+from budgetlens.observability import metrics_registry
 
 
 def get_db_session() -> Generator[Session, None, None]:
@@ -36,6 +37,7 @@ def get_db_session() -> Generator[Session, None, None]:
         session.commit()
     except Exception:
         session.rollback()
+        metrics_registry().record_rollback()
         raise
     finally:
         session.close()

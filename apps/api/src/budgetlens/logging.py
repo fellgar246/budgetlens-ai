@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from budgetlens.config import Settings
+from budgetlens.observability import sanitize_log_payload
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -18,12 +19,19 @@ class JsonLogFormatter(logging.Formatter):
             "environment": getattr(record, "environment", None),
             "event": getattr(record, "event", record.getMessage()),
             "trace_id": getattr(record, "trace_id", None),
+            "request_id": getattr(record, "request_id", None),
+            "organization_id_hash": getattr(record, "organization_id_hash", None),
+            "user_id_hash": getattr(record, "user_id_hash", None),
             "outcome": getattr(record, "outcome", None),
+            "route": getattr(record, "route", None),
+            "method": getattr(record, "method", None),
+            "status_class": getattr(record, "status_class", None),
+            "failure_class": getattr(record, "failure_class", None),
         }
         duration_ms = getattr(record, "duration_ms", None)
         if duration_ms is not None:
             payload["duration_ms"] = duration_ms
-        return json.dumps({key: value for key, value in payload.items() if value is not None})
+        return json.dumps(sanitize_log_payload(payload))
 
 
 def configure_logging(settings: Settings) -> None:

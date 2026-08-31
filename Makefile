@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build clean-generated reset-local-data
+.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog retain-files test-perf clean-generated reset-local-data
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -27,7 +27,7 @@ seed:
 	cd "$(API)" && uv run python -m budgetlens seed
 
 test:
-	cd "$(API)" && uv run pytest -m "not integration"
+	cd "$(API)" && uv run pytest -m "not integration and not perf"
 	$(PNPM) --filter web test
 
 test-integration:
@@ -52,9 +52,36 @@ format:
 openapi:
 	cd "$(API)" && uv run python "$(ROOT)/scripts/export_openapi.py"
 
+coverage:
+	cd "$(API)" && uv run pytest tests/unit/domain \
+		--cov=budgetlens.domain.money --cov=budgetlens.domain.variance \
+		--cov=budgetlens.domain.fiscal --cov=budgetlens.domain.financial_entry \
+		--cov-fail-under=85 --cov-report=term-missing
+	cd "$(API)" && uv run pytest -m "not perf" \
+		--cov=budgetlens --cov-report=term-missing --cov-fail-under=75
+
+coverage-unit:
+	cd "$(API)" && uv run pytest -m "not integration and not perf" \
+		--cov=budgetlens --cov-report=term-missing
+
+scan:
+	chmod +x "$(ROOT)/scripts/scan.sh"
+	$(ROOT)/scripts/scan.sh
+
+watchdog:
+	cd "$(API)" && uv run python -m budgetlens watchdog
+
+retain-files:
+	cd "$(API)" && uv run python -m budgetlens retain-files
+
+test-perf:
+	cd "$(API)" && uv run pytest -m perf
+
 build:
 	$(PNPM) --filter web build
 	@if docker info >/dev/null 2>&1; then \
+		docker image inspect budgetlens-api:local >/dev/null 2>&1 && docker tag budgetlens-api:local budgetlens-api:previous || true; \
+		docker image inspect budgetlens-web:local >/dev/null 2>&1 && docker tag budgetlens-web:local budgetlens-web:previous || true; \
 		docker build -t budgetlens-api:local "$(API)"; \
 		docker build -t budgetlens-web:local -f apps/web/Dockerfile "$(ROOT)"; \
 	else \
@@ -64,7 +91,10 @@ build:
 
 ci: lint test openapi
 	$(PNPM) --filter web build
+	$(ROOT)/scripts/scan.sh
 	@if docker info >/dev/null 2>&1; then \
+		docker image inspect budgetlens-api:local >/dev/null 2>&1 && docker tag budgetlens-api:local budgetlens-api:previous || true; \
+		docker image inspect budgetlens-web:local >/dev/null 2>&1 && docker tag budgetlens-web:local budgetlens-web:previous || true; \
 		docker build -t budgetlens-api:local "$(API)"; \
 		docker build -t budgetlens-web:local -f apps/web/Dockerfile "$(ROOT)"; \
 	else \

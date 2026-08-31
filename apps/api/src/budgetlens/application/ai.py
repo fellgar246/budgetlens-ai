@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Protocol, cast
 from uuid import UUID
 
@@ -18,6 +18,7 @@ from budgetlens.application.analytics import AnalyticsQuery, AnalyticsService, p
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.application.scenarios import ScenarioService, as_object_map, parse_rule_payload
 from budgetlens.config import Settings
 from budgetlens.domain.conversation import (
@@ -35,7 +36,7 @@ from budgetlens.domain.enums import (
     ScenarioType,
     ToolExecutionStatus,
 )
-from budgetlens.domain.errors import NotFoundError, ValidationError
+from budgetlens.domain.errors import DomainError, NotFoundError, ValidationError
 from budgetlens.domain.evidence import Evidence, evaluate_grounding
 from budgetlens.domain.idempotency import canonical_json, sha256_hex
 from budgetlens.domain.identities import Clock, IdFactory
@@ -43,6 +44,7 @@ from budgetlens.domain.money import Currency, MoneyAmount
 from budgetlens.domain.organization import normalize_name
 from budgetlens.domain.permissions import require_permission
 from budgetlens.domain.scenario import ScenarioRule
+from budgetlens.observability import metrics_registry
 
 REGISTERED_TOOLS = frozenset(
     {
@@ -279,6 +281,18 @@ class ConversationService:
         conversation = self.get(context, conversation_id)
         updated = conversation.soft_delete(now=self._clock.now())
         self._repo(context.organization_id).save(updated)
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action="conversation.delete",
+            resource_type="conversation",
+            resource_id=conversation.id,
+            trace_id=context.trace_id,
+            metadata={"deleted": True},
+        )
         return updated
 
     def ask(
@@ -290,10 +304,58 @@ class ConversationService:
         view_context: dict[str, Any],
     ) -> CopilotAnswer:
         require_permission(context.role, Permission.USE_AI)
+        enforce_limit("ai", context.user.id, limit=self._settings.rate_limit_ai_per_minute)
         conversation = self.get(context, conversation_id)
         question = normalize_message(content)
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action="ai.message_requested",
+            resource_type="conversation",
+            resource_id=conversation.id,
+            trace_id=context.trace_id,
+            metadata={"has_context": bool(view_context or conversation.context_filters)},
+        )
         repo = self._repo(context.organization_id)
         now = self._clock.now()
+        try:
+            return self._complete_ask(
+                context,
+                conversation=conversation,
+                question=question,
+                view_context=view_context,
+                repo=repo,
+                now=now,
+            )
+        except DomainError as exc:
+            record_audit(
+                self._audits,
+                clock=self._clock,
+                ids=self._ids,
+                organization_id=context.organization_id,
+                actor_id=context.user.id,
+                action="ai.response_failed",
+                resource_type="conversation",
+                resource_id=conversation.id,
+                trace_id=context.trace_id,
+                metadata={"code": exc.code},
+                outcome="failed",
+            )
+            raise
+
+    def _complete_ask(
+        self,
+        context: TenantContext,
+        *,
+        conversation: Conversation,
+        question: str,
+        view_context: dict[str, Any],
+        repo: SqlConversationRepository,
+        now: datetime,
+    ) -> CopilotAnswer:
         user_message = ConversationMessage(
             id=self._ids.new_id(),
             organization_id=context.organization_id,
@@ -340,18 +402,34 @@ class ConversationService:
                 }
             )
             figures.extend(_extract_amounts(payload))
-            pending_tools.append(
-                ToolExecution(
-                    id=self._ids.new_id(),
-                    organization_id=context.organization_id,
-                    ai_run_id=run_id,
-                    tool_name=request.name,
-                    argument_hash=sha256_hex(canonical_json(request.arguments).encode()),
-                    result_hash=sha256_hex(canonical_json(payload).encode()),
-                    row_count=row_count,
-                    duration_ms=0,
-                    status=status_tool,
-                )
+            execution = ToolExecution(
+                id=self._ids.new_id(),
+                organization_id=context.organization_id,
+                ai_run_id=run_id,
+                tool_name=request.name,
+                argument_hash=sha256_hex(canonical_json(request.arguments).encode()),
+                result_hash=sha256_hex(canonical_json(payload).encode()),
+                row_count=row_count,
+                duration_ms=0,
+                status=status_tool,
+            )
+            pending_tools.append(execution)
+            record_audit(
+                self._audits,
+                clock=self._clock,
+                ids=self._ids,
+                organization_id=context.organization_id,
+                actor_id=context.user.id,
+                action="ai.tool_executed",
+                resource_type="conversation",
+                resource_id=conversation.id,
+                trace_id=context.trace_id,
+                metadata={
+                    "name": execution.tool_name,
+                    "argument_hash": execution.argument_hash,
+                    "result_hash": execution.result_hash,
+                    "row_count": execution.row_count,
+                },
             )
         grounding = (
             evaluate_grounding(
@@ -411,7 +489,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="ai.message",
+            action="ai.response_completed",
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,
@@ -426,6 +504,17 @@ class ConversationService:
                     for item in pending_tools
                 ],
             },
+        )
+        if latency_ms > self._settings.ai_timeout_seconds * 1000:
+            limitations.append("La respuesta superó el tiempo máximo configurado.")
+        metrics_registry().record_ai_run(
+            latency_ms=latency_ms,
+            input_units=provider.input_units,
+            output_units=provider.output_units,
+            tool_calls=len(pending_tools),
+            tool_failures=sum(
+                1 for item in pending_tools if item.status is not ToolExecutionStatus.SUCCEEDED
+            ),
         )
         scope = {
             "fiscal_year": query.fiscal_year,

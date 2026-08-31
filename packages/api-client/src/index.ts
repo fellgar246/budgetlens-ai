@@ -235,6 +235,34 @@ export function getVersion(baseUrl: string) {
   return sendJson<VersionResponse>(baseUrl, `${API_PREFIX}/version`);
 }
 
+export type OpsMetrics = {
+  requests: Array<{
+    method: string;
+    route: string;
+    status_class: string;
+    count: number;
+    errors: number;
+    duration_ms_p95: number | null;
+  }>;
+  active_requests: number;
+  db_pool: { checked_out: number; overflow: number; size: number };
+  db_rollbacks: number;
+  jobs: { timed_out: number; by_status: Record<string, number> };
+  ai: {
+    runs: number;
+    tool_calls: number;
+    tool_failures: number;
+    latency_ms_p95: number | null;
+    estimated_cost: { currency: string; amount: string; estimate: boolean } | null;
+  };
+  rate_limited: number;
+  cost_estimate_configured: boolean;
+};
+
+export function getOpsMetrics(baseUrl: string, auth: AuthContext) {
+  return requestJson<OpsMetrics>(baseUrl, `${API_PREFIX}/ops/metrics`, {}, auth);
+}
+
 export function getDevIdentities(baseUrl: string) {
   return requestJson<{ users: DevIdentity[] }>(baseUrl, `${API_PREFIX}/dev/identities`);
 }

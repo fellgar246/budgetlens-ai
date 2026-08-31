@@ -81,3 +81,10 @@ class UnauthenticatedError(DomainError):
 class PayloadTooLargeError(DomainError):
     def __init__(self, message: str = "El archivo excede el tamaño permitido.") -> None:
         super().__init__(code="FILE_TOO_LARGE", message=message, status_code=413)
+
+
+class RateLimitError(DomainError):
+    def __init__(
+        self, message: str = "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo."
+    ) -> None:
+        super().__init__(code="RATE_LIMITED", message=message, status_code=429, retryable=True)

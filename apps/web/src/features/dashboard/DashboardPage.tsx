@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   createExport,
   downloadAuthorized,
@@ -14,6 +14,8 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { VarianceBadge } from "@/components/ui/VarianceBadge";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,7 +26,7 @@ import { useSession } from "@/features/session/SessionProvider";
 import { withPathFilters } from "@/lib/analysis-filters";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
-import { favorabilityLabel, formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatPercent } from "@/lib/format";
 import { queryFromFilters } from "@/lib/query-from-filters";
 
 export function DashboardPage() {
@@ -45,7 +47,7 @@ export function DashboardPage() {
   const [trend, setTrend] = useState<BreakdownItem[]>([]);
   const [top, setTop] = useState<BreakdownItem[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "empty" | "ready">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | string | null>(null);
 
   useEffect(() => {
     if (!userId || !organizationId || !query) {
@@ -72,7 +74,7 @@ export function DashboardPage() {
         setStatus(inactive ? "empty" : "ready");
       })
       .catch((err: Error) => {
-        setError(err.message);
+        setError(err);
         setStatus("error");
       });
   }, [organizationId, query, userId]);
@@ -126,9 +128,7 @@ export function DashboardPage() {
       {status === "loading" ? (
         <p className="mt-6 text-sm text-secondary">{copy.loadingFigures}</p>
       ) : null}
-      {status === "error" ? (
-        <p className="mt-6 text-sm text-danger">{error ?? copy.figuresError}</p>
-      ) : null}
+      {status === "error" ? <ErrorBanner error={error ?? copy.figuresError} /> : null}
       {status === "ready" && summary ? (
         <>
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -143,7 +143,7 @@ export function DashboardPage() {
             <Kpi
               label={copy.kpiVariance}
               value={formatMoney(summary.metrics.variance_amount, currency)}
-              hint={favorabilityLabel(summary.metrics.favorability)}
+              hint={<VarianceBadge value={summary.metrics.favorability} />}
             />
             <Kpi
               label={copy.kpiVariancePct}
@@ -203,12 +203,12 @@ export function DashboardPage() {
   );
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Kpi({ label, value, hint }: { label: string; value: string; hint?: string | ReactNode }) {
   return (
     <article className="rounded-surface border border-border bg-surface p-4">
       <p className="text-sm text-secondary">{label}</p>
       <p className="mt-2 text-[32px] font-semibold leading-10 text-primary">{value}</p>
-      <p className="mt-1 text-xs text-secondary">{hint ?? copy.vsBudget}</p>
+      <div className="mt-1 text-xs text-secondary">{hint ?? copy.vsBudget}</div>
     </article>
   );
 }

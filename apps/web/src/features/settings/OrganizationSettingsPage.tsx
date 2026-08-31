@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { patchOrganization } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useSession } from "@/features/session/SessionProvider";
@@ -14,7 +15,7 @@ export function OrganizationSettingsPage() {
   const { userId, organizationId, selectedOrganization, capabilities } = useSession();
   const [name, setName] = useState("");
   const [fiscalMonth, setFiscalMonth] = useState("1");
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | Error | null>(null);
   const hasSession = Boolean(userId && organizationId);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export function OrganizationSettingsPage() {
               window.dispatchEvent(new Event("budgetlens-session"));
               setMessage(copy.saveOrganization);
             })
-            .catch((error: Error) => setMessage(error.message));
+            .catch((error: Error) => setMessage(error));
         }}
       >
         <label className="flex flex-col gap-1 text-xs">
@@ -83,7 +84,10 @@ export function OrganizationSettingsPage() {
         {capabilities.can_manage_organization ? (
           <Button type="submit">{copy.saveOrganization}</Button>
         ) : null}
-        {message ? <p className="text-sm text-secondary">{message}</p> : null}
+        {message && message !== copy.saveOrganization ? <ErrorBanner error={message} /> : null}
+        {message === copy.saveOrganization ? (
+          <p className="text-sm text-secondary">{message}</p>
+        ) : null}
       </form>
     </CapabilityGate>
   );

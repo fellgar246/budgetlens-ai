@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,8 +19,20 @@ from budgetlens.presentation.routes.dimensions import router as dimensions_route
 from budgetlens.presentation.routes.health import router as health_router
 from budgetlens.presentation.routes.imports import router as imports_router
 from budgetlens.presentation.routes.memberships import router as memberships_router
+from budgetlens.presentation.routes.ops import router as ops_router
 from budgetlens.presentation.routes.scenarios import router as scenarios_router
 from budgetlens.presentation.routes.session import router as session_router
+from budgetlens.presentation.security_headers import SecurityHeadersMiddleware
+from budgetlens.runtime import mark_shutting_down, reset_runtime
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    reset_runtime()
+    try:
+        yield
+    finally:
+        mark_shutting_down()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -30,7 +45,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=docs_url,
         redoc_url="/redoc" if docs_url else None,
         openapi_url="/openapi.json" if docs_url else None,
+        lifespan=_lifespan,
     )
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(TraceIdMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -58,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scenarios_router, prefix="/api/v1")
     app.include_router(conversations_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
+    app.include_router(ops_router, prefix="/api/v1")
     if resolved.auth_mode == "dev" and resolved.app_env in {"local", "test"}:
         app.include_router(dev_router, prefix="/api/v1")
     return app

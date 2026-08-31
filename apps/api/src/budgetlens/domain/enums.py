@@ -92,6 +92,7 @@ class ScenarioType(StrEnum):
 class ImportJobStatus(StrEnum):
     CREATED = "created"
     UPLOADED = "uploaded"
+    PROCESSING = "processing"
     READY = "ready"
     INVALID = "invalid"
     APPLIED = "applied"

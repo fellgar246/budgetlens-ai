@@ -10,6 +10,10 @@ from budgetlens.domain.errors import ValidationError, field_issue
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
+ABSOLUTE_MAX_LIMIT = 500
+
+if MAX_LIMIT > ABSOLUTE_MAX_LIMIT:
+    raise RuntimeError("Page limit cannot exceed 500 rows.")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,36 @@
+import { ApiRequestError } from "@budgetlens/api-client";
+
+import { Button } from "@/components/ui/Button";
+import { copy } from "@/lib/copy";
+
+export function ErrorBanner({
+  error,
+  onRetry,
+}: {
+  error: string | Error | null;
+  onRetry?: () => void;
+}) {
+  if (!error) {
+    return null;
+  }
+  const message = typeof error === "string" ? error : error.message;
+  const traceId = error instanceof ApiRequestError ? error.traceId : null;
+  return (
+    <div role="alert" className="mt-6 rounded-surface border border-border bg-surface p-4">
+      <p className="text-sm text-danger">{message}</p>
+      <p className="mt-2 text-sm text-secondary">{copy.errorCorrective}</p>
+      {traceId ? (
+        <p className="mt-2 text-xs text-secondary">
+          {copy.traceLabel}: <code className="text-primary">{traceId}</code>
+        </p>
+      ) : null}
+      {onRetry ? (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={onRetry}>
+            {copy.retry}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -32,6 +32,7 @@ from budgetlens.application.idempotency_keys import (
     require_idempotency_key,
 )
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.application.row_normalization import normalize_row
 from budgetlens.config import Settings
 from budgetlens.domain.budget_version import BudgetVersion
@@ -49,6 +50,7 @@ from budgetlens.domain.enums import (
 )
 from budgetlens.domain.errors import (
     ConflictError,
+    DomainError,
     NotFoundError,
     PayloadTooLargeError,
     ValidationError,
@@ -69,6 +71,7 @@ from budgetlens.domain.money import Currency
 from budgetlens.domain.organization import Organization, normalize_name
 from budgetlens.domain.permissions import can_create_missing_dimensions, require_permission
 from budgetlens.domain.text_safety import redact_cell
+from budgetlens.observability import metrics_registry
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +173,7 @@ class ImportService:
             failure_code=None,
             create_missing_dimensions=False,
             sheet_name=None,
+            trace_id=context.trace_id,
         )
         self._jobs(context.organization_id).add(job)
         record_audit(
@@ -195,6 +199,11 @@ class ImportService:
         media_type: str | None,
     ) -> ImportJob:
         require_permission(context.role, Permission.IMPORT)
+        enforce_limit(
+            "upload",
+            context.user.id,
+            limit=self._settings.rate_limit_upload_per_minute,
+        )
         job = self.get(context, job_id)
         if job.status not in {ImportJobStatus.CREATED, ImportJobStatus.UPLOADED}:
             raise ConflictError("IMPORT_STATE", "Este trabajo ya no admite un archivo nuevo.")
@@ -224,6 +233,12 @@ class ImportService:
         self._jobs(context.organization_id).save(updated)
         return updated
 
+    def _persist_processing(self, job: ImportJob, *, trace_id: str) -> ImportJob:
+        updated = job.mark_processing(now=self._clock.now(), trace_id=trace_id)
+        self._jobs(job.organization_id).save(updated)
+        self._session.flush()
+        return updated
+
     def validate(
         self,
         context: TenantContext,
@@ -235,63 +250,107 @@ class ImportService:
     ) -> ImportJob:
         require_permission(context.role, Permission.IMPORT)
         job = self.get(context, job_id)
+        previous = job
+        job = self._persist_processing(job, trace_id=context.trace_id)
         organization = self._require_org(context.organization_id)
-        columns = validate_mapping(mapping)
-        payload = {"columns": columns, "amount_locale": amount_locale}
-        fingerprint = job.fingerprint_for(payload)
-        existing = self._jobs(context.organization_id).get_by_fingerprint(fingerprint)
-        if existing is not None and existing.id != job.id:
-            if existing.status is ImportJobStatus.APPLIED:
-                raise ConflictError(
-                    "IMPORT_ALREADY_APPLIED",
-                    "Ya existe un trabajo aplicado con la misma huella.",
-                )
-            raise ConflictError(
-                "IMPORT_ALREADY_IN_PROGRESS",
-                "Ya hay un trabajo en curso con la misma huella.",
-            )
-        create_missing = can_create_missing_dimensions(
-            flag=create_missing_dimensions, role=context.role
-        )
-        if create_missing_dimensions and not create_missing and context.role is not Role.ADMIN:
-            create_missing = False
-        table = self._load_table(job)
-        version_fy = self._fiscal_year_for_job(context, job)
-        normalized, issues = self._collect_rows(
-            table.rows,
-            mapping=columns,
-            amount_locale=amount_locale,
-            organization=organization,
-            fiscal_year=version_fy,
-            create_missing=create_missing,
-            context=context,
-        )
-        periods = [item.period_start for item in normalized]
-        total = sum((item.amount.value for item in normalized), Decimal("0.0000"))
-        updated = job.mark_validated(
-            mapping=payload,
-            fingerprint=fingerprint,
-            row_count=len(table.rows),
-            valid_count=len(normalized),
-            error_count=sum(1 for item in issues if item.severity is ImportErrorSeverity.ERROR),
-            warning_count=sum(1 for item in issues if item.severity is ImportErrorSeverity.WARNING),
-            period_min=min(periods) if periods else None,
-            period_max=max(periods) if periods else None,
-            valid_amount_total=f"{total:.4f}",
-            create_missing_dimensions=create_missing,
-            sheet_name=table.sheet_name,
-            now=self._clock.now(),
-        )
         try:
-            self._jobs(context.organization_id).save(updated)
-            self._errors(context.organization_id).replace_for_job(job.id, issues, ids=self._ids)
-            self._session.flush()
-        except IntegrityError as exc:
-            raise ConflictError(
-                "IMPORT_ALREADY_IN_PROGRESS",
-                "Ya hay un trabajo en curso con la misma huella.",
-            ) from exc
-        return updated
+            columns = validate_mapping(mapping)
+            payload = {"columns": columns, "amount_locale": amount_locale}
+            fingerprint = job.fingerprint_for(payload)
+            existing = self._jobs(context.organization_id).get_by_fingerprint(fingerprint)
+            if existing is not None and existing.id != job.id:
+                if existing.status is ImportJobStatus.APPLIED:
+                    raise ConflictError(
+                        "IMPORT_ALREADY_APPLIED",
+                        "Ya existe un trabajo aplicado con la misma huella.",
+                    )
+                raise ConflictError(
+                    "IMPORT_ALREADY_IN_PROGRESS",
+                    "Ya hay un trabajo en curso con la misma huella.",
+                )
+            create_missing = can_create_missing_dimensions(
+                flag=create_missing_dimensions, role=context.role
+            )
+            if create_missing_dimensions and not create_missing and context.role is not Role.ADMIN:
+                create_missing = False
+            table = self._load_table(job)
+            version_fy = self._fiscal_year_for_job(context, job)
+            normalized, issues = self._collect_rows(
+                table.rows,
+                mapping=columns,
+                amount_locale=amount_locale,
+                organization=organization,
+                fiscal_year=version_fy,
+                create_missing=create_missing,
+                context=context,
+            )
+            periods = [item.period_start for item in normalized]
+            total = sum((item.amount.value for item in normalized), Decimal("0.0000"))
+            updated = job.mark_validated(
+                mapping=payload,
+                fingerprint=fingerprint,
+                row_count=len(table.rows),
+                valid_count=len(normalized),
+                error_count=sum(1 for item in issues if item.severity is ImportErrorSeverity.ERROR),
+                warning_count=sum(
+                    1 for item in issues if item.severity is ImportErrorSeverity.WARNING
+                ),
+                period_min=min(periods) if periods else None,
+                period_max=max(periods) if periods else None,
+                valid_amount_total=f"{total:.4f}",
+                create_missing_dimensions=create_missing,
+                sheet_name=table.sheet_name,
+                now=self._clock.now(),
+            )
+            try:
+                self._jobs(context.organization_id).save(updated)
+                self._errors(context.organization_id).replace_for_job(job.id, issues, ids=self._ids)
+                self._session.flush()
+            except IntegrityError as exc:
+                raise ConflictError(
+                    "IMPORT_ALREADY_IN_PROGRESS",
+                    "Ya hay un trabajo en curso con la misma huella.",
+                ) from exc
+            record_audit(
+                self._audits,
+                clock=self._clock,
+                ids=self._ids,
+                organization_id=context.organization_id,
+                actor_id=context.user.id,
+                action="import.validated",
+                resource_type="import_job",
+                resource_id=updated.id,
+                trace_id=context.trace_id,
+                metadata={
+                    "status": updated.status.value,
+                    "valid_count": updated.valid_count,
+                    "error_count": updated.error_count,
+                    "warning_count": updated.warning_count,
+                },
+            )
+            metrics_registry().record_job_status(updated.status.value)
+            return updated
+        except DomainError:
+            self._jobs(context.organization_id).save(previous)
+            raise
+        except Exception:
+            failed = job.mark_failed(code="JOB_INTERRUPTED", now=self._clock.now())
+            self._jobs(context.organization_id).save(failed)
+            record_audit(
+                self._audits,
+                clock=self._clock,
+                ids=self._ids,
+                organization_id=context.organization_id,
+                actor_id=context.user.id,
+                action="import.failed",
+                resource_type="import_job",
+                resource_id=failed.id,
+                trace_id=context.trace_id,
+                metadata={"failure_code": "JOB_INTERRUPTED"},
+                outcome="failed",
+            )
+            metrics_registry().record_job_status("failed")
+            raise
 
     def preview(
         self, context: TenantContext, *, job_id: UUID, cursor: str | None, limit: int | None
@@ -394,6 +453,7 @@ class ImportService:
             existing = self.get(context, replay)
             return existing
         job.assert_committable()
+        job = self._persist_processing(job, trace_id=context.trace_id)
         if job.idempotency_fingerprint:
             other = self._jobs(context.organization_id).get_by_fingerprint(
                 job.idempotency_fingerprint
@@ -454,8 +514,9 @@ class ImportService:
             resource_type="import_job",
             resource_id=updated.id,
             trace_id=context.trace_id,
-            metadata={"valid_count": updated.valid_count, "total": updated.valid_amount_total},
+            metadata={"valid_count": updated.valid_count, "error_count": updated.error_count},
         )
+        metrics_registry().record_job_status(updated.status.value)
         return updated
 
     def cancel(self, context: TenantContext, *, job_id: UUID) -> ImportJob:

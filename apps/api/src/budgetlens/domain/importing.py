@@ -40,10 +40,26 @@ NAME_ALIASES = {
 ALLOWED_TRANSITIONS: dict[ImportJobStatus, frozenset[ImportJobStatus]] = {
     ImportJobStatus.CREATED: frozenset({ImportJobStatus.UPLOADED, ImportJobStatus.CANCELLED}),
     ImportJobStatus.UPLOADED: frozenset(
-        {ImportJobStatus.READY, ImportJobStatus.INVALID, ImportJobStatus.CANCELLED}
+        {
+            ImportJobStatus.PROCESSING,
+            ImportJobStatus.READY,
+            ImportJobStatus.INVALID,
+            ImportJobStatus.CANCELLED,
+        }
+    ),
+    ImportJobStatus.PROCESSING: frozenset(
+        {
+            ImportJobStatus.READY,
+            ImportJobStatus.INVALID,
+            ImportJobStatus.APPLIED,
+            ImportJobStatus.FAILED,
+            ImportJobStatus.CANCELLED,
+            ImportJobStatus.PROCESSING,
+        }
     ),
     ImportJobStatus.READY: frozenset(
         {
+            ImportJobStatus.PROCESSING,
             ImportJobStatus.APPLIED,
             ImportJobStatus.CANCELLED,
             ImportJobStatus.INVALID,
@@ -52,7 +68,12 @@ ALLOWED_TRANSITIONS: dict[ImportJobStatus, frozenset[ImportJobStatus]] = {
         }
     ),
     ImportJobStatus.INVALID: frozenset(
-        {ImportJobStatus.READY, ImportJobStatus.INVALID, ImportJobStatus.CANCELLED}
+        {
+            ImportJobStatus.PROCESSING,
+            ImportJobStatus.READY,
+            ImportJobStatus.INVALID,
+            ImportJobStatus.CANCELLED,
+        }
     ),
     ImportJobStatus.APPLIED: frozenset(),
     ImportJobStatus.CANCELLED: frozenset(),
@@ -187,6 +208,7 @@ class ImportJob:
     failure_code: str | None
     create_missing_dimensions: bool
     sheet_name: str | None
+    trace_id: str | None = None
 
     def _transition(self, status: ImportJobStatus) -> ImportJob:
         if status not in ALLOWED_TRANSITIONS[self.status] and status is not self.status:
@@ -195,6 +217,18 @@ class ImportJob:
                 "El trabajo de importación no admite esta transición.",
             )
         return replace(self, status=status)
+
+    def mark_processing(self, *, now: datetime, trace_id: str | None = None) -> ImportJob:
+        if self.status is ImportJobStatus.PROCESSING:
+            return replace(self, started_at=now, trace_id=trace_id or self.trace_id)
+        updated = self._transition(ImportJobStatus.PROCESSING)
+        return replace(updated, started_at=now, trace_id=trace_id or self.trace_id)
+
+    def mark_timed_out(self, *, now: datetime) -> ImportJob:
+        return self.mark_failed(code="JOB_TIMEOUT", now=now)
+
+    def clear_object_key(self) -> ImportJob:
+        return replace(self, object_key=None)
 
     def mark_uploaded(self, *, object_key: str, media_type: str, now: datetime) -> ImportJob:
         if self.status is ImportJobStatus.UPLOADED:

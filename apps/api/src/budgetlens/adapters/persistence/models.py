@@ -283,7 +283,10 @@ class ImportJobRow(Base):
             ),
         ),
         CheckConstraint(
-            "status IN ('created','uploaded','ready','invalid','applied','cancelled','failed')",
+            (
+                "status IN ('created','uploaded','processing','ready',"
+                "'invalid','applied','cancelled','failed')"
+            ),
             name="ck_import_jobs_status",
         ),
         CheckConstraint("import_type IN ('budget', 'actual')", name="ck_import_jobs_type"),
@@ -325,6 +328,7 @@ class ImportJobRow(Base):
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     create_missing_dimensions: Mapped[bool] = mapped_column(Boolean, nullable=False)
     sheet_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class ImportErrorRow(Base):

@@ -109,6 +109,28 @@ class SqlImportJobRepository:
         )
 
 
+def list_stale_processing(session: Session, *, cutoff: datetime) -> list[ImportJob]:
+    rows = session.scalars(
+        select(ImportJobRow).where(
+            ImportJobRow.status == "processing",
+            ImportJobRow.started_at.is_not(None),
+            ImportJobRow.started_at <= cutoff,
+        )
+    ).all()
+    return [import_job_from_row(row) for row in rows]
+
+
+def list_jobs_with_expired_originals(session: Session, *, cutoff: datetime) -> list[ImportJob]:
+    rows = session.scalars(
+        select(ImportJobRow).where(
+            ImportJobRow.object_key.is_not(None),
+            ImportJobRow.created_at <= cutoff,
+            ImportJobRow.status.in_(("applied", "cancelled", "failed")),
+        )
+    ).all()
+    return [import_job_from_row(row) for row in rows]
+
+
 class SqlImportErrorRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session

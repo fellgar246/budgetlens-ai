@@ -488,6 +488,83 @@ def test_copilot_uses_tools_and_rejects_mutations(seeded_client: TestClient) -> 
         "modificar" in mutation.json()["answer"].lower()
         or "no puedo" in mutation.json()["answer"].lower()
     )
+    deleted = seeded_client.delete(
+        f"{PREFIX}/conversations/{conversation_id}",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert deleted.status_code == 200
+    missing = seeded_client.get(
+        f"{PREFIX}/conversations/{conversation_id}",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert missing.status_code == 404
+    audits = seeded_client.get(
+        f"{PREFIX}/audit-events",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        params={"action": "conversation.delete"},
+    )
+    assert audits.status_code == 200
+    events = audits.json()["items"]
+    assert events
+    assert events[0]["metadata"] == {"deleted": True}
+    assert "content" not in events[0]["metadata"]
+    assert "prompt" not in str(events[0]["metadata"]).lower()
+
+
+@pytest.mark.integration
+def test_export_download_is_authorized_and_expires(seeded_client: TestClient) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from budgetlens.adapters.db import session_scope
+    from budgetlens.adapters.persistence.models import ExportJobRow
+
+    version_id = _create_version(seeded_client, "ExportExpire")
+    _import_file(
+        seeded_client,
+        content=_read("budget-valid.csv"),
+        filename="budget-valid.csv",
+        import_type="budget",
+        version_id=version_id,
+        idempotency="export-budget",
+    )
+    seeded_client.post(
+        f"{PREFIX}/budget-versions/{version_id}/publish",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID, "pub-ex"),
+    )
+    created = seeded_client.post(
+        f"{PREFIX}/exports",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={
+            "filters": {
+                "fiscal_year": 2026,
+                "period_from": "2026-01-01",
+                "period_to": "2026-01-01",
+                "budget_version_id": version_id,
+            },
+            "group_by": "account",
+        },
+    )
+    assert created.status_code == 200, created.text
+    export_id = created.json()["id"]
+    allowed = seeded_client.get(
+        f"{PREFIX}/exports/{export_id}/content",
+        headers=_headers(ALPHA_VIEWER_ID, ALPHA_ORG_ID),
+    )
+    assert allowed.status_code == 200
+    cross = seeded_client.get(
+        f"{PREFIX}/exports/{export_id}/content",
+        headers=_headers(BETA_ADMIN_ID, BETA_ORG_ID),
+    )
+    assert cross.status_code == 404
+    with session_scope() as session:
+        row = session.get(ExportJobRow, UUID(export_id))
+        assert row is not None
+        row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    expired = seeded_client.get(
+        f"{PREFIX}/exports/{export_id}/content",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert expired.status_code == 404
 
 
 def _account_id(client: TestClient, code: str) -> str:

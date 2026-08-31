@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from budgetlens.dev_identities import (
@@ -28,6 +29,7 @@ def _headers(
     return headers
 
 
+@pytest.mark.integration
 def test_me_capabilities_follow_persona_matrix(seeded_client: TestClient) -> None:
     owner = seeded_client.get(
         f"{PREFIX}/me",
@@ -69,6 +71,7 @@ def test_me_capabilities_follow_persona_matrix(seeded_client: TestClient) -> Non
     assert operator["capabilities"]["can_deploy_rollback"] is True
 
 
+@pytest.mark.integration
 def test_operator_cannot_read_financial_data_or_create_org(seeded_client: TestClient) -> None:
     accounts = seeded_client.get(
         f"{PREFIX}/accounts",
@@ -92,6 +95,7 @@ def test_operator_cannot_read_financial_data_or_create_org(seeded_client: TestCl
     assert orgs.json()["items"] == []
 
 
+@pytest.mark.integration
 def test_switching_organization_does_not_leak_other_tenant(seeded_client: TestClient) -> None:
     alpha = seeded_client.get(
         f"{PREFIX}/accounts",
@@ -127,6 +131,7 @@ def test_switching_organization_does_not_leak_other_tenant(seeded_client: TestCl
     assert leaked.status_code == 404
 
 
+@pytest.mark.integration
 def test_forged_organization_id_does_not_reveal_existence(seeded_client: TestClient) -> None:
     header = seeded_client.get(
         f"{PREFIX}/accounts",
@@ -161,3 +166,21 @@ def test_forged_organization_id_does_not_reveal_existence(seeded_client: TestCli
         headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
     )
     assert random_account.status_code == 404
+
+
+@pytest.mark.integration
+def test_ops_metrics_are_operator_only_and_non_financial(seeded_client: TestClient) -> None:
+    tenant = seeded_client.get(
+        f"{PREFIX}/ops/metrics",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+    )
+    assert tenant.status_code == 403
+    operator = seeded_client.get(f"{PREFIX}/ops/metrics", headers=_headers(OPERATOR_ID))
+    assert operator.status_code == 200, operator.text
+    payload = operator.json()
+    serialized = str(payload).lower()
+    assert "budget_amount" not in serialized
+    assert "prompt" not in serialized
+    assert "requests" in payload
+    assert "jobs" in payload
+    assert payload["ai"]["estimated_cost"] is None

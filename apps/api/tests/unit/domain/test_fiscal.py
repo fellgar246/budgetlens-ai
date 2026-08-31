@@ -41,3 +41,11 @@ def test_invalid_start_month_is_rejected() -> None:
 def test_period_must_be_first_of_month() -> None:
     with pytest.raises(ValidationError):
         FiscalPeriod(period_start=date(2026, 1, 15), fiscal_year=2026, fiscal_year_start_month=1)
+
+
+def test_fiscal_year_must_match_period_and_renders_iso() -> None:
+    with pytest.raises(ValidationError) as exc:
+        FiscalPeriod(period_start=date(2026, 1, 1), fiscal_year=2025, fiscal_year_start_month=1)
+    assert exc.value.code == "INVALID_FISCAL_YEAR"
+    period = FiscalPeriod.from_date(date(2026, 2, 10), 1)
+    assert period.as_text() == "2026-02-01"

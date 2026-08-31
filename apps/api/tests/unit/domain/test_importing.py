@@ -73,6 +73,46 @@ def test_import_job_rejects_commit_before_ready() -> None:
         job.assert_committable()
 
 
+def test_processing_job_can_timeout() -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    job = ImportJob(
+        id=UUID(int=1),
+        organization_id=UUID(int=2),
+        created_by=UUID(int=3),
+        import_type=ScenarioType.ACTUAL,
+        budget_version_id=None,
+        status=ImportJobStatus.CREATED,
+        original_filename="a.csv",
+        object_key="org/a.csv",
+        sha256="a" * 64,
+        size_bytes=10,
+        media_type="text/csv",
+        template_version="1.0",
+        mapping_json={},
+        row_count=0,
+        valid_count=0,
+        error_count=0,
+        warning_count=0,
+        period_min=None,
+        period_max=None,
+        valid_amount_total="0.0000",
+        idempotency_fingerprint=None,
+        started_at=None,
+        completed_at=None,
+        created_at=now,
+        failure_code=None,
+        create_missing_dimensions=False,
+        sheet_name=None,
+    )
+    uploaded = job.mark_uploaded(object_key="org/a.csv", media_type="text/csv", now=now)
+    processing = uploaded.mark_processing(now=now, trace_id="trace-1")
+    assert processing.status is ImportJobStatus.PROCESSING
+    assert processing.trace_id == "trace-1"
+    timed = processing.mark_timed_out(now=now)
+    assert timed.status is ImportJobStatus.FAILED
+    assert timed.failure_code == "JOB_TIMEOUT"
+
+
 def test_csv_injection_is_neutralized() -> None:
     assert neutralize_csv_text("=1+1") == "'=1+1"
     content = render_csv(("code",), [("=cmd",)]).decode("utf-8")

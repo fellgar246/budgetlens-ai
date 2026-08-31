@@ -3,11 +3,12 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from uuid import UUID
 
 from budgetlens.domain.enums import ExportJobStatus, ExportType
+from budgetlens.domain.errors import NotFoundError
 from budgetlens.domain.text_safety import neutralize_csv_text
 
 
@@ -24,6 +25,16 @@ class ExportJob:
     status: ExportJobStatus
     created_at: datetime
     expires_at: datetime
+
+    def is_expired(self, *, now: datetime) -> bool:
+        return now >= self.expires_at or self.status is ExportJobStatus.EXPIRED
+
+    def mark_expired(self) -> ExportJob:
+        return replace(self, status=ExportJobStatus.EXPIRED)
+
+    def assert_downloadable(self, *, now: datetime) -> None:
+        if self.is_expired(now=now):
+            raise NotFoundError()
 
 
 def export_filename(*, period_from: date, period_to: date) -> str:

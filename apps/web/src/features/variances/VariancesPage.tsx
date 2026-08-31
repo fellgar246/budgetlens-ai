@@ -13,6 +13,8 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { VarianceBadge } from "@/components/ui/VarianceBadge";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,7 +25,7 @@ import { useSession } from "@/features/session/SessionProvider";
 import { withPathFilters } from "@/lib/analysis-filters";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
-import { favorabilityLabel, formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatPercent } from "@/lib/format";
 import { queryFromFilters } from "@/lib/query-from-filters";
 
 export function VariancesPage() {
@@ -48,6 +50,7 @@ export function VariancesPage() {
   const [summary, setSummary] = useState<VarianceSummary | null>(null);
   const [items, setItems] = useState<BreakdownItem[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [error, setError] = useState<Error | string | null>(null);
   const crumbs = [
     { href: withPathFilters("/dashboard", filters), label: copy.breadcrumbHome },
     filters.departmentId
@@ -86,7 +89,10 @@ export function VariancesPage() {
         setItems(nextItems.data.items);
         setStatus("ready");
       })
-      .catch(() => setStatus("error"));
+      .catch((err: Error) => {
+        setError(err);
+        setStatus("error");
+      });
   }, [groupBy, organizationId, query, userId]);
 
   const currency = summary?.scope.currency ?? selectedOrganization?.functional_currency ?? "MXN";
@@ -150,12 +156,12 @@ export function VariancesPage() {
       {status === "loading" ? (
         <p className="mt-6 text-sm text-secondary">{copy.loadingFigures}</p>
       ) : null}
-      {status === "error" ? <p className="mt-6 text-sm text-danger">{copy.figuresError}</p> : null}
+      {status === "error" ? <ErrorBanner error={error ?? copy.figuresError} /> : null}
       {status === "ready" && summary ? (
         <section className="mt-6 rounded-surface border border-border bg-surface p-6">
           <p className="text-sm text-secondary">
             {formatMoney(summary.metrics.variance_amount, currency)} ·{" "}
-            {favorabilityLabel(summary.metrics.favorability)} ·{" "}
+            <VarianceBadge value={summary.metrics.favorability} /> ·{" "}
             {formatPercent(summary.metrics.variance_percent)}
           </p>
           <ul className="mt-4 space-y-2">
@@ -177,7 +183,7 @@ export function VariancesPage() {
                   </span>
                   <span>
                     {formatMoney(item.metrics.variance_amount, currency)} ·{" "}
-                    {favorabilityLabel(item.metrics.favorability)}
+                    <VarianceBadge value={item.metrics.favorability} />
                   </span>
                 </button>
               </li>

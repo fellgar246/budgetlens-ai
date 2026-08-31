@@ -24,6 +24,8 @@ from budgetlens.adapters.storage import ObjectStorage
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit, decode_cursor, encode_cursor
+from budgetlens.application.rate_limit import enforce_limit
+from budgetlens.config import get_settings
 from budgetlens.domain.enums import (
     AccountType,
     AnalyticsGroupBy,
@@ -226,6 +228,11 @@ class AnalyticsService:
         group_by: AnalyticsGroupBy,
     ) -> ExportJob:
         require_permission(context.role, Permission.EXPORT)
+        enforce_limit(
+            "export",
+            context.user.id,
+            limit=get_settings().rate_limit_export_per_minute,
+        )
         summary = self.summary(context, query)
         items = self._breakdown_items(context.organization_id, query, group_by)
         items = _sort_items(items, AnalyticsSort.ABSOLUTE_VARIANCE, SortDirection.DESC)
@@ -308,9 +315,23 @@ class AnalyticsService:
         return job
 
     def get_export(self, context: TenantContext, export_id: UUID) -> tuple[ExportJob, bytes]:
+        require_permission(context.role, Permission.EXPORT)
         job = SqlExportJobRepository(self._session, context.organization_id).get(export_id)
         if job is None:
             raise NotFoundError()
+        job.assert_downloadable(now=self._clock.now())
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action="export.download_authorized",
+            resource_type="export_job",
+            resource_id=job.id,
+            trace_id=context.trace_id,
+            metadata={"export_type": job.export_type.value},
+        )
         return job, self._storage.get(job.object_key)
 
     def _assert_version(self, context: TenantContext, version_id: UUID) -> None:

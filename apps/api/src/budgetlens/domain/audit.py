@@ -22,5 +22,16 @@ class AuditEvent:
 
 
 def sanitized_metadata(values: dict[str, Any]) -> dict[str, Any]:
-    blocked = {"password", "token", "secret", "authorization", "database_url"}
+    blocked = {
+        "password",
+        "token",
+        "secret",
+        "authorization",
+        "database_url",
+        "prompt",
+        "content",
+        "amount",
+        "download_url",
+        "presigned",
+    }
     return {key: value for key, value in values.items() if key.lower() not in blocked}

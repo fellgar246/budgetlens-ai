@@ -36,7 +36,16 @@ testpaths = ["tests"]
 addopts = "-q"
 markers = [
     "integration: requires a reachable PostgreSQL instance",
+    "perf: large fixtures or timed local measurements",
 ]
+
+[tool.coverage.run]
+source = ["budgetlens"]
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 100

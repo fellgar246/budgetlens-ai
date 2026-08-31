@@ -285,6 +285,7 @@ def import_job_from_row(row: ImportJobRow) -> ImportJob:
         failure_code=row.failure_code,
         create_missing_dimensions=row.create_missing_dimensions,
         sheet_name=row.sheet_name,
+        trace_id=row.trace_id,
     )
 
 
@@ -316,6 +317,7 @@ def apply_import_job(row: ImportJobRow, entity: ImportJob) -> None:
     row.failure_code = entity.failure_code
     row.create_missing_dimensions = entity.create_missing_dimensions
     row.sheet_name = entity.sheet_name
+    row.trace_id = entity.trace_id
 
 
 def import_issue_from_row(row: ImportErrorRow) -> ImportIssue:

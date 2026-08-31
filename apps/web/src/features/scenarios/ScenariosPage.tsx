@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createScenario, previewScenario, type ScenarioPreview } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,7 +22,7 @@ export function ScenariosPage() {
   const [percent, setPercent] = useState("5");
   const [departmentId, setDepartmentId] = useState("");
   const [preview, setPreview] = useState<ScenarioPreview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | string | null>(null);
   const hasSession = Boolean(userId && organizationId);
   const version = versions.find((item) => item.id === baseline);
   const bounds = version
@@ -116,7 +117,7 @@ export function ScenariosPage() {
                 },
               )
                 .then((result) => setPreview(result.data))
-                .catch((err: Error) => setError(err.message));
+                .catch((err: Error) => setError(err));
             }}
           >
             {copy.previewImpact}
@@ -137,14 +138,14 @@ export function ScenariosPage() {
                   fiscal_year: version.fiscal_year,
                   rules: rulePayload(),
                 },
-              ).catch((err: Error) => setError(err.message));
+              ).catch((err: Error) => setError(err));
             }}
           >
             {copy.saveScenario}
           </Button>
         </div>
       </form>
-      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+      <ErrorBanner error={error} />
       {preview ? (
         <section className="mt-6 rounded-surface border border-border bg-surface p-6">
           <p className="text-sm text-secondary">
@@ -156,7 +157,9 @@ export function ScenariosPage() {
           <ul className="mt-4 space-y-1 text-sm">
             {preview.monthly.map((item) => (
               <li key={item.period}>
-                {item.period}: {item.baseline} → {item.result}
+                {item.period}:{" "}
+                {formatMoney(item.baseline, selectedOrganization?.functional_currency ?? "MXN")} →{" "}
+                {formatMoney(item.result, selectedOrganization?.functional_currency ?? "MXN")}
               </li>
             ))}
           </ul>

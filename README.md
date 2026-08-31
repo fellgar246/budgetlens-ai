@@ -75,7 +75,13 @@ pnpm --filter web dev
 | `make lint` | Ruff, Pyright, ESLint, TypeScript, Prettier check. |
 | `make format` | Apply formatters. |
 | `make openapi` | Refresh `packages/api-client/openapi.json`. |
-| `make ci` | Lint, unit tests, OpenAPI export, web build, image builds when Docker is up. |
+| `make ci` | Lint, coverage gates, OpenAPI export, web build, image builds when Docker is up. |
+| `make coverage` | 85% en el motor financiero y 75% backend con la suite de integración. |
+| `make coverage-unit` | Cobertura unitaria informativa, sin umbral de fallo. |
+| `make scan` | Dependency, secret, and optional image scans. Critical findings fail the command. |
+| `make watchdog` | Mark stale processing import jobs as timed out. |
+| `make retain-files` | Delete original import files older than the retention window. |
+| `make test-perf` | Large-file preview timing. |
 | `make reset-local-data CONFIRM=1` | Destroy the local database volume and object storage. |
 
 ## Configuration
@@ -119,3 +125,5 @@ If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.e
 ## Security notes
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
+
+Operational runbooks for rollback, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`.
