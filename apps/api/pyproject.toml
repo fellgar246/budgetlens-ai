@@ -58,6 +58,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyright]
 include = ["src", "tests"]
+extraPaths = ["."]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 venvPath = "."

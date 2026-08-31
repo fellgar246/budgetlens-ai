@@ -56,6 +56,18 @@ docker compose up -d api
 
 Do not roll back to an incompatible schema. If the new version required a migration, application rollback uses an image compatible with the current schema.
 
+## Restore
+
+Local recovery is recreation, not point-in-time restore:
+
+```text
+make reset-local-data CONFIRM=1
+make migrate
+make seed
+```
+
+On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance. Check row counts and tenant isolation on that copy before pointing traffic at it. An isolated restore (AC-026) is required before calling the product production-ready. Until that check runs, R-15 stays unverified and blocks AWS and production release.
+
 ## Encryption and credentials
 
 On AWS, traffic uses TLS and storage uses managed encryption. CI uses roles/OIDC, not permanent access keys. Domain and use-case code does not import AWS SDKs.

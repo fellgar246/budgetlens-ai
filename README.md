@@ -82,6 +82,7 @@ pnpm --filter web dev
 | `make watchdog` | Mark stale processing import jobs as timed out. |
 | `make retain-files` | Delete original import files older than the retention window. |
 | `make test-perf` | Large-file preview timing. |
+| `make traceability` | Check that every FR/NFR/AC, plan, gate, and high-impact risk is catalogued. |
 | `make reset-local-data CONFIRM=1` | Destroy the local database volume and object storage. |
 
 ## Configuration
@@ -126,4 +127,4 @@ If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.e
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
 
-Operational runbooks for rollback, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`.
+Operational runbooks for rollback, restore, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`.

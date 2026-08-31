@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog retain-files test-perf clean-generated reset-local-data
+.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog retain-files test-perf traceability clean-generated reset-local-data
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -76,6 +76,9 @@ retain-files:
 
 test-perf:
 	cd "$(API)" && uv run pytest -m perf
+
+traceability:
+	cd "$(API)" && uv run pytest tests/unit/test_traceability.py
 
 build:
 	$(PNPM) --filter web build
