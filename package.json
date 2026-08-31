@@ -1,0 +1,21 @@
+{
+  "name": "budgetlens",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=20.11.0 <25",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "test": "pnpm --filter web test",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter web typecheck",
+    "format": "pnpm --filter web format",
+    "format:check": "pnpm --filter web format:check"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "unrs-resolver"]
+  }
+}

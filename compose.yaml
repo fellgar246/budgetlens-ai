@@ -1,0 +1,86 @@
+name: budgetlens
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: budgetlens
+      POSTGRES_PASSWORD: budgetlens_local_only
+      POSTGRES_DB: budgetlens
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U budgetlens -d budgetlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./apps/api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    environment:
+      APP_ENV: local
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      DATABASE_URL: postgresql+psycopg://budgetlens:budgetlens_local_only@postgres:5432/budgetlens
+      OBJECT_STORAGE_BACKEND: local
+      LOCAL_STORAGE_PATH: /var/lib/budgetlens/storage
+      AUTH_MODE: dev
+      AI_PROVIDER: stub
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      DB_READY_TIMEOUT_SECONDS: ${DB_READY_TIMEOUT_SECONDS:-2}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - local_storage:/var/lib/budgetlens/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-local}
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-local}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  local_storage:

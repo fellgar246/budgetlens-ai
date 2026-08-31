@@ -1,0 +1,54 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+
+# Node
+node_modules/
+.pnpm-store/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+
+# Local runtime
+var/
+local-storage/
+uploads/
+exports/
+
+# Terraform (binaries and state; version pins stay tracked)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Specification package (kept local, not versioned with the app)
+spec-docs/
+
+# OS and editor
+.DS_Store
+.idea/
+.vscode/*.log
+
+# Test artifacts
+playwright-report/
+test-results/
+.nyc_output/

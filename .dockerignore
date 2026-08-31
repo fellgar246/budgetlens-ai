@@ -1,0 +1,11 @@
+.git
+.venv
+node_modules
+apps/web/.next
+apps/web/out
+apps/api/.venv
+apps/api/.pytest_cache
+apps/api/.ruff_cache
+var
+**/.DS_Store
+**/__pycache__

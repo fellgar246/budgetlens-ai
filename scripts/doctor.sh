@@ -1,0 +1,128 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+
+failed=0
+warned=0
+
+ok() {
+  printf 'OK    %s\n' "$1"
+}
+
+fail() {
+  printf 'FAIL  %s\n' "$1"
+  failed=1
+}
+
+warn() {
+  printf 'WARN  %s\n' "$1"
+  warned=1
+}
+
+have() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+echo "BudgetLens toolchain check"
+echo "Repository: $ROOT"
+echo
+
+if have git; then
+  ok "git $(git --version | awk '{print $3}')"
+else
+  fail "git is not installed. Install Git and retry."
+fi
+
+if have docker; then
+  ok "docker $(docker --version | awk '{print $3}' | tr -d ',')"
+  if docker compose version >/dev/null 2>&1; then
+    ok "docker compose $(docker compose version --short 2>/dev/null || echo present)"
+  else
+    fail "docker compose v2 is not available. Install Docker Desktop with Compose v2."
+  fi
+  if docker info >/dev/null 2>&1; then
+    ok "docker daemon is running"
+  else
+    fail "docker daemon is not running. Start Docker Desktop and retry."
+  fi
+else
+  fail "docker is not installed. Install Docker Desktop and retry."
+fi
+
+if have node; then
+  node_version="$(node -v | tr -d 'v')"
+  node_major="$(printf '%s' "$node_version" | cut -d. -f1)"
+  if [ "$node_major" -ge 20 ]; then
+    ok "node $node_version"
+    if [ "$node_major" -lt 22 ]; then
+      warn "this repository pins Node.js 22 in .node-version; $node_version works for local install, Compose uses Node 22."
+    fi
+  else
+    fail "node $node_version is too old. Install Node.js 20.11 or newer (22 preferred)."
+  fi
+else
+  fail "node is not installed. Install Node.js 22 LTS (see .node-version)."
+fi
+
+if have corepack; then
+  ok "corepack $(corepack --version 2>/dev/null || echo present)"
+else
+  warn "corepack is not available. Enable it from a current Node.js install to activate pnpm."
+fi
+
+if have pnpm; then
+  ok "pnpm $(pnpm -v)"
+elif have corepack; then
+  ok "pnpm $(corepack pnpm -v) via corepack (no global shim)"
+else
+  fail "pnpm is not available. Install Node.js with Corepack, then run: corepack enable && corepack prepare pnpm@10.15.0 --activate"
+fi
+
+if have python3; then
+  if python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)'; then
+    ok "python $(python3 --version | awk '{print $2}')"
+  else
+    fail "python $(python3 --version | awk '{print $2}') is not 3.12. Install Python 3.12 (see .python-version)."
+  fi
+else
+  fail "python3 is not installed. Install Python 3.12."
+fi
+
+if have uv; then
+  ok "uv $(uv --version | awk '{print $2}')"
+else
+  fail "uv is not installed. Install from https://docs.astral.sh/uv/ and retry."
+fi
+
+if have terraform; then
+  tf_version="$(terraform version -json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["terraform_version"])' 2>/dev/null || terraform version | head -n 1 | awk '{print $2}' | tr -d 'v')"
+  pinned="$(cat "$ROOT/infrastructure/terraform/.terraform-version")"
+  if [ "$tf_version" = "$pinned" ]; then
+    ok "terraform $tf_version"
+  else
+    warn "terraform $tf_version found; repository pin is $pinned. Local app does not require Terraform."
+  fi
+else
+  warn "terraform is not installed. Required later for AWS environments; not needed to run the local app."
+fi
+
+if have make; then
+  ok "make $(make --version | head -n 1 | awk '{print $3}')"
+else
+  fail "make is not installed."
+fi
+
+echo
+if [ "$failed" -ne 0 ]; then
+  echo "Doctor found missing required tools. Install only the commands listed above; this script does not change your system."
+  exit 1
+fi
+
+if [ "$warned" -ne 0 ]; then
+  echo "Doctor passed with warnings. You can continue local setup."
+  exit 0
+fi
+
+echo "Doctor passed."
