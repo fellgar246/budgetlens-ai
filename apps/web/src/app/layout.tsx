@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: `${copy.appName} · ${copy.statusTitle}`,
+  title: copy.appName,
   description: copy.statusDescription,
 };
 

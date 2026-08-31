@@ -13,6 +13,7 @@ API_SRC = ROOT / "apps" / "api" / "src"
 SNAPSHOT = ROOT / "packages" / "api-client" / "openapi.json"
 
 os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("AUTH_MODE", "dev")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://budgetlens:budgetlens_local_only@localhost:5432/budgetlens",

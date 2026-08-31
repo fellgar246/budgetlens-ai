@@ -69,7 +69,7 @@ pnpm --filter web dev
 | `make stop` | Stop containers without deleting volumes. |
 | `make logs` | Follow Compose logs. |
 | `make migrate` | Apply Alembic migrations using host `DATABASE_URL`. |
-| `make seed` | Upsert the synthetic local marker. Idempotent. |
+| `make seed` | Upsert Alpha/Beta tenants, local users, and catalog dimensions. Idempotent. |
 | `make test` | API unit tests and web unit tests. |
 | `make test-integration` | API tests that need PostgreSQL. |
 | `make lint` | Ruff, Pyright, ESLint, TypeScript, Prettier check. |
@@ -85,6 +85,12 @@ Copy `.env.example` to `.env`. Every variable is documented there with type, sec
 `AUTH_MODE=dev` is rejected when `APP_ENV=prod`. API docs are enabled only when `APP_ENV` is `local` or `test`.
 
 The browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`). Do not point that variable at the Docker service name; the request runs in the browser.
+
+## Local identity
+
+`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, and admin users. The web header lists those identities. Publish, activate, and archive require `Idempotency-Key`.
+
+The catalog page at `/catalogo` is a local harness for dimensions and budget versions. Amounts stay as four-decimal values; the API never returns infinity or `NaN` for variance.
 
 If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env`.
 

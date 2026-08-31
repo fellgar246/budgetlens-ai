@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from budgetlens.domain.errors import DomainError
 from budgetlens.presentation.middleware import TRACE_HEADER
 
 logger = logging.getLogger("budgetlens.errors")
@@ -50,16 +51,50 @@ async def validation_handler(request: Request, _exc: Exception) -> JSONResponse:
     )
 
 
+async def domain_handler(request: Request, exc: Exception) -> JSONResponse:
+    trace_id = _trace_id(request)
+    error = (
+        exc
+        if isinstance(exc, DomainError)
+        else DomainError(
+            code="INTERNAL_ERROR",
+            message="Ocurrió un error interno.",
+            status_code=500,
+            retryable=True,
+        )
+    )
+    return JSONResponse(
+        status_code=error.status_code,
+        content=error_body(
+            code=error.code,
+            message=error.message,
+            trace_id=trace_id,
+            retryable=error.retryable,
+            field_errors=error.field_errors,
+        ),
+        headers={TRACE_HEADER: trace_id},
+    )
+
+
 async def http_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = _trace_id(request)
     status_code = exc.status_code if isinstance(exc, StarletteHTTPException) else 500
-    message = (
-        "No se encontró el recurso." if status_code == 404 else "La solicitud no se pudo completar."
-    )
+    if status_code == 401:
+        message = "Debes iniciar sesión para continuar."
+        code = "UNAUTHENTICATED"
+    elif status_code == 403:
+        message = "No tienes permiso para esta acción."
+        code = "FORBIDDEN"
+    elif status_code == 404:
+        message = "No se encontró el recurso."
+        code = "NOT_FOUND"
+    else:
+        message = "La solicitud no se pudo completar."
+        code = "HTTP_ERROR"
     return JSONResponse(
         status_code=status_code,
         content=error_body(
-            code="HTTP_ERROR",
+            code=code,
             message=message,
             trace_id=trace_id,
             retryable=False,
@@ -90,6 +125,7 @@ async def unhandled_handler(request: Request, _exc: Exception) -> JSONResponse:
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(DomainError, domain_handler)
     app.add_exception_handler(RequestValidationError, validation_handler)
     app.add_exception_handler(StarletteHTTPException, http_handler)
     app.add_exception_handler(Exception, unhandled_handler)

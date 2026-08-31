@@ -7,7 +7,12 @@ from budgetlens.config import Settings, get_settings
 from budgetlens.logging import configure_logging
 from budgetlens.presentation.errors import install_error_handlers
 from budgetlens.presentation.middleware import TraceIdMiddleware
+from budgetlens.presentation.routes.budget_versions import router as budget_versions_router
+from budgetlens.presentation.routes.dev import router as dev_router
+from budgetlens.presentation.routes.dimensions import router as dimensions_router
 from budgetlens.presentation.routes.health import router as health_router
+from budgetlens.presentation.routes.memberships import router as memberships_router
+from budgetlens.presentation.routes.session import router as session_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -32,10 +37,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Content-Type",
             "X-Organization-Id",
             "X-Trace-Id",
+            "Idempotency-Key",
             "traceparent",
         ],
         expose_headers=["X-Trace-Id"],
     )
     install_error_handlers(app)
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(session_router, prefix="/api/v1")
+    app.include_router(memberships_router, prefix="/api/v1")
+    app.include_router(dimensions_router, prefix="/api/v1")
+    app.include_router(budget_versions_router, prefix="/api/v1")
+    if resolved.auth_mode == "dev" and resolved.app_env in {"local", "test"}:
+        app.include_router(dev_router, prefix="/api/v1")
     return app
