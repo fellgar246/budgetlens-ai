@@ -38,7 +38,6 @@ from budgetlens.domain.dimensions import Account, CostCenter, Department, normal
 from budgetlens.domain.enums import (
     UNASSIGNED_CODE,
     AccountType,
-    BudgetVersionStatus,
     DimensionStatus,
     ImportErrorSeverity,
     ImportJobStatus,
@@ -66,7 +65,6 @@ from budgetlens.domain.importing import (
     propose_mapping,
     validate_mapping,
 )
-from budgetlens.domain.money import Currency
 from budgetlens.domain.organization import Organization, normalize_name
 from budgetlens.domain.permissions import can_create_missing_dimensions, require_permission
 from budgetlens.domain.text_safety import redact_cell
@@ -523,18 +521,10 @@ class ImportService:
                 "El archivo contiene errores que deben corregirse.",
             )
         if job.import_type is ScenarioType.BUDGET:
-            version = self._require_version_for_create(
+            self._require_version_for_create(
                 context, import_type=job.import_type, budget_version_id=job.budget_version_id
             )
-            if version is None or version.status is not BudgetVersionStatus.DRAFT:
-                raise ConflictError(
-                    "VERSION_NOT_DRAFT",
-                    "Una versión publicada no recibe nuevas entradas.",
-                )
-        entries = [
-            self._to_entry(context, job, item, organization.functional_currency)
-            for item in normalized
-        ]
+        entries = [self._to_entry(context, job, item, organization) for item in normalized]
         SqlFinancialEntryRepository(self._session, context.organization_id).add_many(entries)
         updated = job.mark_applied(now=self._clock.now())
         self._jobs(context.organization_id).save(updated)
@@ -705,13 +695,13 @@ class ImportService:
         context: TenantContext,
         job: ImportJob,
         item: NormalizedImportRow,
-        currency: Currency,
+        organization: Organization,
     ) -> FinancialEntry:
         now = self._clock.now()
         account = self._resolve_account(context, item, now)
         department = self._resolve_department(context, item, now)
         cost_center = self._resolve_cost_center(context, item, now)
-        return FinancialEntry(
+        entry = FinancialEntry(
             id=self._ids.new_id(),
             organization_id=context.organization_id,
             import_job_id=job.id,
@@ -723,11 +713,13 @@ class ImportService:
             department_id=department.id,
             cost_center_id=cost_center.id,
             amount=item.amount,
-            currency=currency,
+            currency=organization.functional_currency,
             source_row_number=item.row_number,
             source_reference=item.source_reference,
             created_at=now,
         )
+        entry.assert_consistent_with(organization)
+        return entry
 
     def _resolve_account(
         self, context: TenantContext, item: NormalizedImportRow, now: datetime
@@ -832,11 +824,7 @@ class ImportService:
         )
         if version is None:
             raise NotFoundError()
-        if version.status is not BudgetVersionStatus.DRAFT:
-            raise ConflictError(
-                "VERSION_NOT_DRAFT",
-                "Solo una versión en borrador puede recibir presupuesto.",
-            )
+        version.assert_accepts_entries()
         return version
 
     def _fiscal_year_for_job(self, context: TenantContext, job: ImportJob) -> int | None:

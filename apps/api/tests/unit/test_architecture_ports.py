@@ -47,6 +47,14 @@ def test_ports_package_has_no_adapter_imports() -> None:
 
 
 def test_ports_package_exists() -> None:
-    expected = {"ai.py", "identity.py", "imports.py", "storage.py", "telemetry.py", "parsing.py"}
+    expected = {
+        "ai.py",
+        "clock.py",
+        "identity.py",
+        "imports.py",
+        "parsing.py",
+        "storage.py",
+        "telemetry.py",
+    }
     present = {path.name for path in (ROOT / "ports").glob("*.py")}
     assert expected <= present

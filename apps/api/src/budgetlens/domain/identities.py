@@ -5,6 +5,11 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 
+def format_rfc3339(value: datetime) -> str:
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 class Clock(Protocol):
     def now(self) -> datetime: ...
 

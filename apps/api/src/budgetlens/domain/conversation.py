@@ -54,6 +54,30 @@ class Conversation:
             return self
         return replace(self, deleted_at=now, updated_at=now)
 
+    def assert_same_organization(self, organization_id: UUID) -> None:
+        if self.organization_id != organization_id:
+            raise ValidationError(
+                "CONVERSATION_ORG_MISMATCH",
+                "Una conversación no se mueve entre organizaciones.",
+            )
+
+    def message(
+        self,
+        *,
+        message_id: UUID,
+        role: MessageRole,
+        content: str,
+        created_at: datetime,
+    ) -> ConversationMessage:
+        return ConversationMessage(
+            id=message_id,
+            organization_id=self.organization_id,
+            conversation_id=self.id,
+            role=role,
+            content=content,
+            created_at=created_at,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationMessage:

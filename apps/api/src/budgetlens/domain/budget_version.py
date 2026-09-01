@@ -30,6 +30,13 @@ class BudgetVersion:
                 "Publica una versión nueva para corregir.",
             )
 
+    def assert_accepts_entries(self) -> None:
+        if self.status is not BudgetVersionStatus.DRAFT:
+            raise ConflictError(
+                "VERSION_NOT_DRAFT",
+                "Una versión publicada no recibe nuevas entradas.",
+            )
+
     def with_draft_metadata(self, *, expected_version: int, name: str) -> BudgetVersion:
         if expected_version != self.version:
             from budgetlens.domain.errors import ConcurrencyError

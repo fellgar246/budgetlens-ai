@@ -24,7 +24,6 @@ from budgetlens.config import Settings
 from budgetlens.domain.conversation import (
     AiRun,
     Conversation,
-    ConversationMessage,
     ToolExecution,
     normalize_message,
 )
@@ -221,10 +220,8 @@ class ConversationService:
         repo: SqlConversationRepository,
         now: datetime,
     ) -> CopilotAnswer:
-        user_message = ConversationMessage(
-            id=self._ids.new_id(),
-            organization_id=context.organization_id,
-            conversation_id=conversation.id,
+        user_message = conversation.message(
+            message_id=self._ids.new_id(),
             role=MessageRole.USER,
             content=question,
             created_at=now,
@@ -339,10 +336,8 @@ class ConversationService:
         repo.add_run(run)
         for execution in pending_tools:
             repo.add_tool(execution)
-        assistant = ConversationMessage(
-            id=self._ids.new_id(),
-            organization_id=context.organization_id,
-            conversation_id=conversation.id,
+        assistant = conversation.message(
+            message_id=self._ids.new_id(),
             role=MessageRole.ASSISTANT,
             content=answer,
             created_at=self._clock.now(),

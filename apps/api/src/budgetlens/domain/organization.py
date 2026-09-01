@@ -66,6 +66,14 @@ def normalize_email(value: str) -> str:
     return cleaned
 
 
+def require_same_organization(expected: UUID, actual: UUID) -> None:
+    if expected != actual:
+        raise ValidationError(
+            "TENANT_MISMATCH",
+            "El recurso no pertenece a esta organización.",
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Organization:
     id: UUID

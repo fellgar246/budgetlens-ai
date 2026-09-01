@@ -65,3 +65,11 @@ def test_archive_keeps_trace_and_clears_active() -> None:
     assert archived.is_active is False
     assert archived.published_at is not None
     assert archived.appears_in_default_list() is False
+
+
+def test_published_version_does_not_accept_entries() -> None:
+    published = _version(status=BudgetVersionStatus.PUBLISHED)
+    with pytest.raises(ConflictError) as exc:
+        published.assert_accepts_entries()
+    assert exc.value.code == "VERSION_NOT_DRAFT"
+    _version().assert_accepts_entries()

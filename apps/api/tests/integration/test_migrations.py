@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from budgetlens.adapters.db import reset_engine
@@ -37,7 +38,12 @@ def test_upgrade_from_empty_creates_domain_tables(migrated_database: str) -> Non
         "import_errors",
         "financial_entries",
         "scenarios",
+        "scenario_rules",
         "conversations",
+        "messages",
+        "ai_runs",
+        "tool_executions",
+        "export_jobs",
     }.issubset(tables)
 
 
@@ -50,7 +56,12 @@ def test_upgrade_from_n_minus_one_preserves_schema_meta(monkeypatch: pytest.Monk
     reset_settings_cache()
     reset_engine()
     config = Config(str(API_ROOT / "alembic.ini"))
-    command.upgrade(config, "20260831_0001")
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1
+    n_minus_one = script.get_revision(heads[0]).down_revision
+    assert isinstance(n_minus_one, str)
+    command.upgrade(config, n_minus_one)
     engine = create_engine(url)
     with engine.begin() as connection:
         connection.execute(
@@ -59,8 +70,6 @@ def test_upgrade_from_n_minus_one_preserves_schema_meta(monkeypatch: pytest.Monk
                 "VALUES ('kept', 'yes') ON CONFLICT (key) DO NOTHING"
             )
         )
-        tables = inspect(connection).get_table_names()
-        assert "users" not in tables
     engine.dispose()
     command.upgrade(config, "head")
     engine = create_engine(url)

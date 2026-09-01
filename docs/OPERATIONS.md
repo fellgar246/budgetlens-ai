@@ -38,6 +38,14 @@ make retain-files
 
 The initial retention window for original files is 90 days (`ORIGINAL_FILE_RETENTION_DAYS`). After a purge, job metadata is kept.
 
+Business entities use logical archive or disable flags. Original files and exports expire by lifecycle. Local demo data is purged only with an explicit administrative command outside the 1.0 UI:
+
+```text
+make reset-local-data CONFIRM=1
+```
+
+Audit events are append-only for the application. Identifiers are UUID strings. Timestamps are UTC in RFC 3339.
+
 ## Exports
 
 Exports expire. Creating and downloading them requires authorization. URLs are not written to logs.

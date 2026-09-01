@@ -36,6 +36,7 @@ class UserRow(Base):
             "platform_role IS NULL OR platform_role IN ('operator')",
             name="ck_users_platform_role",
         ),
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -77,6 +78,8 @@ class MembershipRow(Base):
     __tablename__ = "memberships"
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id", name="uq_memberships_org_user"),
+        CheckConstraint("role IN ('viewer', 'analyst', 'admin')", name="ck_memberships_role"),
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_memberships_status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -103,6 +106,11 @@ class AccountRow(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "id", name="uq_accounts_org_id"),
         UniqueConstraint("organization_id", "code", name="uq_accounts_org_code"),
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_accounts_status"),
+        CheckConstraint(
+            "account_type IN ('revenue', 'expense', 'asset', 'liability', 'equity', 'other')",
+            name="ck_accounts_type",
+        ),
         ForeignKeyConstraint(
             ["organization_id", "parent_id"],
             ["accounts.organization_id", "accounts.id"],
@@ -128,7 +136,11 @@ class AccountRow(Base):
 
 class DepartmentRow(Base):
     __tablename__ = "departments"
-    __table_args__ = (UniqueConstraint("organization_id", "code", name="uq_departments_org_code"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_departments_org_id"),
+        UniqueConstraint("organization_id", "code", name="uq_departments_org_code"),
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_departments_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -146,7 +158,11 @@ class DepartmentRow(Base):
 
 class CostCenterRow(Base):
     __tablename__ = "cost_centers"
-    __table_args__ = (UniqueConstraint("organization_id", "code", name="uq_cost_centers_org_code"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_cost_centers_org_id"),
+        UniqueConstraint("organization_id", "code", name="uq_cost_centers_org_code"),
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_cost_centers_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -171,6 +187,7 @@ class BudgetVersionRow(Base):
             "name",
             name="uq_budget_versions_org_fy_name",
         ),
+        UniqueConstraint("organization_id", "id", name="uq_budget_versions_org_id"),
         CheckConstraint(
             "status IN ('draft', 'published', 'archived')",
             name="ck_budget_versions_status",
@@ -290,6 +307,7 @@ class ImportJobRow(Base):
             name="ck_import_jobs_status",
         ),
         CheckConstraint("import_type IN ('budget', 'actual')", name="ck_import_jobs_type"),
+        CheckConstraint("char_length(sha256) = 64", name="ck_import_jobs_sha256"),
         ForeignKeyConstraint(
             ["organization_id", "budget_version_id"],
             ["budget_versions.organization_id", "budget_versions.id"],
@@ -339,6 +357,7 @@ class ImportErrorRow(Base):
             ["import_jobs.organization_id", "import_jobs.id"],
             name="fk_import_errors_job_same_org",
         ),
+        CheckConstraint("severity IN ('error', 'warning')", name="ck_import_errors_severity"),
         Index("ix_import_errors_job_row", "organization_id", "import_job_id", "row_number"),
     )
 
@@ -363,6 +382,14 @@ class FinancialEntryRow(Base):
             "(scenario_type = 'budget' AND budget_version_id IS NOT NULL) OR "
             "(scenario_type = 'actual' AND budget_version_id IS NULL)",
             name="ck_financial_entries_version",
+        ),
+        CheckConstraint(
+            "EXTRACT(DAY FROM period_start) = 1",
+            name="ck_financial_entries_period_start",
+        ),
+        CheckConstraint(
+            "char_length(currency) = 3",
+            name="ck_financial_entries_currency",
         ),
         ForeignKeyConstraint(
             ["organization_id", "import_job_id"],
@@ -439,7 +466,17 @@ class FinancialEntryRow(Base):
 
 class ScenarioRow(Base):
     __tablename__ = "scenarios"
-    __table_args__ = (UniqueConstraint("organization_id", "id", name="uq_scenarios_org_id"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_scenarios_org_id"),
+        CheckConstraint(
+            "baseline_type IN ('budget', 'actual')",
+            name="ck_scenarios_baseline_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'saved', 'archived')",
+            name="ck_scenarios_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -525,6 +562,7 @@ class MessageRow(Base):
             ["conversations.organization_id", "conversations.id"],
             name="fk_messages_conversation_same_org",
         ),
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -539,14 +577,24 @@ class MessageRow(Base):
 
 class AiRunRow(Base):
     __tablename__ = "ai_runs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_ai_runs_org_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "conversation_id"],
+            ["conversations.organization_id", "conversations.id"],
+            name="fk_ai_runs_conversation_same_org",
+        ),
+        CheckConstraint(
+            "status IN ('succeeded', 'failed', 'limited')",
+            name="ck_ai_runs_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
-    conversation_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("conversations.id"), nullable=False
-    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     model_id: Mapped[str] = mapped_column(String(120), nullable=False)
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -559,14 +607,23 @@ class AiRunRow(Base):
 
 class ToolExecutionRow(Base):
     __tablename__ = "tool_executions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "ai_run_id"],
+            ["ai_runs.organization_id", "ai_runs.id"],
+            name="fk_tool_executions_run_same_org",
+        ),
+        CheckConstraint(
+            "status IN ('succeeded', 'rejected', 'failed')",
+            name="ck_tool_executions_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
-    ai_run_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("ai_runs.id"), nullable=False
-    )
+    ai_run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
     argument_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     result_hash: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -37,6 +37,7 @@ from budgetlens.adapters.persistence.models import (
 )
 from budgetlens.application.pagination import Page, decode_cursor, encode_cursor
 from budgetlens.domain.conversation import AiRun, Conversation, ConversationMessage, ToolExecution
+from budgetlens.domain.errors import ValidationError
 from budgetlens.domain.exporting import ExportJob
 from budgetlens.domain.financial_entry import FinancialEntry
 from budgetlens.domain.identities import IdFactory
@@ -337,15 +338,22 @@ class SqlConversationRepository:
         return conversation_from_row(row)
 
     def add(self, conversation: Conversation) -> None:
+        conversation.assert_same_organization(self._organization_id)
         row = ConversationRow()
         apply_conversation(row, conversation)
         self._session.add(row)
 
     def save(self, conversation: Conversation) -> None:
+        conversation.assert_same_organization(self._organization_id)
         row = self._session.get(ConversationRow, conversation.id)
-        if row is None or row.organization_id != self._organization_id:
+        if row is None:
             self.add(conversation)
             return
+        if row.organization_id != self._organization_id:
+            raise ValidationError(
+                "CONVERSATION_ORG_MISMATCH",
+                "Una conversación no se mueve entre organizaciones.",
+            )
         apply_conversation(row, conversation)
 
     def list_page(self, *, user_id: UUID, cursor: str | None, limit: int) -> Page[Conversation]:
@@ -384,6 +392,11 @@ class SqlConversationRepository:
         )
 
     def add_message(self, message: ConversationMessage) -> None:
+        if message.organization_id != self._organization_id:
+            raise ValidationError(
+                "CONVERSATION_ORG_MISMATCH",
+                "Una conversación no se mueve entre organizaciones.",
+            )
         row = MessageRow()
         apply_message(row, message)
         self._session.add(row)
