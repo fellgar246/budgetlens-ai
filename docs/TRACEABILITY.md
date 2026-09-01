@@ -82,7 +82,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 | NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, AWS review pending |
 | NFR-PRI-001–005 | 02, 05–10 | Log tests, retention, synthetic seed, presigned export flow |
 | NFR-UX-001–004 | 04, 07 | Automated display tests, keyboard/focus styles, format components |
-| NFR-MNT-001–006 | 00–09 | Coverage gates, types, migrations, OpenAPI, [decisions](DECISIONS.md) |
+| NFR-MNT-001–006 | 00–09 | Coverage gates, types, migrations, OpenAPI, [decision log](DECISIONS.md) |
 | NFR-OBS-001–004 | 00, 05, 07, 08, 10 | Trace/log/metrics/alarm tests and AWS smoke still pending |
 
 Individual IDs: NFR-PERF-001, NFR-PERF-002, NFR-PERF-003, NFR-PERF-004, NFR-PERF-005, NFR-REL-001, NFR-REL-002, NFR-REL-003, NFR-REL-004, NFR-REL-005, NFR-SEC-001, NFR-SEC-002, NFR-SEC-003, NFR-SEC-004, NFR-SEC-005, NFR-SEC-006, NFR-SEC-007, NFR-PRI-001, NFR-PRI-002, NFR-PRI-003, NFR-PRI-004, NFR-PRI-005, NFR-UX-001, NFR-UX-002, NFR-UX-003, NFR-UX-004, NFR-MNT-001, NFR-MNT-002, NFR-MNT-003, NFR-MNT-004, NFR-MNT-005, NFR-MNT-006, NFR-OBS-001, NFR-OBS-002, NFR-OBS-003, NFR-OBS-004.

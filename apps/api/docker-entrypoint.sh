@@ -9,5 +9,15 @@ if [ ! -w "$STORAGE_PATH" ]; then
   exit 1
 fi
 
-alembic upgrade head
-exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 30
+case "${1:-api}" in
+  api)
+    alembic upgrade head
+    exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 30
+    ;;
+  seed|eval-ai|watchdog|retain-files|import-job)
+    exec python -m budgetlens "$@"
+    ;;
+  *)
+    exec "$@"
+    ;;
+esac

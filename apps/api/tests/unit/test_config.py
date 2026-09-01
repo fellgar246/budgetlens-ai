@@ -82,6 +82,17 @@ def test_prod_accepts_oidc() -> None:
     )
     assert settings.docs_enabled is False
     assert settings.cors_origin_list == ["http://localhost:3000"]
+    assert settings.conversation_content_mode == "redacted"
+
+
+def test_local_keeps_full_synthetic_conversation_content() -> None:
+    settings = Settings.model_validate(
+        {
+            "app_env": "local",
+            "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+        }
+    )
+    assert settings.conversation_content_mode == "full_synthetic"
 
 
 def _docs_block_for(text: str, env_name: str) -> str:

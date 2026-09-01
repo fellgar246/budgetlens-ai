@@ -9,6 +9,27 @@ from budgetlens.domain.enums import AiRunStatus, MessageRole, ToolExecutionStatu
 from budgetlens.domain.errors import ValidationError, field_issue
 
 MAX_MESSAGE_CHARS = 2000
+CONVERSATION_CONTENT_FULL_SYNTHETIC = "full_synthetic"
+CONVERSATION_CONTENT_REDACTED = "redacted"
+REDACTED_MESSAGE_CONTENT = "[redacted]"
+
+
+def persistable_message_content(content: str, *, mode: str) -> str:
+    if mode == CONVERSATION_CONTENT_FULL_SYNTHETIC:
+        return content
+    if mode == CONVERSATION_CONTENT_REDACTED:
+        return REDACTED_MESSAGE_CONTENT
+    raise ValidationError(
+        "INVALID_CONTENT_MODE",
+        "El modo de persistencia de conversación no es válido.",
+        field_errors=[
+            field_issue(
+                "conversation_content_mode",
+                "INVALID_CONTENT_MODE",
+                "El modo de persistencia de conversación no es válido.",
+            )
+        ],
+    )
 
 
 def normalize_message(content: str) -> str:

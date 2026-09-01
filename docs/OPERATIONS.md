@@ -54,6 +54,12 @@ Exports expire. Creating and downloading them requires authorization. URLs are n
 
 Deletion is logical. Audit keeps metadata (identifiers, outcome) and not the conversation text. Prompts and full answers are not written to CloudWatch by default; usage metadata and hashes are retained.
 
+`CONVERSATION_CONTENT_MODE=full_synthetic` may persist complete message text in `local` and `test` so synthetic demos keep history. In `dev` and `prod` the API stores a redacted placeholder instead. Accepting a production persistence policy (full encrypted text versus redacted storage) is a human decision and remains open. Real customer data stays blocked until that decision and M-08 are complete.
+
+## Terraform state
+
+Remote state uses a versioned, encrypted S3 bucket and Terraform's native `use_lockfile`. Do not add a new DynamoDB lock table. The repository pins Terraform 1.13.5 (1.10 or newer is required for native S3 locking). If an older root still has `dynamodb_table`, upgrade first, apply with both locks, then remove the DynamoDB argument.
+
 ## Images and rollback
 
 `make build` keeps the `previous` tag when a `local` image already exists.

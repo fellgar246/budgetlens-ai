@@ -11,6 +11,9 @@ describe("financial display", () => {
   it("always includes currency in amounts", () => {
     expect(formatMoney("12500.2500", "MXN")).toContain("MXN");
     expect(formatMoney("-10.0000", "USD")).toContain("USD");
+    expect(formatMoney("9999999999999.1234", "MXN").replace(/[^\d.-]/g, "")).toBe(
+      "9999999999999.1234",
+    );
   });
 
   it("shows N/A when the percent is missing", () => {

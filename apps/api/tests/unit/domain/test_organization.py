@@ -5,7 +5,13 @@ from uuid import UUID
 
 import pytest
 
-from budgetlens.domain.conversation import Conversation
+from budgetlens.domain.conversation import (
+    CONVERSATION_CONTENT_FULL_SYNTHETIC,
+    CONVERSATION_CONTENT_REDACTED,
+    REDACTED_MESSAGE_CONTENT,
+    Conversation,
+    persistable_message_content,
+)
 from budgetlens.domain.enums import MessageRole, OrganizationStatus, UserStatus
 from budgetlens.domain.errors import UnauthenticatedError, ValidationError
 from budgetlens.domain.money import Currency
@@ -94,3 +100,17 @@ def test_conversation_stays_in_its_organization() -> None:
     )
     assert message.organization_id == conversation.organization_id
     assert message.conversation_id == conversation.id
+
+
+def test_conversation_persistence_redacts_outside_synthetic_mode() -> None:
+    question = "¿Cuál fue el gasto?"
+    assert (
+        persistable_message_content(question, mode=CONVERSATION_CONTENT_FULL_SYNTHETIC) == question
+    )
+    assert (
+        persistable_message_content(question, mode=CONVERSATION_CONTENT_REDACTED)
+        == REDACTED_MESSAGE_CONTENT
+    )
+    with pytest.raises(ValidationError) as exc:
+        persistable_message_content(question, mode="encrypted")
+    assert exc.value.code == "INVALID_CONTENT_MODE"

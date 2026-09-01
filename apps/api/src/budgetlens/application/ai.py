@@ -37,6 +37,7 @@ from budgetlens.domain.conversation import (
     Conversation,
     ToolExecution,
     normalize_message,
+    persistable_message_content,
 )
 from budgetlens.domain.enums import (
     AiRunStatus,
@@ -251,7 +252,9 @@ class ConversationService:
         user_message = conversation.message(
             message_id=self._ids.new_id(),
             role=MessageRole.USER,
-            content=question,
+            content=persistable_message_content(
+                question, mode=self._settings.conversation_content_mode
+            ),
             created_at=now,
         )
         repo.add_message(user_message)
@@ -386,7 +389,9 @@ class ConversationService:
         assistant = conversation.message(
             message_id=self._ids.new_id(),
             role=MessageRole.ASSISTANT,
-            content=answer,
+            content=persistable_message_content(
+                answer, mode=self._settings.conversation_content_mode
+            ),
             created_at=self._clock.now(),
         )
         repo.add_message(assistant)

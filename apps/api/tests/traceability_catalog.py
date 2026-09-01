@@ -1072,7 +1072,11 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Every irreversible or costly decision has a recorded ADR",
         "status": "implemented",
         "plans": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09"],
-        "evidence": ["docs/DECISIONS.md"],
+        "evidence": [
+            "docs/DECISIONS.md",
+            "apps/api/tests/unit/test_decisions.py",
+            "apps/api/tests/unit/test_architecture_decisions.py",
+        ],
     },
     {
         "id": "NFR-OBS-001",

@@ -11,6 +11,7 @@ AuthMode = Literal["dev", "oidc"]
 ObjectStorageBackend = Literal["local", "s3"]
 AiProvider = Literal["stub", "bedrock"]
 ImportExecutorMode = Literal["inline", "process"]
+ConversationContentMode = Literal["full_synthetic", "redacted"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
@@ -50,6 +51,7 @@ class Settings(BaseSettings):
     ai_timeout_seconds: int = Field(default=20, ge=1)
     ai_max_concurrent_conversations: int = Field(default=2, ge=1)
     import_executor: ImportExecutorMode = "inline"
+    conversation_content_mode: ConversationContentMode = "full_synthetic"
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
     cors_origins: str = "http://localhost:3000"
     db_ready_timeout_seconds: float = Field(default=2.0, gt=0)
@@ -89,6 +91,8 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL are required when AUTH_MODE=oidc"
                 )
+        if self.app_env not in {"local", "test"} and self.conversation_content_mode != "redacted":
+            object.__setattr__(self, "conversation_content_mode", "redacted")
         return self
 
     @property
