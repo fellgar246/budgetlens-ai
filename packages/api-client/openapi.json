@@ -6863,7 +6863,10 @@
                   "amount": "Actual",
                   "currency": "Currency"
                 },
-                "create_missing_dimensions": false
+                "create_missing_dimensions": false,
+                "amount_locale": "en",
+                "sheet_name": null,
+                "delimiter": null
               }
             }
           }
@@ -7285,7 +7288,7 @@
               "anyOf": [
                 {
                   "type": "integer",
-                  "maximum": 100,
+                  "maximum": 50,
                   "minimum": 1
                 },
                 {
@@ -13725,6 +13728,35 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ImportErrorGroupResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "sample_message": {
+            "type": "string",
+            "title": "Sample Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "count",
+          "sample_message"
+        ],
+        "title": "ImportErrorGroupResponse"
+      },
       "ImportErrorItem": {
         "properties": {
           "row_number": {
@@ -13846,6 +13878,10 @@
             "type": "string",
             "title": "Sha256"
           },
+          "sha256_short": {
+            "type": "string",
+            "title": "Sha256 Short"
+          },
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes"
@@ -13951,6 +13987,7 @@
           "status",
           "original_filename",
           "sha256",
+          "sha256_short",
           "size_bytes",
           "template_version",
           "mapping",
@@ -14008,6 +14045,43 @@
             "type": "integer",
             "title": "New Cost Centers"
           },
+          "replaced_records": {
+            "type": "integer",
+            "title": "Replaced Records"
+          },
+          "sha256_short": {
+            "type": "string",
+            "title": "Sha256 Short"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
+          },
+          "delimiter_ambiguous": {
+            "type": "boolean",
+            "title": "Delimiter Ambiguous"
+          },
+          "available_sheets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Sheets"
+          },
+          "error_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ImportErrorGroupResponse"
+            },
+            "type": "array",
+            "title": "Error Groups"
+          },
           "page": {
             "$ref": "#/components/schemas/PageInfo"
           }
@@ -14022,6 +14096,12 @@
           "new_accounts",
           "new_departments",
           "new_cost_centers",
+          "replaced_records",
+          "sha256_short",
+          "delimiter",
+          "delimiter_ambiguous",
+          "available_sheets",
+          "error_groups",
           "page"
         ],
         "title": "ImportPreviewResponse"
@@ -14945,6 +15025,33 @@
             ],
             "title": "Amount Locale",
             "default": "en"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  ",",
+                  ";",
+                  "\t"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
           }
         },
         "additionalProperties": false,

@@ -5,10 +5,17 @@ from uuid import UUID
 
 import pytest
 
-from budgetlens.domain.enums import ImportJobStatus, ScenarioType
+from budgetlens.domain.enums import ImportErrorSeverity, ImportJobStatus, ScenarioType
 from budgetlens.domain.errors import ConflictError, ValidationError
-from budgetlens.domain.exporting import render_csv
-from budgetlens.domain.importing import ImportJob, propose_mapping, validate_mapping
+from budgetlens.domain.exporting import export_filename, render_csv
+from budgetlens.domain.importing import (
+    ImportIssue,
+    ImportJob,
+    abbreviated_sha256,
+    group_import_issues,
+    propose_mapping,
+    validate_mapping,
+)
 from budgetlens.domain.text_safety import neutralize_csv_text, sanitize_filename
 
 
@@ -121,8 +128,52 @@ def test_original_filename_is_sanitized_for_presentation() -> None:
 
 def test_csv_injection_is_neutralized() -> None:
     assert neutralize_csv_text("=1+1") == "'=1+1"
+    assert neutralize_csv_text("-100.0000") == "-100.0000"
     content = render_csv(("code",), [("=cmd",)]).decode("utf-8")
     assert "'=cmd" in content
+    assert content.startswith("\ufeff")
+
+
+def test_export_filename_is_safe_and_stable() -> None:
+    from datetime import date
+
+    assert (
+        export_filename(period_from=date(2026, 1, 1), period_to=date(2026, 6, 1))
+        == "budgetlens-variance-2026-01_2026-06.csv"
+    )
+
+
+def test_issues_are_grouped_and_hash_is_abbreviated() -> None:
+    issues = [
+        ImportIssue(
+            row_number=2,
+            field="amount",
+            code="INVALID_AMOUNT",
+            message="El importe no es válido.",
+            raw_value_redacted="x",
+            severity=ImportErrorSeverity.ERROR,
+        ),
+        ImportIssue(
+            row_number=3,
+            field="amount",
+            code="INVALID_AMOUNT",
+            message="El importe no es válido.",
+            raw_value_redacted="y",
+            severity=ImportErrorSeverity.ERROR,
+        ),
+        ImportIssue(
+            4,
+            "cost_center_code",
+            "EMPTY_OPTIONAL_VALUE",
+            "Se aplicó Sin asignar.",
+            "",
+            ImportErrorSeverity.WARNING,
+        ),
+    ]
+    groups = group_import_issues(issues)
+    assert groups[0].code == "INVALID_AMOUNT"
+    assert groups[0].count == 2
+    assert abbreviated_sha256("a" * 64) == "a" * 12
 
 
 def test_applied_job_cannot_be_reapplied() -> None:

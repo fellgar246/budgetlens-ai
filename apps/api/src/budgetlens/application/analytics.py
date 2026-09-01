@@ -273,7 +273,8 @@ class AnalyticsService:
             ]
             for item in items
         ]
-        content = render_csv(headers, rows)
+        settings = get_settings()
+        content = render_csv(headers, rows, with_bom=settings.csv_export_with_bom)
         filename = export_filename(period_from=query.period_from, period_to=query.period_to)
         key = self._storage.generate_key(
             organization_id=context.organization_id,
@@ -298,7 +299,7 @@ class AnalyticsService:
             filename=filename,
             status=ExportJobStatus.READY,
             created_at=self._clock.now(),
-            expires_at=self._clock.now() + timedelta(hours=24),
+            expires_at=self._clock.now() + timedelta(hours=settings.export_retention_hours),
         )
         SqlExportJobRepository(self._session, context.organization_id).add(job)
         record_audit(

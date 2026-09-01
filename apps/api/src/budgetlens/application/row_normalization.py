@@ -18,6 +18,11 @@ def parse_mapped_amount(value: str, *, locale: str) -> MoneyAmount:
     else:
         compact = cleaned.replace(" ", "")
         if "," in compact and "." in compact:
+            if compact.rfind(",") > compact.rfind("."):
+                raise ValidationError(
+                    "INVALID_AMOUNT",
+                    "El importe usa un separador ambiguo.",
+                )
             cleaned = compact.replace(",", "")
         elif "," in compact and "." not in compact:
             raise ValidationError(

@@ -5,11 +5,17 @@ from uuid import UUID
 
 import pytest
 
-from budgetlens.application.retention import purge_expired_conversations, purge_expired_originals
+from budgetlens.application.retention import (
+    purge_expired_conversations,
+    purge_expired_error_reports,
+    purge_expired_exports,
+    purge_expired_originals,
+)
 from budgetlens.application.watchdog import timeout_stale_jobs
 from budgetlens.config import Settings
 from budgetlens.domain.conversation import Conversation
-from budgetlens.domain.enums import ImportJobStatus, ScenarioType
+from budgetlens.domain.enums import ExportJobStatus, ExportType, ImportJobStatus, ScenarioType
+from budgetlens.domain.exporting import ExportJob
 from budgetlens.domain.identities import FrozenClock, SequentialIdFactory
 from budgetlens.domain.importing import ImportJob
 
@@ -208,3 +214,90 @@ def test_expired_conversations_are_soft_deleted(monkeypatch: pytest.MonkeyPatch)
     purged = purge_expired_conversations(object(), clock=FrozenClock(now))  # type: ignore[arg-type]
     assert purged == 1
     assert saved[0].deleted_at == now
+
+
+def test_retention_purges_error_reports_and_keeps_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime(2026, 8, 31, tzinfo=UTC)
+    job = _job(
+        status=ImportJobStatus.INVALID,
+        started_at=now - timedelta(days=40),
+        created_at=now - timedelta(days=40),
+    )
+    deleted: list[UUID] = []
+
+    class ErrorRepo:
+        def __init__(self, _session: object, _org: object) -> None:
+            del _session, _org
+
+        def delete_for_job(self, job_id: UUID) -> None:
+            deleted.append(job_id)
+
+    monkeypatch.setattr(
+        "budgetlens.application.retention.list_jobs_with_expired_error_reports",
+        lambda _session, *, cutoff: [job],
+    )
+    monkeypatch.setattr(
+        "budgetlens.application.retention.SqlImportErrorRepository",
+        ErrorRepo,
+    )
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+            "error_report_retention_days": 30,
+        }
+    )
+    purged = purge_expired_error_reports(
+        object(),  # type: ignore[arg-type]
+        clock=FrozenClock(now),
+        settings=settings,
+    )
+    assert purged == 1
+    assert deleted == [job.id]
+
+
+def test_retention_expires_exports_and_deletes_objects(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime(2026, 8, 31, tzinfo=UTC)
+    job = ExportJob(
+        id=UUID(int=8),
+        organization_id=UUID(int=2),
+        created_by=UUID(int=3),
+        export_type=ExportType.VARIANCE_BREAKDOWN,
+        format="csv",
+        filters_json={},
+        object_key="org/exports/a.csv",
+        filename="budgetlens-variance-2026-01_2026-01.csv",
+        status=ExportJobStatus.READY,
+        created_at=now - timedelta(hours=25),
+        expires_at=now - timedelta(minutes=1),
+    )
+    deleted: list[str] = []
+    saved: list[ExportJob] = []
+
+    class Storage:
+        def delete(self, key: str) -> None:
+            deleted.append(key)
+
+    class Repo:
+        def __init__(self, _session: object, _org: object) -> None:
+            del _session, _org
+
+        def save(self, item: ExportJob) -> None:
+            saved.append(item)
+
+    monkeypatch.setattr(
+        "budgetlens.application.retention.list_expired_exports",
+        lambda _session, *, now: [job],
+    )
+    monkeypatch.setattr(
+        "budgetlens.application.retention.SqlExportJobRepository",
+        Repo,
+    )
+    purged = purge_expired_exports(
+        object(),  # type: ignore[arg-type]
+        Storage(),  # type: ignore[arg-type]
+        clock=FrozenClock(now),
+    )
+    assert purged == 1
+    assert deleted == ["org/exports/a.csv"]
+    assert saved[0].status is ExportJobStatus.EXPIRED
+    assert saved[0].object_key == "org/exports/a.csv"

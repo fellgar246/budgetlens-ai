@@ -567,6 +567,136 @@ def test_export_download_is_authorized_and_expires(seeded_client: TestClient) ->
     assert expired.status_code == 404
 
 
+@pytest.mark.integration
+def test_import_contract_fixtures_cover_normalization_and_preview(
+    seeded_client: TestClient,
+) -> None:
+    version_id = _create_version(seeded_client, "Contract")
+    leading = _import_file(
+        seeded_client,
+        content=_read("leading-zero.csv"),
+        filename="leading-zero.csv",
+        import_type="budget",
+        version_id=version_id,
+        commit=False,
+        user=ALPHA_ADMIN_ID,
+        mapping={**CANONICAL, "account_name": "account_name"},
+    )
+    confirmed = seeded_client.post(
+        f"{PREFIX}/imports/{leading['id']}/validate",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        json={
+            "mapping": {**CANONICAL, "account_name": "account_name"},
+            "create_missing_dimensions": True,
+        },
+    )
+    assert confirmed.status_code == 200
+    leading = confirmed.json()
+    assert leading["status"] == "ready"
+    preview = seeded_client.get(
+        f"{PREFIX}/imports/{leading['id']}/preview",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        params={"limit": 50},
+    )
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["sha256_short"] == leading["sha256"][:12]
+    assert body["items"][0]["account_code"] == "0610"
+    assert body["replaced_records"] == 0
+    assert body["job"]["valid_amount_total"] == leading["valid_amount_total"]
+    locale = _import_file(
+        seeded_client,
+        content=_read("locale-ambiguous.csv"),
+        filename="locale-ambiguous.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Locale"),
+        commit=False,
+        mapping=CANONICAL,
+    )
+    assert locale["status"] == "invalid"
+    locale_ready = seeded_client.post(
+        f"{PREFIX}/imports/{locale['id']}/validate",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={"mapping": CANONICAL, "create_missing_dimensions": False, "amount_locale": "es"},
+    )
+    assert locale_ready.status_code == 200
+    assert locale_ready.json()["status"] == "ready"
+    duplicates = _import_file(
+        seeded_client,
+        content=_read("duplicates.csv"),
+        filename="duplicates.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Dup"),
+        commit=False,
+    )
+    assert duplicates["status"] == "invalid"
+    dup_errors = seeded_client.get(
+        f"{PREFIX}/imports/{duplicates['id']}/errors",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    ).json()["items"]
+    assert any(item["code"] == "DUPLICATE_ROW" for item in dup_errors)
+    unknown = _import_file(
+        seeded_client,
+        content=_read("unknown-dimension.csv"),
+        filename="unknown-dimension.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Unknown"),
+        commit=False,
+    )
+    assert unknown["status"] == "invalid"
+    unknown_errors = seeded_client.get(
+        f"{PREFIX}/imports/{unknown['id']}/errors",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    ).json()["items"]
+    assert any(item["code"] == "UNKNOWN_ACCOUNT" for item in unknown_errors)
+    xlsx = _import_file(
+        seeded_client,
+        content=_read("budget-valid.xlsx"),
+        filename="budget-valid.xlsx",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "XlsxFixture"),
+        idempotency="xlsx-fixture",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    assert xlsx["_status"] == 200
+    formula = _import_file(
+        seeded_client,
+        content=_read("formula.xlsx"),
+        filename="formula.xlsx",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "FormulaFixture"),
+        commit=False,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    assert formula["status"] == "invalid"
+    fingerprint_content = (
+        b"period,account_code,department_code,cost_center_code,amount,currency\n"
+        b"2026-01,6100,OPS,CC-GEN,1111.0000,MXN\n"
+    )
+    applied_version = _create_version(seeded_client, "AppliedOnce")
+    first = _import_file(
+        seeded_client,
+        content=fingerprint_content,
+        filename="applied-once.csv",
+        import_type="budget",
+        version_id=applied_version,
+        commit=True,
+        idempotency="applied-once",
+    )
+    assert first["_status"] == 200
+    replay = _import_file(
+        seeded_client,
+        content=fingerprint_content,
+        filename="applied-once.csv",
+        import_type="budget",
+        version_id=applied_version,
+        commit=False,
+        idempotency="applied-twice",
+    )
+    assert replay["id"] == first["_body"]["id"]
+    assert replay["status"] == "applied"
+
+
 def _account_id(client: TestClient, code: str) -> str:
     accounts = client.get(f"{PREFIX}/accounts", headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID))
     for item in accounts.json()["items"]:

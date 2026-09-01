@@ -11,7 +11,16 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rows", type=int, default=250_000)
     parser.add_argument("--output", type=Path, default=Path("var/perf/250k-actuals.csv"))
+    parser.add_argument(
+        "--near-limit",
+        action="store_true",
+        help="Generate a file just under the 100k-row import limit (not versioned).",
+    )
     args = parser.parse_args()
+    if args.near_limit:
+        args.rows = 99_000
+        if args.output == Path("var/perf/250k-actuals.csv"):
+            args.output = Path("var/perf/near-limit-import.csv")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     accounts = ("6100", "6200", "4100", "5100")
     departments = ("OPS", "FIN", "MKT", "IT")

@@ -12,7 +12,7 @@ from budgetlens.domain.audit import AuditEvent, sanitized_metadata
 from budgetlens.domain.conversation import Conversation
 from budgetlens.domain.enums import ScenarioType
 from budgetlens.domain.exporting import ExportJob
-from budgetlens.domain.importing import ImportIssue, ImportJob
+from budgetlens.domain.importing import ImportErrorGroup, ImportIssue, ImportJob, abbreviated_sha256
 from budgetlens.domain.scenario import Scenario
 from budgetlens.presentation.schemas import PageInfo
 
@@ -59,6 +59,8 @@ class ValidateImportRequest(BaseModel):
     mapping: dict[str, str]
     create_missing_dimensions: bool = False
     amount_locale: Literal["en", "es"] = "en"
+    sheet_name: str | None = None
+    delimiter: Literal[",", ";", "\t"] | None = None
 
 
 class ImportUploadInfo(BaseModel):
@@ -77,6 +79,7 @@ class ImportJobResponse(BaseModel):
     status: str
     original_filename: str
     sha256: str
+    sha256_short: str
     size_bytes: int
     template_version: str
     mapping: dict[str, Any]
@@ -99,6 +102,14 @@ class ImportJobListResponse(BaseModel):
     page: PageInfo
 
 
+class ImportErrorGroupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str
+    severity: str
+    count: int
+    sample_message: str
+
+
 class ImportPreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job: ImportJobResponse
@@ -108,6 +119,12 @@ class ImportPreviewResponse(BaseModel):
     new_accounts: int
     new_departments: int
     new_cost_centers: int
+    replaced_records: int
+    sha256_short: str
+    delimiter: str | None
+    delimiter_ambiguous: bool
+    available_sheets: list[str]
+    error_groups: list[ImportErrorGroupResponse]
     page: PageInfo
 
 
@@ -346,6 +363,7 @@ def import_job_response(job: ImportJob, *, include_upload: bool = False) -> Impo
         status=job.status.value,
         original_filename=job.original_filename,
         sha256=job.sha256,
+        sha256_short=abbreviated_sha256(job.sha256),
         size_bytes=job.size_bytes,
         template_version=job.template_version,
         mapping=job.mapping_json,
@@ -366,6 +384,15 @@ def import_job_response(job: ImportJob, *, include_upload: bool = False) -> Impo
         )
         if include_upload
         else None,
+    )
+
+
+def import_error_group(group: ImportErrorGroup) -> ImportErrorGroupResponse:
+    return ImportErrorGroupResponse(
+        code=group.code,
+        severity=group.severity,
+        count=group.count,
+        sample_message=group.sample_message,
     )
 
 

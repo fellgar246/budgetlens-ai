@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from budgetlens.adapters.ai import build_ai_provider_from_settings
 from budgetlens.adapters.identity import build_identity_provider
 from budgetlens.adapters.imports import build_import_executor
-from budgetlens.adapters.parsing import OpenpyxlWorkbookParser
+from budgetlens.adapters.parsing import OpenpyxlWorkbookParser, ParseLimits
 from budgetlens.adapters.persistence.repositories import SqlUserRepository
 from budgetlens.adapters.storage import LocalObjectStorage, S3ObjectStorage
 from budgetlens.config import Settings
@@ -45,5 +45,14 @@ def build_import_runner(settings: Settings) -> ImportExecutor:
     return build_import_executor(settings.import_executor)
 
 
-def build_workbook_parser() -> WorkbookParser:
-    return OpenpyxlWorkbookParser()
+def build_workbook_parser(settings: Settings | None = None) -> WorkbookParser:
+    if settings is None:
+        return OpenpyxlWorkbookParser()
+    return OpenpyxlWorkbookParser(
+        ParseLimits(
+            max_sheets=settings.import_max_sheets,
+            max_rows=settings.import_max_rows,
+            max_columns=settings.import_max_columns,
+            max_cells=settings.import_max_cells,
+        )
+    )

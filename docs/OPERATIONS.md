@@ -36,7 +36,13 @@ make watchdog
 make retain-files
 ```
 
-The initial retention window for original files is 90 days (`ORIGINAL_FILE_RETENTION_DAYS`). After a purge, job metadata is kept. Conversation retention is configured per organization (7–365 days, default 90) and expired conversations are soft-deleted by the same command.
+The local cleanup command purges:
+
+- original import files after 90 days (`ORIGINAL_FILE_RETENTION_DAYS`);
+- detailed import error rows after 30 days (`ERROR_REPORT_RETENTION_DAYS`);
+- export objects after 24 hours (`EXPORT_RETENTION_HOURS`).
+
+After a purge, job metadata and hashes stay in the database. Object lifecycle on AWS is configured in Terraform when those roots are filled. Conversation retention is configured per organization (7–365 days, default 90) and expired conversations are soft-deleted by the same command.
 
 Business entities use logical archive or disable flags. Original files and exports expire by lifecycle. Local demo data is purged only with an explicit administrative command outside the 1.0 UI:
 

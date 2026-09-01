@@ -11,6 +11,7 @@ from budgetlens.domain.errors import ValidationError, field_issue
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
+PREVIEW_MAX_LIMIT = 50
 ABSOLUTE_MAX_LIMIT = 500
 
 if MAX_LIMIT > ABSOLUTE_MAX_LIMIT:
@@ -24,17 +25,21 @@ class Page[T]:
     has_more: bool
 
 
-def clamp_limit(limit: int | None) -> int:
+def clamp_limit(limit: int | None, *, maximum: int = MAX_LIMIT) -> int:
     value = DEFAULT_LIMIT if limit is None else limit
-    if value < 1 or value > MAX_LIMIT:
+    if value < 1 or value > maximum:
         raise ValidationError(
             "INVALID_LIMIT",
-            "El límite de página debe estar entre 1 y 100.",
+            f"El límite de página debe estar entre 1 y {maximum}.",
             field_errors=[
-                field_issue("limit", "INVALID_LIMIT", "El límite debe estar entre 1 y 100.")
+                field_issue("limit", "INVALID_LIMIT", f"El límite debe estar entre 1 y {maximum}.")
             ],
         )
     return value
+
+
+def clamp_preview_limit(limit: int | None) -> int:
+    return clamp_limit(limit, maximum=PREVIEW_MAX_LIMIT)
 
 
 def offset_page[T](items: Sequence[T], *, cursor: str | None, limit: int | None) -> Page[T]:

@@ -33,10 +33,15 @@ import { downloadImportTemplate } from "@/lib/import-template";
 const CANONICAL = [
   "period",
   "account_code",
+  "account_name",
+  "account_type",
   "department_code",
+  "department_name",
   "cost_center_code",
+  "cost_center_name",
   "amount",
   "currency",
+  "source_reference",
 ] as const;
 
 export function ImportsPage() {
@@ -56,6 +61,9 @@ export function ImportsPage() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [errors, setErrors] = useState<ImportErrorItem[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [delimiter, setDelimiter] = useState<"," | ";" | "\t" | "">("");
+  const [sheetName, setSheetName] = useState("");
+  const [createMissing, setCreateMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState(false);
   const hasUser = Boolean(userId);
@@ -228,6 +236,10 @@ export function ImportsPage() {
                     setJob(created.data);
                     setPreview(nextPreview.data);
                     setMapping(nextPreview.data.proposed_mapping);
+                    setDelimiter((nextPreview.data.delimiter as "," | ";" | "\t" | "") || "");
+                    setSheetName(
+                      nextPreview.data.job.sheet_name ?? nextPreview.data.available_sheets[0] ?? "",
+                    );
                   })
                   .catch((err: Error) => setError(err))
                   .finally(() => setBusy(false));
@@ -259,6 +271,49 @@ export function ImportsPage() {
                   </label>
                 ))}
               </div>
+              {preview.delimiter_ambiguous ? (
+                <p className="mt-4 text-sm text-warning">{copy.delimiterAmbiguous}</p>
+              ) : null}
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {preview.available_sheets.length > 1 ? (
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="font-medium text-secondary">{copy.sheetLabel}</span>
+                    <select
+                      className="h-10 rounded-control border border-border px-3 text-sm"
+                      value={sheetName}
+                      onChange={(event) => setSheetName(event.target.value)}
+                    >
+                      {preview.available_sheets.map((sheet) => (
+                        <option key={sheet} value={sheet}>
+                          {sheet}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {preview.delimiter ? (
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="font-medium text-secondary">{copy.confirmDelimiter}</span>
+                    <select
+                      className="h-10 rounded-control border border-border px-3 text-sm"
+                      value={delimiter}
+                      onChange={(event) => setDelimiter(event.target.value as "," | ";" | "\t")}
+                    >
+                      <option value=",">{copy.delimiterComma}</option>
+                      <option value=";">{copy.delimiterSemicolon}</option>
+                      <option value={"\t"}>{copy.delimiterTab}</option>
+                    </select>
+                  </label>
+                ) : null}
+                <label className="flex items-center gap-2 text-sm text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={createMissing}
+                    onChange={(event) => setCreateMissing(event.target.checked)}
+                  />
+                  {copy.createMissingDimensions}
+                </label>
+              </div>
               <div className="mt-4">
                 <Button
                   disabled={busy}
@@ -267,7 +322,9 @@ export function ImportsPage() {
                     setBusy(true);
                     void validateImport(apiBaseUrl(), auth, job.id, {
                       mapping,
-                      create_missing_dimensions: false,
+                      create_missing_dimensions: createMissing,
+                      sheet_name: sheetName || null,
+                      delimiter: delimiter || null,
                     })
                       .then(async (result) => {
                         setJob(result.data);
@@ -292,8 +349,20 @@ export function ImportsPage() {
           {job && preview && job.status !== "created" ? (
             <div className="rounded-surface border border-border bg-surface p-6">
               <p className="text-sm text-secondary">
-                {job.original_filename} · {job.valid_count}/{job.row_count} ·{" "}
-                {job.valid_amount_total} {selectedOrganization?.functional_currency}
+                {job.original_filename} · {job.size_bytes} B · {job.sha256_short}
+                {job.sheet_name ? ` · ${job.sheet_name}` : ""}
+              </p>
+              <p className="mt-2 text-sm text-secondary">
+                {job.valid_count}/{job.row_count} · {job.error_count} err · {job.warning_count} warn
+                {job.period_min && job.period_max
+                  ? ` · ${copy.periodRange} ${job.period_min}–${job.period_max}`
+                  : ""}{" "}
+                · {job.valid_amount_total} {selectedOrganization?.functional_currency}
+              </p>
+              <p className="mt-2 text-sm text-secondary">
+                {copy.importImpact}: {copy.newDimensions}{" "}
+                {preview.new_accounts + preview.new_departments + preview.new_cost_centers} ·{" "}
+                {copy.replacedRecords} {preview.replaced_records}
               </p>
               {job.status === "ready" ? (
                 <p className="mt-2 text-sm text-success">{copy.importReady}</p>
@@ -330,6 +399,18 @@ export function ImportsPage() {
                   </tbody>
                 </table>
               </div>
+              {preview.error_groups.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-secondary">{copy.groupedErrors}</p>
+                  <ul className="mt-2 space-y-1 text-sm text-danger">
+                    {preview.error_groups.map((group) => (
+                      <li key={`${group.code}-${group.severity}`}>
+                        {group.code} · {group.count} · {group.sample_message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {errors.length > 0 ? (
                 <ul className="mt-4 space-y-1 text-sm text-danger">
                   {errors.map((item) => (

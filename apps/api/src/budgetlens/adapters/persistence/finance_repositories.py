@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from collections.abc import Sequence
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.mapping import (
@@ -154,6 +155,29 @@ def list_jobs_with_expired_originals(session: Session, *, cutoff: datetime) -> l
     return [import_job_from_row(row) for row in rows]
 
 
+def list_jobs_with_expired_error_reports(session: Session, *, cutoff: datetime) -> list[ImportJob]:
+    job_ids = session.scalars(select(ImportErrorRow.import_job_id).distinct()).all()
+    if not job_ids:
+        return []
+    rows = session.scalars(
+        select(ImportJobRow).where(
+            ImportJobRow.id.in_(job_ids),
+            ImportJobRow.created_at <= cutoff,
+        )
+    ).all()
+    return [import_job_from_row(row) for row in rows]
+
+
+def list_expired_exports(session: Session, *, now: datetime) -> list[ExportJob]:
+    rows = session.scalars(
+        select(ExportJobRow).where(
+            ExportJobRow.status != "expired",
+            ExportJobRow.expires_at <= now,
+        )
+    ).all()
+    return [export_job_from_row(row) for row in rows]
+
+
 class SqlImportErrorRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
@@ -225,6 +249,14 @@ class SqlImportErrorRepository:
         ).all()
         return [import_issue_from_row(row) for row in rows]
 
+    def delete_for_job(self, job_id: UUID) -> None:
+        self._session.execute(
+            delete(ImportErrorRow).where(
+                ImportErrorRow.organization_id == self._organization_id,
+                ImportErrorRow.import_job_id == job_id,
+            )
+        )
+
 
 class SqlFinancialEntryRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
@@ -251,6 +283,48 @@ class SqlFinancialEntryRepository:
                 ).all()
             )
         )
+
+    def count_matching(
+        self,
+        *,
+        scenario_type: str,
+        budget_version_id: UUID | None,
+        keys: Sequence[tuple[object, object, object, object]],
+    ) -> int:
+        if not keys:
+            return 0
+        typed: list[tuple[date, UUID, UUID, UUID]] = []
+        for period_start, account_id, department_id, cost_center_id in keys:
+            if (
+                isinstance(period_start, date)
+                and isinstance(account_id, UUID)
+                and isinstance(department_id, UUID)
+                and isinstance(cost_center_id, UUID)
+            ):
+                typed.append((period_start, account_id, department_id, cost_center_id))
+        if not typed:
+            return 0
+        version_filter = (
+            FinancialEntryRow.budget_version_id == budget_version_id
+            if budget_version_id is not None
+            else FinancialEntryRow.budget_version_id.is_(None)
+        )
+        counted = self._session.scalar(
+            select(func.count())
+            .select_from(FinancialEntryRow)
+            .where(
+                FinancialEntryRow.organization_id == self._organization_id,
+                FinancialEntryRow.scenario_type == scenario_type,
+                version_filter,
+                tuple_(
+                    FinancialEntryRow.period_start,
+                    FinancialEntryRow.account_id,
+                    FinancialEntryRow.department_id,
+                    FinancialEntryRow.cost_center_id,
+                ).in_(typed),
+            )
+        )
+        return int(counted or 0)
 
 
 class SqlScenarioRepository:
@@ -341,6 +415,13 @@ class SqlExportJobRepository:
         row = ExportJobRow()
         apply_export_job(row, job)
         self._session.add(row)
+
+    def save(self, job: ExportJob) -> None:
+        row = self._session.get(ExportJobRow, job.id)
+        if row is None or row.organization_id != self._organization_id:
+            self.add(job)
+            return
+        apply_export_job(row, job)
 
 
 class SqlConversationRepository:

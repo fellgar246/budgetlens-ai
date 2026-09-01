@@ -5,9 +5,12 @@ from pathlib import Path
 
 _INJECTION_PREFIXES = ("=", "+", "-", "@")
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
+_DECIMAL_TEXT = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 
 def neutralize_csv_text(value: str) -> str:
+    if _DECIMAL_TEXT.fullmatch(value):
+        return value
     if value.startswith(_INJECTION_PREFIXES):
         return f"'{value}"
     return value

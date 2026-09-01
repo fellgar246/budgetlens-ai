@@ -53,10 +53,17 @@ class Settings(BaseSettings):
     import_executor: ImportExecutorMode = "inline"
     conversation_content_mode: ConversationContentMode = "full_synthetic"
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
+    import_max_sheets: int = Field(default=8, ge=1)
+    import_max_rows: int = Field(default=100_000, ge=1)
+    import_max_columns: int = Field(default=40, ge=1)
+    import_max_cells: int = Field(default=500_000, ge=1)
     cors_origins: str = "http://localhost:3000"
     db_ready_timeout_seconds: float = Field(default=2.0, gt=0)
     job_timeout_seconds: int = Field(default=600, ge=1)
     original_file_retention_days: int = Field(default=90, ge=1)
+    error_report_retention_days: int = Field(default=30, ge=1)
+    export_retention_hours: int = Field(default=24, ge=1)
+    csv_export_with_bom: bool = True
     rate_limit_upload_per_minute: int = Field(default=20, ge=1)
     rate_limit_export_per_minute: int = Field(default=20, ge=1)
     rate_limit_ai_per_minute: int = Field(default=10, ge=1)

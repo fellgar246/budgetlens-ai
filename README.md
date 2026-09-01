@@ -85,7 +85,7 @@ pnpm --filter web dev
 | `make scan` | Dependency, secret, Terraform (fmt/TFLint/Checkov), and optional image scans. Critical findings fail the command. |
 | `make watchdog` | Mark stale processing import jobs as timed out. |
 | `python -m budgetlens import-job validate\|apply <job-id>` | Run the same import modules as a worker process. |
-| `make retain-files` | Delete original import files older than the retention window. |
+| `make retain-files` | Delete expired original files, import error reports, and export objects. |
 | `make test-perf` | Large-file preview timing. |
 | `make traceability` | Check that every FR/NFR/AC, plan, gate, and high-impact risk is catalogued. |
 | `make reset-local-data CONFIRM=1` | Destroy the local database volume and object storage. |

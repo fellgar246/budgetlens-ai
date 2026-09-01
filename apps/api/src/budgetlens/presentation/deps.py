@@ -166,8 +166,8 @@ def get_import_executor(settings: Annotated[Settings, Depends(get_settings)]) ->
     return build_import_runner(settings)
 
 
-def get_workbook_parser() -> WorkbookParser:
-    return build_workbook_parser()
+def get_workbook_parser(settings: Annotated[Settings, Depends(get_settings)]) -> WorkbookParser:
+    return build_workbook_parser(settings)
 
 
 def get_import_service(

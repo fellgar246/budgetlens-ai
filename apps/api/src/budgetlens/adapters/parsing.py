@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import BinaryIO
 
 from openpyxl import load_workbook
@@ -34,6 +36,7 @@ MAX_CELLS = 500_000
 MAX_CELL_LENGTH = 500
 MAX_UNCOMPRESSED_BYTES = 80_000_000
 MAX_COMPRESSION_RATIO = 20
+CSV_DELIMITERS = (",", ";", "\t")
 DANGEROUS_ZIP_NAMES = (
     "xl/vbaProject.bin",
     "xl/externalLinks/",
@@ -42,11 +45,35 @@ DANGEROUS_ZIP_NAMES = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class ParseLimits:
+    max_sheets: int = MAX_SHEETS
+    max_rows: int = MAX_ROWS
+    max_columns: int = MAX_COLUMNS
+    max_cells: int = MAX_CELLS
+
+
 class OpenpyxlWorkbookParser:
+    def __init__(self, limits: ParseLimits | None = None) -> None:
+        self._limits = limits or ParseLimits()
+
     def parse(
-        self, filename: str, content: bytes, *, media_type: str | None = None
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        media_type: str | None = None,
+        sheet_name: str | None = None,
+        delimiter: str | None = None,
     ) -> WorkbookTable:
-        return parse_workbook(filename, content, media_type=media_type)
+        return parse_workbook(
+            filename,
+            content,
+            media_type=media_type,
+            sheet_name=sheet_name,
+            delimiter=delimiter,
+            limits=self._limits,
+        )
 
 
 def detect_kind(filename: str, content: bytes) -> str:
@@ -104,24 +131,58 @@ def validate_declared_media(*, kind: str, media_type: str | None) -> None:
 
 
 def parse_workbook(
-    filename: str, content: bytes, *, media_type: str | None = None
+    filename: str,
+    content: bytes,
+    *,
+    media_type: str | None = None,
+    sheet_name: str | None = None,
+    delimiter: str | None = None,
+    limits: ParseLimits | None = None,
 ) -> WorkbookTable:
     kind = detect_kind(filename, content)
     validate_declared_media(kind=kind, media_type=media_type)
+    bounds = limits or ParseLimits()
     if kind == "csv":
-        return _parse_csv(content)
-    return _parse_xlsx(content)
+        return _parse_csv(content, delimiter=delimiter, limits=bounds)
+    return _parse_xlsx(content, sheet_name=sheet_name, limits=bounds)
 
 
-def _parse_csv(content: bytes) -> WorkbookTable:
-    text = content.decode("utf-8-sig")
+def detect_csv_delimiter(text: str, *, confirmed: str | None = None) -> tuple[str, bool]:
+    if confirmed is not None:
+        if confirmed not in CSV_DELIMITERS:
+            raise ValidationError(
+                "UNSUPPORTED_FILE",
+                "El delimitador no está permitido.",
+                field_errors=[
+                    field_issue(
+                        "delimiter", "UNSUPPORTED_FILE", "Usa coma, punto y coma o tabulador."
+                    )
+                ],
+            )
+        return confirmed, False
     sample = text[:4096]
+    header = next((line for line in sample.splitlines() if line.strip()), "")
+    counts = {item: header.count(item) for item in CSV_DELIMITERS}
+    plausible = [item for item, count in counts.items() if count >= 1]
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-        delimiter = dialect.delimiter
+        sniffed = csv.Sniffer().sniff(sample, delimiters=",;\t").delimiter
     except csv.Error:
-        delimiter = ","
-    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        sniffed = ","
+    if len(plausible) <= 1:
+        return (plausible[0] if plausible else sniffed), False
+    ranked = sorted(plausible, key=lambda item: counts[item], reverse=True)
+    leader = ranked[0]
+    runner_up = counts[ranked[1]]
+    if counts[leader] >= 2 * runner_up:
+        return leader, False
+    chosen = sniffed if sniffed in plausible else leader
+    return chosen, True
+
+
+def _parse_csv(content: bytes, *, delimiter: str | None, limits: ParseLimits) -> WorkbookTable:
+    text = content.decode("utf-8-sig")
+    chosen, ambiguous = detect_csv_delimiter(text, confirmed=delimiter)
+    reader = csv.reader(io.StringIO(text), delimiter=chosen)
     raw_rows = list(reader)
     if not raw_rows:
         raise ValidationError(
@@ -140,15 +201,24 @@ def _parse_csv(content: bytes) -> WorkbookTable:
                 field_issue("file", "MISSING_COLUMN", "La primera fila debe ser el encabezado.")
             ],
         )
+    if len(headers) > limits.max_columns:
+        raise PayloadTooLargeError("El archivo excede el número máximo de columnas.")
     rows: list[ParsedCellRow] = []
     for index, raw in enumerate(raw_rows[1:], start=2):
-        if len(rows) >= MAX_ROWS:
+        if len(rows) >= limits.max_rows:
             raise PayloadTooLargeError("El archivo excede el número máximo de filas.")
         values = {
             headers[i]: _bounded_text(raw[i] if i < len(raw) else "") for i in range(len(headers))
         }
         rows.append(ParsedCellRow(row_number=index, values=values, formula_fields=()))
-    return WorkbookTable(headers=headers, rows=rows, sheet_name="csv", delimiter=delimiter)
+    return WorkbookTable(
+        headers=headers,
+        rows=rows,
+        sheet_name="csv",
+        delimiter=chosen,
+        delimiter_ambiguous=ambiguous,
+        available_sheets=("csv",),
+    )
 
 
 def _reject_dangerous_xlsx(content: bytes) -> None:
@@ -178,7 +248,7 @@ def _reject_dangerous_xlsx(content: bytes) -> None:
             )
 
 
-def _parse_xlsx(content: bytes) -> WorkbookTable:
+def _parse_xlsx(content: bytes, *, sheet_name: str | None, limits: ParseLimits) -> WorkbookTable:
     _reject_dangerous_xlsx(content)
     workbook: Workbook = load_workbook(
         filename=io.BytesIO(content),
@@ -197,7 +267,7 @@ def _parse_xlsx(content: bytes) -> WorkbookTable:
                     field_issue("file", "UNSUPPORTED_FILE", "El libro no tiene hojas visibles.")
                 ],
             )
-        if len(workbook.worksheets) > MAX_SHEETS:
+        if len(workbook.worksheets) > limits.max_sheets:
             raise ValidationError(
                 "UNSUPPORTED_FILE",
                 "El libro excede el número de hojas permitido.",
@@ -207,29 +277,50 @@ def _parse_xlsx(content: bytes) -> WorkbookTable:
                     )
                 ],
             )
-        sheet = visible[0]
-        return _sheet_table(sheet)
+        available = tuple(sheet.title for sheet in visible)
+        if sheet_name:
+            selected = next((sheet for sheet in visible if sheet.title == sheet_name), None)
+            if selected is None:
+                raise ValidationError(
+                    "UNSUPPORTED_FILE",
+                    "La hoja seleccionada no existe.",
+                    field_errors=[
+                        field_issue("sheet_name", "UNSUPPORTED_FILE", "Elige una hoja visible.")
+                    ],
+                )
+            sheet = selected
+        else:
+            sheet = visible[0]
+        table = _sheet_table(sheet, limits=limits, epoch=workbook.epoch)
+        return WorkbookTable(
+            headers=table.headers,
+            rows=table.rows,
+            sheet_name=table.sheet_name,
+            delimiter=None,
+            delimiter_ambiguous=False,
+            available_sheets=available,
+        )
     finally:
         workbook.close()
 
 
-def _sheet_table(sheet: Worksheet) -> WorkbookTable:
+def _sheet_table(sheet: Worksheet, *, limits: ParseLimits, epoch: datetime) -> WorkbookTable:
     headers: list[str] = []
     rows: list[ParsedCellRow] = []
     cells_seen = 0
     header_row_number = 0
-    for row_index, raw_row in enumerate(sheet.iter_rows(max_col=MAX_COLUMNS), start=1):
+    for row_index, raw_row in enumerate(sheet.iter_rows(max_col=limits.max_columns), start=1):
         cells_seen += len(raw_row)
-        if cells_seen > MAX_CELLS:
+        if cells_seen > limits.max_cells:
             raise PayloadTooLargeError("El archivo excede el número máximo de celdas.")
-        values = [_cell_text(cell) for cell in raw_row]
+        values = [_cell_text(cell, epoch=epoch) for cell in raw_row]
         if not headers:
             if not any(item.strip() for item in values):
                 continue
             headers = [item.strip() for item in values]
             header_row_number = row_index
             continue
-        if row_index - header_row_number > MAX_ROWS:
+        if row_index - header_row_number > limits.max_rows:
             raise PayloadTooLargeError("El archivo excede el número máximo de filas.")
         mapping = {headers[i]: values[i] if i < len(values) else "" for i in range(len(headers))}
         formulas = tuple(
@@ -273,10 +364,16 @@ def _bounded_text(value: str) -> str:
     return value
 
 
-def _cell_text(cell: object) -> str:
+def _cell_text(cell: object, *, epoch: datetime) -> str:
     value = getattr(cell, "value", None)
     if value is None:
         return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if getattr(cell, "is_date", False) and isinstance(value, int | float):
+        return (epoch + timedelta(days=int(value))).date().isoformat()
     return _bounded_text(str(value))
 
 

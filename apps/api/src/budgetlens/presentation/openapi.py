@@ -475,6 +475,9 @@ SCHEMA_EXAMPLES: dict[str, dict[str, object]] = {
             "currency": "Currency",
         },
         "create_missing_dimensions": False,
+        "amount_locale": "en",
+        "sheet_name": None,
+        "delimiter": None,
     },
     "VarianceSummaryResponse": {
         "scope": {

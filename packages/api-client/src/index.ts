@@ -571,6 +571,7 @@ export type ImportJob = {
   status: string;
   original_filename: string;
   sha256: string;
+  sha256_short: string;
   size_bytes: number;
   template_version: string;
   mapping: Record<string, unknown>;
@@ -587,6 +588,13 @@ export type ImportJob = {
   upload?: { mode: string; method: string; url: string } | null;
 };
 
+export type ImportErrorGroup = {
+  code: string;
+  severity: string;
+  count: number;
+  sample_message: string;
+};
+
 export type ImportPreview = {
   job: ImportJob;
   headers: string[];
@@ -595,6 +603,12 @@ export type ImportPreview = {
   new_accounts: number;
   new_departments: number;
   new_cost_centers: number;
+  replaced_records: number;
+  sha256_short: string;
+  delimiter: string | null;
+  delimiter_ambiguous: boolean;
+  available_sheets: string[];
+  error_groups: ImportErrorGroup[];
   page: PageInfo;
 };
 
@@ -778,7 +792,13 @@ export function validateImport(
   baseUrl: string,
   auth: AuthContext,
   jobId: string,
-  body: { mapping: Record<string, string>; create_missing_dimensions?: boolean; amount_locale?: "en" | "es" },
+  body: {
+    mapping: Record<string, string>;
+    create_missing_dimensions?: boolean;
+    amount_locale?: "en" | "es";
+    sheet_name?: string | null;
+    delimiter?: "," | ";" | "\t" | null;
+  },
 ) {
   return requestJson<ImportJob>(
     baseUrl,

@@ -16,6 +16,7 @@ from budgetlens.presentation.schemas_ops import (
     ImportJobResponse,
     ImportPreviewResponse,
     ValidateImportRequest,
+    import_error_group,
     import_error_item,
     import_job_response,
 )
@@ -95,6 +96,8 @@ def validate_import(
             mapping=payload.mapping,
             create_missing_dimensions=payload.create_missing_dimensions,
             amount_locale=payload.amount_locale,
+            sheet_name=payload.sheet_name,
+            delimiter=payload.delimiter,
         )
     )
 
@@ -114,7 +117,7 @@ def preview_import(
     context: CurrentTenant,
     service: ImportServiceDep,
     cursor: str | None = None,
-    limit: int | None = Query(default=None, ge=1, le=100),
+    limit: int | None = Query(default=None, ge=1, le=50),
 ) -> ImportPreviewResponse:
     preview = service.preview(context, job_id=job_id, cursor=cursor, limit=limit)
     return ImportPreviewResponse(
@@ -125,6 +128,12 @@ def preview_import(
         new_accounts=preview.new_accounts,
         new_departments=preview.new_departments,
         new_cost_centers=preview.new_cost_centers,
+        replaced_records=preview.replaced_records,
+        sha256_short=preview.sha256_short,
+        delimiter=preview.delimiter,
+        delimiter_ambiguous=preview.delimiter_ambiguous,
+        available_sheets=preview.available_sheets,
+        error_groups=[import_error_group(group) for group in preview.error_groups],
         page=PageInfo(next_cursor=preview.next_cursor, has_more=preview.has_more),
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from typing import Any
@@ -156,6 +157,37 @@ class WorkbookTable:
     rows: list[ParsedCellRow]
     sheet_name: str
     delimiter: str | None
+    delimiter_ambiguous: bool = False
+    available_sheets: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ImportErrorGroup:
+    code: str
+    severity: str
+    count: int
+    sample_message: str
+
+
+def abbreviated_sha256(value: str) -> str:
+    return value[:12]
+
+
+def group_import_issues(issues: Sequence[ImportIssue]) -> list[ImportErrorGroup]:
+    grouped: dict[tuple[str, str], ImportErrorGroup] = {}
+    for issue in issues:
+        key = (issue.code, issue.severity.value)
+        current = grouped.get(key)
+        if current is None:
+            grouped[key] = ImportErrorGroup(
+                code=issue.code,
+                severity=issue.severity.value,
+                count=1,
+                sample_message=issue.message,
+            )
+            continue
+        grouped[key] = replace(current, count=current.count + 1)
+    return sorted(grouped.values(), key=lambda item: (-item.count, item.code, item.severity))
 
 
 @dataclass(frozen=True, slots=True)

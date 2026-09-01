@@ -6,6 +6,7 @@ from typing import Any, cast
 from budgetlens.application.pagination import (
     ABSOLUTE_MAX_LIMIT,
     MAX_LIMIT,
+    PREVIEW_MAX_LIMIT,
     decode_cursor,
     offset_page,
 )
@@ -20,6 +21,8 @@ def _as_dict(value: object) -> dict[str, Any]:
 
 def test_page_limit_stays_at_or_below_absolute_max() -> None:
     assert MAX_LIMIT <= ABSOLUTE_MAX_LIMIT
+    assert PREVIEW_MAX_LIMIT == 50
+    assert PREVIEW_MAX_LIMIT <= MAX_LIMIT
     assert ABSOLUTE_MAX_LIMIT == 500
 
 

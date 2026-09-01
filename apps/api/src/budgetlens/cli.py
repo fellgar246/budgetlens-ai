@@ -22,7 +22,12 @@ from budgetlens.adapters.tenancy import apply_tenant_gucs
 from budgetlens.application.ai_eval import run_stub_eval
 from budgetlens.application.context import TenantContext
 from budgetlens.application.imports import ImportService
-from budgetlens.application.retention import purge_expired_conversations, purge_expired_originals
+from budgetlens.application.retention import (
+    purge_expired_conversations,
+    purge_expired_error_reports,
+    purge_expired_exports,
+    purge_expired_originals,
+)
 from budgetlens.application.watchdog import timeout_stale_jobs
 from budgetlens.config import get_settings, reset_settings_cache
 from budgetlens.domain.errors import NotFoundError
@@ -82,16 +87,24 @@ def main(argv: list[str] | None = None) -> None:
         settings = get_settings()
         with session_scope() as session:
             clock = SystemClock()
+            storage = build_object_storage(settings)
             purged = purge_expired_originals(
                 session,
-                build_object_storage(settings),
+                storage,
                 clock=clock,
                 settings=settings,
             )
+            error_reports = purge_expired_error_reports(session, clock=clock, settings=settings)
+            exports = purge_expired_exports(session, storage, clock=clock)
             conversations = purge_expired_conversations(session, clock=clock)
         print(
             json.dumps(
-                {"purged": purged, "conversations_purged": conversations},
+                {
+                    "purged": purged,
+                    "error_reports_purged": error_reports,
+                    "exports_purged": exports,
+                    "conversations_purged": conversations,
+                },
                 ensure_ascii=True,
             )
         )
@@ -125,7 +138,7 @@ def _run_import_job(*, operation: str, job_id: str) -> None:
             build_object_storage(settings),
             settings,
             build_import_runner(settings),
-            build_workbook_parser(),
+            build_workbook_parser(settings),
         )
         context = TenantContext(
             user=user,

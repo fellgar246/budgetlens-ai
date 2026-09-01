@@ -29,7 +29,13 @@ from budgetlens.application.idempotency_keys import (
     replay_or_reserve,
     require_idempotency_key,
 )
-from budgetlens.application.pagination import Page, clamp_limit, decode_cursor, encode_cursor
+from budgetlens.application.pagination import (
+    Page,
+    clamp_limit,
+    clamp_preview_limit,
+    decode_cursor,
+    encode_cursor,
+)
 from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.application.row_normalization import normalize_row
 from budgetlens.config import Settings
@@ -58,11 +64,14 @@ from budgetlens.domain.financial_entry import FinancialEntry
 from budgetlens.domain.idempotency import sha256_hex
 from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.domain.importing import (
+    ImportErrorGroup,
     ImportIssue,
     ImportJob,
     NormalizedImportRow,
     ParsedCellRow,
     WorkbookTable,
+    abbreviated_sha256,
+    group_import_issues,
     propose_mapping,
     validate_mapping,
 )
@@ -84,6 +93,12 @@ class ImportPreview:
     new_accounts: int
     new_departments: int
     new_cost_centers: int
+    replaced_records: int
+    sha256_short: str
+    delimiter: str | None
+    delimiter_ambiguous: bool
+    available_sheets: list[str]
+    error_groups: list[ImportErrorGroup]
     next_cursor: str | None
     has_more: bool
 
@@ -255,6 +270,8 @@ class ImportService:
         mapping: dict[str, str],
         create_missing_dimensions: bool,
         amount_locale: str = "en",
+        sheet_name: str | None = None,
+        delimiter: str | None = None,
     ) -> ImportJob:
         require_permission(context.role, Permission.IMPORT)
         job = self.get(context, job_id)
@@ -271,6 +288,8 @@ class ImportService:
                 mapping=mapping,
                 create_missing_dimensions=create_missing_dimensions,
                 amount_locale=amount_locale,
+                sheet_name=sheet_name,
+                delimiter=delimiter,
             )
 
         return self._executor.run("validate", work)
@@ -285,28 +304,44 @@ class ImportService:
         mapping: dict[str, str],
         create_missing_dimensions: bool,
         amount_locale: str,
+        sheet_name: str | None,
+        delimiter: str | None,
     ) -> ImportJob:
         try:
             columns = validate_mapping(mapping)
-            payload = {"columns": columns, "amount_locale": amount_locale}
+            table = self._load_table(job, sheet_name=sheet_name, delimiter=delimiter)
+            if table.delimiter_ambiguous and delimiter is None:
+                raise ValidationError(
+                    "UNSUPPORTED_FILE",
+                    "El delimitador del CSV es ambiguo y debe confirmarse.",
+                    field_errors=[
+                        field_issue(
+                            "delimiter",
+                            "UNSUPPORTED_FILE",
+                            "Confirma si el archivo usa coma, punto y coma o tabulador.",
+                        )
+                    ],
+                )
+            payload = {
+                "columns": columns,
+                "amount_locale": amount_locale,
+                "delimiter": delimiter or table.delimiter,
+            }
             fingerprint = job.fingerprint_for(payload)
             existing = self._jobs(context.organization_id).get_by_fingerprint(fingerprint)
             if existing is not None and existing.id != job.id:
-                if existing.status is ImportJobStatus.APPLIED:
+                self._jobs(context.organization_id).save(previous)
+                if existing.status is ImportJobStatus.PROCESSING:
                     raise ConflictError(
-                        "IMPORT_ALREADY_APPLIED",
-                        "Ya existe un trabajo aplicado con la misma huella.",
+                        "IMPORT_ALREADY_IN_PROGRESS",
+                        "Ya hay un trabajo en curso con la misma huella.",
                     )
-                raise ConflictError(
-                    "IMPORT_ALREADY_IN_PROGRESS",
-                    "Ya hay un trabajo en curso con la misma huella.",
-                )
+                return existing
             create_missing = can_create_missing_dimensions(
                 flag=create_missing_dimensions, role=context.role
             )
             if create_missing_dimensions and not create_missing and context.role is not Role.ADMIN:
                 create_missing = False
-            table = self._load_table(job)
             version_fy = self._fiscal_year_for_job(context, job)
             normalized, issues = self._collect_rows(
                 table.rows,
@@ -391,13 +426,18 @@ class ImportService:
         job = self.get(context, job_id)
         if job.status in {ImportJobStatus.CREATED}:
             raise ConflictError("IMPORT_STATE", "Valida el archivo para ver la vista previa.")
-        table = self._load_table(job)
+        stored_delimiter = (
+            str(job.mapping_json["delimiter"])
+            if job.mapping_json and job.mapping_json.get("delimiter")
+            else None
+        )
+        table = self._load_table(job, sheet_name=job.sheet_name, delimiter=stored_delimiter)
         columns = dict(job.mapping_json.get("columns", {})) if job.mapping_json else {}
         amount_locale = (
             str(job.mapping_json.get("amount_locale", "en")) if job.mapping_json else "en"
         )
         organization = self._require_org(context.organization_id)
-        page_limit = clamp_limit(limit)
+        page_limit = clamp_preview_limit(limit)
         offset = 0
         parsed = decode_cursor(cursor)
         if parsed is not None:
@@ -417,6 +457,7 @@ class ImportService:
         new_accounts = 0
         new_departments = 0
         new_cost_centers = 0
+        replaced_records = 0
         if columns:
             version_fy = self._fiscal_year_for_job(context, job)
             normalized, _issues = self._collect_rows(
@@ -434,6 +475,7 @@ class ImportService:
             seen_accounts: set[str] = set()
             seen_departments: set[str] = set()
             seen_cost_centers: set[str] = set()
+            overlap_keys: list[tuple[object, object, object, object]] = []
             index = 0
             for item in normalized:
                 if (
@@ -454,6 +496,13 @@ class ImportService:
                 ):
                     new_cost_centers += 1
                     seen_cost_centers.add(item.cost_center_code)
+                account = accounts.get_by_code(item.account_code)
+                department = departments.get_by_code(item.department_code)
+                cost_center = cost_centers.get_by_code(item.cost_center_code)
+                if account and department and cost_center:
+                    overlap_keys.append(
+                        (item.period_start, account.id, department.id, cost_center.id)
+                    )
                 if index < offset:
                     index += 1
                     continue
@@ -461,9 +510,21 @@ class ImportService:
                 index += 1
                 if len(sanitized) > page_limit:
                     break
+            replaced_records = SqlFinancialEntryRepository(
+                self._session, context.organization_id
+            ).count_matching(
+                scenario_type=job.import_type.value,
+                budget_version_id=job.budget_version_id,
+                keys=overlap_keys,
+            )
         has_more = len(sanitized) > page_limit
         rows = sanitized[:page_limit]
         next_cursor = encode_cursor({"offset": str(offset + page_limit)}) if has_more else None
+        stored_issues = (
+            self._errors(context.organization_id).list_all(job.id)
+            if job.status not in {ImportJobStatus.CREATED, ImportJobStatus.UPLOADED}
+            else []
+        )
         return ImportPreview(
             job=job,
             headers=table.headers,
@@ -472,6 +533,12 @@ class ImportService:
             new_accounts=new_accounts,
             new_departments=new_departments,
             new_cost_centers=new_cost_centers,
+            replaced_records=replaced_records,
+            sha256_short=abbreviated_sha256(job.sha256),
+            delimiter=table.delimiter,
+            delimiter_ambiguous=table.delimiter_ambiguous,
+            available_sheets=list(table.available_sheets),
+            error_groups=group_import_issues(stored_issues),
             next_cursor=next_cursor,
             has_more=has_more,
         )
@@ -532,7 +599,18 @@ class ImportService:
         organization = self._require_org(context.organization_id)
         columns = dict(job.mapping_json["columns"])
         amount_locale = str(job.mapping_json.get("amount_locale", "en"))
-        table = self._parser.parse(job.original_filename, content, media_type=job.media_type)
+        stored_delimiter = (
+            str(job.mapping_json["delimiter"])
+            if job.mapping_json and job.mapping_json.get("delimiter")
+            else None
+        )
+        table = self._parser.parse(
+            job.original_filename,
+            content,
+            media_type=job.media_type,
+            sheet_name=job.sheet_name,
+            delimiter=stored_delimiter,
+        )
         version_fy = self._fiscal_year_for_job(context, job)
         normalized, issues = self._collect_rows(
             table.rows,
@@ -591,11 +669,23 @@ class ImportService:
         )
         return updated
 
-    def _load_table(self, job: ImportJob) -> WorkbookTable:
+    def _load_table(
+        self,
+        job: ImportJob,
+        *,
+        sheet_name: str | None = None,
+        delimiter: str | None = None,
+    ) -> WorkbookTable:
         if not job.object_key:
             raise ConflictError("IMPORT_STATE", "Primero debes cargar el archivo.")
         content = self._storage.get(job.object_key)
-        return self._parser.parse(job.original_filename, content, media_type=job.media_type)
+        return self._parser.parse(
+            job.original_filename,
+            content,
+            media_type=job.media_type,
+            sheet_name=sheet_name,
+            delimiter=delimiter,
+        )
 
     def _collect_rows(
         self,
@@ -674,35 +764,59 @@ class ImportService:
         departments = SqlDepartmentRepository(self._session, organization_id)
         cost_centers = SqlCostCenterRepository(self._session, organization_id)
         if accounts.get_by_code(item.account_code) is None:
-            issues.append(
-                ImportIssue(
-                    row_number=item.row_number,
-                    field="account_code",
-                    code="UNKNOWN_ACCOUNT",
-                    message="La cuenta no existe."
-                    if not create_missing
-                    else "La cuenta se creará al confirmar.",
-                    raw_value_redacted=item.account_code,
-                    severity=ImportErrorSeverity.WARNING
-                    if create_missing
-                    else ImportErrorSeverity.ERROR,
+            if create_missing and not item.account_name:
+                issues.append(
+                    ImportIssue(
+                        row_number=item.row_number,
+                        field="account_name",
+                        code="MISSING_COLUMN",
+                        message="El nombre de la cuenta es obligatorio al crear dimensiones.",
+                        raw_value_redacted=item.account_code,
+                        severity=ImportErrorSeverity.ERROR,
+                    )
                 )
-            )
+            else:
+                issues.append(
+                    ImportIssue(
+                        row_number=item.row_number,
+                        field="account_code",
+                        code="UNKNOWN_ACCOUNT",
+                        message="La cuenta no existe."
+                        if not create_missing
+                        else "La cuenta se creará al confirmar.",
+                        raw_value_redacted=item.account_code,
+                        severity=ImportErrorSeverity.WARNING
+                        if create_missing
+                        else ImportErrorSeverity.ERROR,
+                    )
+                )
         if departments.get_by_code(item.department_code) is None:
-            issues.append(
-                ImportIssue(
-                    row_number=item.row_number,
-                    field="department_code",
-                    code="UNKNOWN_DEPARTMENT",
-                    message="El departamento no existe."
-                    if not create_missing
-                    else "El departamento se creará al confirmar.",
-                    raw_value_redacted=item.department_code,
-                    severity=ImportErrorSeverity.WARNING
-                    if create_missing
-                    else ImportErrorSeverity.ERROR,
+            if create_missing and not item.department_name:
+                issues.append(
+                    ImportIssue(
+                        row_number=item.row_number,
+                        field="department_name",
+                        code="MISSING_COLUMN",
+                        message="El nombre del departamento es obligatorio al crear dimensiones.",
+                        raw_value_redacted=item.department_code,
+                        severity=ImportErrorSeverity.ERROR,
+                    )
                 )
-            )
+            else:
+                issues.append(
+                    ImportIssue(
+                        row_number=item.row_number,
+                        field="department_code",
+                        code="UNKNOWN_DEPARTMENT",
+                        message="El departamento no existe."
+                        if not create_missing
+                        else "El departamento se creará al confirmar.",
+                        raw_value_redacted=item.department_code,
+                        severity=ImportErrorSeverity.WARNING
+                        if create_missing
+                        else ImportErrorSeverity.ERROR,
+                    )
+                )
         if cost_centers.get_by_code(item.cost_center_code) is None:
             issues.append(
                 ImportIssue(
