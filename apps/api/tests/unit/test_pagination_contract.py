@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from budgetlens.application.pagination import ABSOLUTE_MAX_LIMIT, MAX_LIMIT
+from budgetlens.application.pagination import (
+    ABSOLUTE_MAX_LIMIT,
+    MAX_LIMIT,
+    decode_cursor,
+    offset_page,
+)
 from budgetlens.presentation.app import create_app
 
 
@@ -56,3 +61,15 @@ def test_list_endpoints_require_pagination_or_small_caps(env_settings: None) -> 
             if isinstance(maximum, int):
                 assert maximum <= 500, f"{path} allows more than 500 rows"
     assert unbounded == []
+
+
+def test_offset_page_returns_opaque_cursor_and_stable_window() -> None:
+    first = offset_page(["a", "b", "c", "d"], cursor=None, limit=2)
+    assert first.items == ["a", "b"]
+    assert first.has_more is True
+    assert first.next_cursor is not None
+    assert decode_cursor(first.next_cursor) == {"offset": "2"}
+    second = offset_page(["a", "b", "c", "d"], cursor=first.next_cursor, limit=2)
+    assert second.items == ["c", "d"]
+    assert second.has_more is False
+    assert second.next_cursor is None

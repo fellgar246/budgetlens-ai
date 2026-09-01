@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
 from budgetlens.domain.enums import ScenarioType
 from budgetlens.presentation.deps import CurrentTenant, ImportServiceDep
+from budgetlens.presentation.headers import RequiredIdempotencyKey
 from budgetlens.presentation.schemas import PageInfo
 from budgetlens.presentation.schemas_ops import (
     CreateImportRequest,
@@ -21,7 +21,6 @@ from budgetlens.presentation.schemas_ops import (
 )
 
 router = APIRouter(tags=["imports"])
-IdempotencyKey = Annotated[str | None, Header(alias="Idempotency-Key")]
 
 
 @router.get("/imports", response_model=ImportJobListResponse, operation_id="list_imports")
@@ -126,7 +125,7 @@ def preview_import(
         new_accounts=preview.new_accounts,
         new_departments=preview.new_departments,
         new_cost_centers=preview.new_cost_centers,
-        page=PageInfo(next_cursor=None, has_more=False),
+        page=PageInfo(next_cursor=preview.next_cursor, has_more=preview.has_more),
     )
 
 
@@ -170,10 +169,10 @@ def commit_import(
     job_id: UUID,
     context: CurrentTenant,
     service: ImportServiceDep,
-    idempotency_key: IdempotencyKey = None,
+    idempotency_key: RequiredIdempotencyKey,
 ) -> ImportJobResponse:
     return import_job_response(
-        service.commit(context, job_id=job_id, idempotency_key=idempotency_key or "")
+        service.commit(context, job_id=job_id, idempotency_key=idempotency_key)
     )
 
 

@@ -29,7 +29,7 @@ from budgetlens.application.idempotency_keys import (
     replay_or_reserve,
     require_idempotency_key,
 )
-from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.application.pagination import Page, clamp_limit, decode_cursor, encode_cursor
 from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.application.row_normalization import normalize_row
 from budgetlens.config import Settings
@@ -51,6 +51,7 @@ from budgetlens.domain.errors import (
     NotFoundError,
     PayloadTooLargeError,
     ValidationError,
+    field_issue,
 )
 from budgetlens.domain.exporting import render_csv
 from budgetlens.domain.financial_entry import FinancialEntry
@@ -83,6 +84,8 @@ class ImportPreview:
     new_accounts: int
     new_departments: int
     new_cost_centers: int
+    next_cursor: str | None
+    has_more: bool
 
 
 class ImportService:
@@ -395,6 +398,21 @@ class ImportService:
         )
         organization = self._require_org(context.organization_id)
         page_limit = clamp_limit(limit)
+        offset = 0
+        parsed = decode_cursor(cursor)
+        if parsed is not None:
+            try:
+                offset = max(0, int(parsed.get("offset", "0")))
+            except ValueError as exc:
+                raise ValidationError(
+                    "INVALID_CURSOR",
+                    "El cursor de paginación no es válido.",
+                    field_errors=[
+                        field_issue(
+                            "cursor", "INVALID_CURSOR", "El cursor de paginación no es válido."
+                        )
+                    ],
+                ) from exc
         sanitized: list[dict[str, str]] = []
         new_accounts = 0
         new_departments = 0
@@ -416,6 +434,7 @@ class ImportService:
             seen_accounts: set[str] = set()
             seen_departments: set[str] = set()
             seen_cost_centers: set[str] = set()
+            index = 0
             for item in normalized:
                 if (
                     accounts.get_by_code(item.account_code) is None
@@ -435,16 +454,26 @@ class ImportService:
                 ):
                     new_cost_centers += 1
                     seen_cost_centers.add(item.cost_center_code)
-                if len(sanitized) < page_limit:
-                    sanitized.append(_preview_row(item))
+                if index < offset:
+                    index += 1
+                    continue
+                sanitized.append(_preview_row(item))
+                index += 1
+                if len(sanitized) > page_limit:
+                    break
+        has_more = len(sanitized) > page_limit
+        rows = sanitized[:page_limit]
+        next_cursor = encode_cursor({"offset": str(offset + page_limit)}) if has_more else None
         return ImportPreview(
             job=job,
             headers=table.headers,
             proposed_mapping=propose_mapping(table.headers),
-            rows=sanitized,
+            rows=rows,
             new_accounts=new_accounts,
             new_departments=new_departments,
             new_cost_centers=new_cost_centers,
+            next_cursor=next_cursor,
+            has_more=has_more,
         )
 
     def list_errors(

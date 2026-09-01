@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from budgetlens.config import Settings, get_settings
 from budgetlens.logging import configure_logging
 from budgetlens.presentation.errors import install_error_handlers
 from budgetlens.presentation.middleware import TraceIdMiddleware
+from budgetlens.presentation.openapi import apply_contract
 from budgetlens.presentation.routes.analytics import router as analytics_router
 from budgetlens.presentation.routes.audit import router as audit_router
 from budgetlens.presentation.routes.budget_versions import router as budget_versions_router
@@ -78,4 +81,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ops_router, prefix="/api/v1")
     if resolved.auth_mode == "dev" and resolved.app_env in {"local", "test"}:
         app.include_router(dev_router, prefix="/api/v1")
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema is None:
+            app.openapi_schema = apply_contract(
+                get_openapi(title=app.title, version=app.version, routes=app.routes)
+            )
+        return app.openapi_schema
+
+    app.openapi = openapi
     return app

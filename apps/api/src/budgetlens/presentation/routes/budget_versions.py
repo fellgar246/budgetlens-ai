@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Query
 
 from budgetlens.presentation.deps import BudgetVersionServiceDep, CurrentTenant
+from budgetlens.presentation.headers import RequiredIdempotencyKey
 from budgetlens.presentation.schemas import (
     BudgetVersionListResponse,
     BudgetVersionResponse,
@@ -16,8 +16,6 @@ from budgetlens.presentation.schemas import (
 )
 
 router = APIRouter(tags=["budget-versions"])
-
-IdempotencyKey = Annotated[str | None, Header(alias="Idempotency-Key")]
 
 
 @router.get(
@@ -105,10 +103,10 @@ def publish_budget_version(
     version_id: UUID,
     context: CurrentTenant,
     service: BudgetVersionServiceDep,
-    idempotency_key: IdempotencyKey = None,
+    idempotency_key: RequiredIdempotencyKey,
 ) -> BudgetVersionResponse:
     return budget_version_response(
-        service.publish(context, version_id=version_id, idempotency_key=idempotency_key or "")
+        service.publish(context, version_id=version_id, idempotency_key=idempotency_key)
     )
 
 
@@ -121,10 +119,10 @@ def activate_budget_version(
     version_id: UUID,
     context: CurrentTenant,
     service: BudgetVersionServiceDep,
-    idempotency_key: IdempotencyKey = None,
+    idempotency_key: RequiredIdempotencyKey,
 ) -> BudgetVersionResponse:
     return budget_version_response(
-        service.activate(context, version_id=version_id, idempotency_key=idempotency_key or "")
+        service.activate(context, version_id=version_id, idempotency_key=idempotency_key)
     )
 
 
@@ -137,8 +135,8 @@ def archive_budget_version(
     version_id: UUID,
     context: CurrentTenant,
     service: BudgetVersionServiceDep,
-    idempotency_key: IdempotencyKey = None,
+    idempotency_key: RequiredIdempotencyKey,
 ) -> BudgetVersionResponse:
     return budget_version_response(
-        service.archive(context, version_id=version_id, idempotency_key=idempotency_key or "")
+        service.archive(context, version_id=version_id, idempotency_key=idempotency_key)
     )

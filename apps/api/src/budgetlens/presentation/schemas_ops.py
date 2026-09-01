@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from budgetlens.application.ai import CopilotAnswer
 from budgetlens.application.analytics import BreakdownItem, VarianceMetrics, VarianceSummary
-from budgetlens.domain.audit import AuditEvent
+from budgetlens.domain.audit import AuditEvent, sanitized_metadata
 from budgetlens.domain.conversation import Conversation
 from budgetlens.domain.enums import ScenarioType
 from budgetlens.domain.exporting import ExportJob
@@ -18,7 +18,19 @@ from budgetlens.presentation.schemas import PageInfo
 
 
 class CreateImportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "import_type": "actual",
+                "budget_version_id": None,
+                "original_filename": "actuals-2026.xlsx",
+                "size_bytes": 123456,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "template_version": "1.0",
+            }
+        },
+    )
     import_type: Literal["budget", "actual"]
     budget_version_id: UUID | None = None
     original_filename: str
@@ -28,7 +40,22 @@ class CreateImportRequest(BaseModel):
 
 
 class ValidateImportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "mapping": {
+                    "period": "Month",
+                    "account_code": "Account",
+                    "department_code": "Department",
+                    "cost_center_code": "Cost Center",
+                    "amount": "Actual",
+                    "currency": "Currency",
+                },
+                "create_missing_dimensions": False,
+            }
+        },
+    )
     mapping: dict[str, str]
     create_missing_dimensions: bool = False
     amount_locale: Literal["en", "es"] = "en"
@@ -140,7 +167,17 @@ class BreakdownListResponse(BaseModel):
 
 
 class CreateExportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "export_type": "variance_breakdown",
+                "format": "csv",
+                "filters": {},
+                "group_by": "account",
+            }
+        },
+    )
     export_type: Literal["variance_breakdown"] = "variance_breakdown"
     format: Literal["csv"] = "csv"
     filters: dict[str, Any]
@@ -160,7 +197,23 @@ class ExportJobResponse(BaseModel):
 
 
 class ScenarioRuleRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "sequence": 1,
+                "scope": {
+                    "period_from": "2026-07-01",
+                    "period_to": "2026-12-01",
+                    "account_ids": [],
+                    "department_ids": ["00000000-0000-0000-0000-000000000002"],
+                    "cost_center_ids": [],
+                },
+                "operation": "percentage_change",
+                "value": "0.0500",
+            }
+        },
+    )
     sequence: int
     scope: dict[str, Any]
     operation: Literal["percentage_change", "absolute_change"]
@@ -236,7 +289,21 @@ class ConversationListResponse(BaseModel):
 
 
 class CreateMessageRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "content": "¿Qué cuentas explican el exceso de gasto?",
+                "context": {
+                    "fiscal_year": 2026,
+                    "period_from": "2026-01-01",
+                    "period_to": "2026-06-01",
+                    "budget_version_id": "00000000-0000-0000-0000-000000000001",
+                    "department_ids": ["00000000-0000-0000-0000-000000000002"],
+                },
+            }
+        },
+    )
     content: str
     context: dict[str, Any] = Field(default_factory=dict)
 
@@ -416,7 +483,7 @@ def audit_event_response(event: AuditEvent) -> AuditEventResponse:
         resource_type=event.resource_type,
         resource_id=event.resource_id,
         outcome=event.outcome,
-        metadata=event.metadata,
+        metadata=sanitized_metadata(event.metadata),
         trace_id=event.trace_id,
         created_at=event.created_at,
     )

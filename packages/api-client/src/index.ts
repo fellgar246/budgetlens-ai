@@ -272,8 +272,13 @@ export function getMe(baseUrl: string, auth: AuthContext) {
   return requestJson<MeResponse>(baseUrl, `${API_PREFIX}/me`, {}, auth);
 }
 
-export function listOrganizations(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<Organization>>(baseUrl, `${API_PREFIX}/organizations`, {}, auth);
+export function listOrganizations(baseUrl: string, auth: AuthContext, query?: PageQuery) {
+  return requestJson<Paginated<Organization>>(
+    baseUrl,
+    `${API_PREFIX}/organizations` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
 }
 
 export function createOrganization(
@@ -318,8 +323,13 @@ export function patchOrganization(
   );
 }
 
-export function listMemberships(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<Membership>>(baseUrl, `${API_PREFIX}/memberships`, {}, auth);
+export function listMemberships(baseUrl: string, auth: AuthContext, query?: PageQuery) {
+  return requestJson<Paginated<Membership>>(
+    baseUrl,
+    `${API_PREFIX}/memberships` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
 }
 
 export function createMembership(
@@ -335,8 +345,33 @@ export function createMembership(
   );
 }
 
-export function listAccounts(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<Account>>(baseUrl, `${API_PREFIX}/accounts`, {}, auth);
+export function patchMembership(
+  baseUrl: string,
+  auth: AuthContext,
+  membershipId: string,
+  body: { role?: "viewer" | "analyst" | "admin" | null; status?: "active" | "disabled" | null },
+) {
+  return requestJson<Membership>(
+    baseUrl,
+    `${API_PREFIX}/memberships/${membershipId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function listAccounts(baseUrl: string, auth: AuthContext, query?: CatalogListQuery) {
+  return requestJson<Paginated<Account>>(
+    baseUrl,
+    `${API_PREFIX}/accounts` +
+      queryString({
+        status: query?.status,
+        search: query?.search,
+        cursor: query?.cursor,
+        limit: query?.limit,
+      }),
+    {},
+    auth,
+  );
 }
 
 export function createAccount(
@@ -347,8 +382,43 @@ export function createAccount(
   return requestJson<Account>(baseUrl, `${API_PREFIX}/accounts`, { method: "POST", body: JSON.stringify(body) }, auth);
 }
 
-export function listDepartments(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<Department>>(baseUrl, `${API_PREFIX}/departments`, {}, auth);
+export function getAccount(baseUrl: string, auth: AuthContext, accountId: string) {
+  return requestJson<Account>(baseUrl, `${API_PREFIX}/accounts/${accountId}`, {}, auth);
+}
+
+export function patchAccount(
+  baseUrl: string,
+  auth: AuthContext,
+  accountId: string,
+  body: {
+    name?: string | null;
+    account_type?: string | null;
+    parent_id?: string | null;
+    clear_parent?: boolean;
+    status?: "active" | "inactive" | null;
+  },
+) {
+  return requestJson<Account>(
+    baseUrl,
+    `${API_PREFIX}/accounts/${accountId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function listDepartments(baseUrl: string, auth: AuthContext, query?: CatalogListQuery) {
+  return requestJson<Paginated<Department>>(
+    baseUrl,
+    `${API_PREFIX}/departments` +
+      queryString({
+        status: query?.status,
+        search: query?.search,
+        cursor: query?.cursor,
+        limit: query?.limit,
+      }),
+    {},
+    auth,
+  );
 }
 
 export function createDepartment(baseUrl: string, auth: AuthContext, body: { code: string; name: string }) {
@@ -360,8 +430,37 @@ export function createDepartment(baseUrl: string, auth: AuthContext, body: { cod
   );
 }
 
-export function listCostCenters(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<CostCenter>>(baseUrl, `${API_PREFIX}/cost-centers`, {}, auth);
+export function getDepartment(baseUrl: string, auth: AuthContext, departmentId: string) {
+  return requestJson<Department>(baseUrl, `${API_PREFIX}/departments/${departmentId}`, {}, auth);
+}
+
+export function patchDepartment(
+  baseUrl: string,
+  auth: AuthContext,
+  departmentId: string,
+  body: { name?: string | null; status?: "active" | "inactive" | null },
+) {
+  return requestJson<Department>(
+    baseUrl,
+    `${API_PREFIX}/departments/${departmentId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function listCostCenters(baseUrl: string, auth: AuthContext, query?: CatalogListQuery) {
+  return requestJson<Paginated<CostCenter>>(
+    baseUrl,
+    `${API_PREFIX}/cost-centers` +
+      queryString({
+        status: query?.status,
+        search: query?.search,
+        cursor: query?.cursor,
+        limit: query?.limit,
+      }),
+    {},
+    auth,
+  );
 }
 
 export function createCostCenter(baseUrl: string, auth: AuthContext, body: { code: string; name: string }) {
@@ -373,8 +472,41 @@ export function createCostCenter(baseUrl: string, auth: AuthContext, body: { cod
   );
 }
 
-export function listBudgetVersions(baseUrl: string, auth: AuthContext) {
-  return requestJson<Paginated<BudgetVersion>>(baseUrl, `${API_PREFIX}/budget-versions`, {}, auth);
+export function getCostCenter(baseUrl: string, auth: AuthContext, costCenterId: string) {
+  return requestJson<CostCenter>(baseUrl, `${API_PREFIX}/cost-centers/${costCenterId}`, {}, auth);
+}
+
+export function patchCostCenter(
+  baseUrl: string,
+  auth: AuthContext,
+  costCenterId: string,
+  body: { name?: string | null; status?: "active" | "inactive" | null },
+) {
+  return requestJson<CostCenter>(
+    baseUrl,
+    `${API_PREFIX}/cost-centers/${costCenterId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function listBudgetVersions(
+  baseUrl: string,
+  auth: AuthContext,
+  query?: { fiscal_year?: number; include_archived?: boolean; cursor?: string; limit?: number },
+) {
+  return requestJson<Paginated<BudgetVersion>>(
+    baseUrl,
+    `${API_PREFIX}/budget-versions` +
+      queryString({
+        fiscal_year: query?.fiscal_year,
+        include_archived: query?.include_archived,
+        cursor: query?.cursor,
+        limit: query?.limit,
+      }),
+    {},
+    auth,
+  );
 }
 
 export function createBudgetVersion(baseUrl: string, auth: AuthContext, body: { name: string; fiscal_year: number }) {
@@ -382,6 +514,24 @@ export function createBudgetVersion(baseUrl: string, auth: AuthContext, body: { 
     baseUrl,
     `${API_PREFIX}/budget-versions`,
     { method: "POST", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function getBudgetVersion(baseUrl: string, auth: AuthContext, versionId: string) {
+  return requestJson<BudgetVersion>(baseUrl, `${API_PREFIX}/budget-versions/${versionId}`, {}, auth);
+}
+
+export function patchBudgetVersion(
+  baseUrl: string,
+  auth: AuthContext,
+  versionId: string,
+  body: { version: number; name: string },
+) {
+  return requestJson<BudgetVersion>(
+    baseUrl,
+    `${API_PREFIX}/budget-versions/${versionId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
     auth,
   );
 }
@@ -531,15 +681,47 @@ export type CopilotMessage = {
   trace_id: string;
 };
 
+export type RepeatableId = string | string[];
+
 export type AnalyticsQuery = {
   fiscal_year: number;
   period_from: string;
   period_to: string;
   budget_version_id: string;
-  account_id?: string;
-  department_id?: string;
-  cost_center_id?: string;
+  account_id?: RepeatableId;
+  department_id?: RepeatableId;
+  cost_center_id?: RepeatableId;
 };
+
+export type CatalogListQuery = {
+  status?: string;
+  search?: string;
+  cursor?: string;
+  limit?: number;
+};
+
+export type PageQuery = {
+  cursor?: string;
+  limit?: number;
+};
+
+function queryString(values: Record<string, string | number | boolean | undefined | null>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null || value === "") continue;
+    params.set(key, String(value));
+  }
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+function appendIds(params: URLSearchParams, name: string, value?: RepeatableId): void {
+  if (!value) return;
+  const items = Array.isArray(value) ? value : [value];
+  for (const item of items) {
+    if (item) params.append(name, item);
+  }
+}
 
 function analyticsQuery(query: AnalyticsQuery): string {
   const params = new URLSearchParams({
@@ -548,9 +730,9 @@ function analyticsQuery(query: AnalyticsQuery): string {
     period_to: query.period_to,
     budget_version_id: query.budget_version_id,
   });
-  if (query.account_id) params.append("account_id", query.account_id);
-  if (query.department_id) params.append("department_id", query.department_id);
-  if (query.cost_center_id) params.append("cost_center_id", query.cost_center_id);
+  appendIds(params, "account_id", query.account_id);
+  appendIds(params, "department_id", query.department_id);
+  appendIds(params, "cost_center_id", query.cost_center_id);
   return params.toString();
 }
 
@@ -610,8 +792,13 @@ export function getImport(baseUrl: string, auth: AuthContext, jobId: string) {
   return requestJson<ImportJob>(baseUrl, `${API_PREFIX}/imports/${jobId}`, {}, auth);
 }
 
-export function previewImport(baseUrl: string, auth: AuthContext, jobId: string) {
-  return requestJson<ImportPreview>(baseUrl, `${API_PREFIX}/imports/${jobId}/preview`, {}, auth);
+export function previewImport(baseUrl: string, auth: AuthContext, jobId: string, query?: PageQuery) {
+  return requestJson<ImportPreview>(
+    baseUrl,
+    `${API_PREFIX}/imports/${jobId}/preview` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
 }
 
 export function listImportErrors(baseUrl: string, auth: AuthContext, jobId: string) {
@@ -644,19 +831,35 @@ export function getVarianceBreakdown(
   auth: AuthContext,
   query: AnalyticsQuery,
   groupBy: string,
+  options?: { sort?: string; direction?: string; cursor?: string; limit?: number },
 ) {
+  const extra = queryString({
+    sort: options?.sort,
+    direction: options?.direction,
+    cursor: options?.cursor,
+    limit: options?.limit,
+  });
+  const suffix = extra ? extra.replace("?", "&") : "";
   return requestJson<Paginated<BreakdownItem>>(
     baseUrl,
-    `${API_PREFIX}/analytics/variance-breakdown?${analyticsQuery(query)}&group_by=${groupBy}`,
+    `${API_PREFIX}/analytics/variance-breakdown?${analyticsQuery(query)}&group_by=${groupBy}${suffix}`,
     {},
     auth,
   );
 }
 
-export function getTopUnfavorable(baseUrl: string, auth: AuthContext, query: AnalyticsQuery, groupBy = "account") {
+export function getTopUnfavorable(
+  baseUrl: string,
+  auth: AuthContext,
+  query: AnalyticsQuery,
+  groupBy = "account",
+  limit?: number,
+) {
+  const extra = queryString({ limit });
+  const suffix = extra ? extra.replace("?", "&") : "";
   return requestJson<Paginated<BreakdownItem>>(
     baseUrl,
-    `${API_PREFIX}/analytics/top-unfavorable?${analyticsQuery(query)}&group_by=${groupBy}`,
+    `${API_PREFIX}/analytics/top-unfavorable?${analyticsQuery(query)}&group_by=${groupBy}${suffix}`,
     {},
     auth,
   );
@@ -689,6 +892,37 @@ export function createExport(baseUrl: string, auth: AuthContext, filters: Analyt
 
 export function exportDownloadUrl(baseUrl: string, exportId: string) {
   return apiUrl(baseUrl, `${API_PREFIX}/exports/${exportId}/content`);
+}
+
+export function listScenarios(baseUrl: string, auth: AuthContext, query?: PageQuery) {
+  return requestJson<Paginated<Scenario>>(
+    baseUrl,
+    `${API_PREFIX}/scenarios` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
+}
+
+export function getScenario(baseUrl: string, auth: AuthContext, scenarioId: string) {
+  return requestJson<Scenario>(baseUrl, `${API_PREFIX}/scenarios/${scenarioId}`, {}, auth);
+}
+
+export function patchScenario(
+  baseUrl: string,
+  auth: AuthContext,
+  scenarioId: string,
+  body: { name?: string | null; rules?: Array<Record<string, unknown>> | null },
+) {
+  return requestJson<Scenario>(
+    baseUrl,
+    `${API_PREFIX}/scenarios/${scenarioId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+export function archiveScenario(baseUrl: string, auth: AuthContext, scenarioId: string) {
+  return requestJson<Scenario>(baseUrl, `${API_PREFIX}/scenarios/${scenarioId}/archive`, { method: "POST" }, auth);
 }
 
 export function previewScenario(
@@ -724,6 +958,70 @@ export function createScenario(
   },
 ) {
   return requestJson<Scenario>(baseUrl, `${API_PREFIX}/scenarios`, { method: "POST", body: JSON.stringify(body) }, auth);
+}
+
+export function listConversations(baseUrl: string, auth: AuthContext, query?: PageQuery) {
+  return requestJson<Paginated<Conversation>>(
+    baseUrl,
+    `${API_PREFIX}/conversations` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
+}
+
+export function getConversation(baseUrl: string, auth: AuthContext, conversationId: string) {
+  return requestJson<Conversation>(baseUrl, `${API_PREFIX}/conversations/${conversationId}`, {}, auth);
+}
+
+export function deleteConversation(baseUrl: string, auth: AuthContext, conversationId: string) {
+  return requestJson<Conversation>(
+    baseUrl,
+    `${API_PREFIX}/conversations/${conversationId}`,
+    { method: "DELETE" },
+    auth,
+  );
+}
+
+export type AuditEvent = {
+  id: string;
+  actor_id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  outcome: string;
+  metadata: Record<string, unknown>;
+  trace_id: string;
+  created_at: string;
+};
+
+export function listAuditEvents(
+  baseUrl: string,
+  auth: AuthContext,
+  query?: {
+    action?: string;
+    actor_id?: string;
+    resource_type?: string;
+    date_from?: string;
+    date_to?: string;
+    cursor?: string;
+    limit?: number;
+  },
+) {
+  return requestJson<Paginated<AuditEvent>>(
+    baseUrl,
+    `${API_PREFIX}/audit-events` +
+      queryString({
+        action: query?.action,
+        actor_id: query?.actor_id,
+        resource_type: query?.resource_type,
+        date_from: query?.date_from,
+        date_to: query?.date_to,
+        cursor: query?.cursor,
+        limit: query?.limit,
+      }),
+    {},
+    auth,
+  );
 }
 
 export function createConversation(baseUrl: string, auth: AuthContext, body: { title?: string; context: Record<string, unknown> }) {

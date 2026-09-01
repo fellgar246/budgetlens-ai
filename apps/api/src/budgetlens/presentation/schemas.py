@@ -42,7 +42,17 @@ class OrganizationListResponse(BaseModel):
 
 
 class CreateOrganizationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "name": "Demo México",
+                "slug": "demo-mexico",
+                "functional_currency": "MXN",
+                "fiscal_year_start_month": 1,
+            }
+        },
+    )
     name: str
     slug: str
     functional_currency: str
@@ -135,7 +145,17 @@ class AccountListResponse(BaseModel):
 
 
 class CreateAccountRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "code": "6100",
+                "name": "Servicios externos",
+                "account_type": "expense",
+                "parent_id": None,
+            }
+        },
+    )
     code: str
     name: str
     account_type: Literal["revenue", "expense", "asset", "liability", "equity", "other"]

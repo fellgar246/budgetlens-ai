@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
@@ -34,6 +35,29 @@ def clamp_limit(limit: int | None) -> int:
             ],
         )
     return value
+
+
+def offset_page[T](items: Sequence[T], *, cursor: str | None, limit: int | None) -> Page[T]:
+    page_limit = clamp_limit(limit)
+    offset = 0
+    parsed = decode_cursor(cursor)
+    if parsed is not None:
+        raw = parsed.get("offset", "0")
+        try:
+            offset = max(0, int(raw))
+        except ValueError as exc:
+            raise ValidationError(
+                "INVALID_CURSOR",
+                "El cursor de paginación no es válido.",
+                field_errors=[
+                    field_issue("cursor", "INVALID_CURSOR", "El cursor de paginación no es válido.")
+                ],
+            ) from exc
+    window = list(items[offset : offset + page_limit + 1])
+    has_more = len(window) > page_limit
+    page_items = window[:page_limit]
+    next_cursor = encode_cursor({"offset": str(offset + page_limit)}) if has_more else None
+    return Page(items=page_items, next_cursor=next_cursor, has_more=has_more)
 
 
 def encode_cursor(payload: dict[str, str]) -> str:

@@ -1053,6 +1053,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "plans": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09"],
         "evidence": [
             "apps/api/tests/unit/test_openapi.py",
+            "apps/api/src/budgetlens/presentation/openapi.py",
             "packages/api-client/openapi.json",
             "packages/api-client/src/index.ts",
         ],

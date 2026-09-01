@@ -34,7 +34,7 @@ class VersionResponse(BaseModel):
     build_time: str
 
 
-@router.get("/health/live", response_model=LiveResponse)
+@router.get("/health/live", response_model=LiveResponse, operation_id="get_health_live")
 def live() -> LiveResponse:
     return LiveResponse(status="ok")
 
@@ -43,6 +43,7 @@ def live() -> LiveResponse:
     "/health/ready",
     response_model=ReadyResponse,
     responses={503: {"model": ReadyResponse}},
+    operation_id="get_health_ready",
 )
 def ready(response: Response) -> ReadyResponse:
     database_ok = ping_database()
@@ -55,7 +56,7 @@ def ready(response: Response) -> ReadyResponse:
     return payload
 
 
-@router.get("/version", response_model=VersionResponse)
+@router.get("/version", response_model=VersionResponse, operation_id="get_version")
 def version() -> VersionResponse:
     settings = get_settings()
     return VersionResponse(

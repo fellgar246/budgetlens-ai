@@ -100,7 +100,7 @@ The browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`). 
 
 ## Local identity
 
-`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. The web header lists those identities. Publish, activate, and archive require `Idempotency-Key`.
+`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. The web header lists those identities. Publish, activate, archive, and import commit require `Idempotency-Key`. JSON uses `snake_case`; amounts and ratios are decimal strings; every response includes `X-Trace-Id`.
 
 `GET /me` returns the active role, persona, and capability matrix. Changing organization clears incompatible filters and cached view state. A forged `organization_id` in the URL, payload, or `X-Organization-Id` header returns `403` or `404` without saying whether the other tenant exists. The operator can open `/estado` and never receives financial rows by default.
 
