@@ -96,8 +96,19 @@ export const NAV_GROUPS: NavGroup[] = [
           capabilities.can_view_dashboard || capabilities.can_manage_dimensions,
       },
       {
+        href: "/settings/budget-versions",
+        label: copy.navVersions,
+        visible: (capabilities) =>
+          capabilities.can_view_dashboard || capabilities.can_manage_versions,
+      },
+      {
         href: "/settings/members",
         label: copy.navMembers,
+        visible: (capabilities) => capabilities.can_manage_members,
+      },
+      {
+        href: "/audit",
+        label: copy.navAudit,
         visible: (capabilities) => capabilities.can_manage_members,
       },
     ],

@@ -233,6 +233,17 @@ class BudgetVersionRow(Base):
 
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("actor_type IN ('user', 'system')", name="ck_audit_events_actor_type"),
+        CheckConstraint(
+            "(actor_type = 'user' AND actor_id IS NOT NULL) OR actor_type = 'system'",
+            name="ck_audit_events_actor",
+        ),
+        CheckConstraint(
+            "outcome IN ('success', 'denied', 'failed')",
+            name="ck_audit_events_outcome",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -241,8 +252,14 @@ class AuditEventRow(Base):
         nullable=True,
         index=True,
     )
-    actor_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False
+    actor_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="user", server_default="user"
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    actor_ref: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="", server_default=""
     )
     action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(40), nullable=False)

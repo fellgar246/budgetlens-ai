@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from budgetlens.config import Settings, get_settings
@@ -28,8 +30,40 @@ def get_engine(settings: Settings | None = None) -> Engine:
             max_overflow=5,
             connect_args=_connect_args(resolved),
         )
+        event.listen(_engine, "before_cursor_execute", _before_cursor_execute)
+        event.listen(_engine, "after_cursor_execute", _after_cursor_execute)
         _session_factory = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
     return _engine
+
+
+def _before_cursor_execute(
+    _conn: object,
+    _cursor: object,
+    _statement: str,
+    _parameters: object,
+    context: Any,
+    _executemany: bool,
+) -> None:
+    context._budgetlens_query_started = time.perf_counter()
+
+
+def _after_cursor_execute(
+    _conn: object,
+    _cursor: object,
+    statement: str,
+    _parameters: object,
+    context: Any,
+    _executemany: bool,
+) -> None:
+    started = getattr(context, "_budgetlens_query_started", None)
+    if not isinstance(started, float):
+        return
+    from budgetlens.observability import logical_query_name, metrics_registry
+
+    metrics_registry().record_query(
+        logical_query_name(statement),
+        (time.perf_counter() - started) * 1000,
+    )
 
 
 def get_session_factory() -> sessionmaker[Session]:

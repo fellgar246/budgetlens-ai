@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 from typing import cast
 from uuid import UUID
 
@@ -19,7 +20,7 @@ from budgetlens.adapters.persistence.repositories import (
     SqlUserRepository,
 )
 from budgetlens.adapters.tenancy import apply_tenant_gucs
-from budgetlens.application.ai_eval import run_stub_eval
+from budgetlens.application.ai_eval import run_live_eval, run_stub_eval, write_eval_report
 from budgetlens.application.context import TenantContext
 from budgetlens.application.imports import ImportService
 from budgetlens.application.retention import (
@@ -37,8 +38,8 @@ DEFAULT_EVAL_DATABASE_URL = (
     "postgresql+psycopg://budgetlens:budgetlens_local_only@127.0.0.1:5433/budgetlens"
 )
 USAGE = (
-    "Usage: python -m budgetlens seed|eval-ai|watchdog|retain-files|"
-    "import-job validate|apply <job-id>"
+    "Usage: python -m budgetlens seed|eval-ai [--live] [--output PATH]|"
+    "watchdog|retain-files|import-job validate|apply <job-id>"
 )
 
 
@@ -47,30 +48,11 @@ def main(argv: list[str] | None = None) -> None:
     if args == ["seed"]:
         from budgetlens.seed import run_seed
 
-        run_seed()
+        run_seed(include_financials=True)
         print("Seed applied.")
         return
-    if args == ["eval-ai"]:
-        os.environ.setdefault("APP_ENV", "test")
-        os.environ.setdefault("AUTH_MODE", "dev")
-        os.environ.setdefault("DATABASE_URL", DEFAULT_EVAL_DATABASE_URL)
-        reset_settings_cache()
-        result = run_stub_eval(build_ai_provider(get_settings()))
-        print(json.dumps(result, indent=2, ensure_ascii=True))
-        passed = result["passed"]
-        total = result["total"]
-        gates = result.get("gates")
-        gates_ok = False
-        if isinstance(gates, dict):
-            typed_gates = cast(dict[object, object], gates)
-            gates_ok = all(bool(value) for value in typed_gates.values())
-        if (
-            not isinstance(passed, int)
-            or not isinstance(total, int)
-            or passed != total
-            or not gates_ok
-        ):
-            raise SystemExit(1)
+    if args and args[0] == "eval-ai":
+        _run_eval_ai(args[1:])
         return
     if args == ["watchdog"]:
         settings = get_settings()
@@ -113,6 +95,40 @@ def main(argv: list[str] | None = None) -> None:
         _run_import_job(operation=args[1], job_id=args[2])
         return
     raise SystemExit(USAGE)
+
+
+def _run_eval_ai(extra: list[str]) -> None:
+    live = "--live" in extra
+    output: str | None = None
+    if "--output" in extra:
+        index = extra.index("--output")
+        if index + 1 >= len(extra):
+            raise SystemExit(USAGE)
+        output = extra[index + 1]
+    os.environ.setdefault("APP_ENV", "test")
+    os.environ.setdefault("AUTH_MODE", "dev")
+    os.environ.setdefault("DATABASE_URL", DEFAULT_EVAL_DATABASE_URL)
+    reset_settings_cache()
+    provider = build_ai_provider(get_settings())
+    try:
+        result = run_live_eval(provider) if live else run_stub_eval(provider)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(result, indent=2, ensure_ascii=True))
+    if output:
+        write_eval_report(result, Path(output))
+    elif live:
+        sha = get_settings().git_sha
+        write_eval_report(result, Path("var") / "ai-eval" / f"{sha}-live.json")
+    passed = result["passed"]
+    total = result["total"]
+    gates = result.get("gates")
+    gates_ok = False
+    if isinstance(gates, dict):
+        typed_gates = cast(dict[object, object], gates)
+        gates_ok = all(bool(value) for value in typed_gates.values())
+    if not isinstance(passed, int) or not isinstance(total, int) or passed != total or not gates_ok:
+        raise SystemExit(1)
 
 
 def _run_import_job(*, operation: str, job_id: str) -> None:

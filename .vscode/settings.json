@@ -5,5 +5,10 @@
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
   "python.defaultInterpreterPath": "${workspaceFolder}/apps/api/.venv/bin/python",
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "python.testing.cwd": "${workspaceFolder}/apps/api",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "vitest.rootConfig": "apps/web/vitest.config.ts"
 }

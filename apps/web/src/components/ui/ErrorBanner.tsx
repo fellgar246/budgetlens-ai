@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { ApiRequestError } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
@@ -10,6 +13,7 @@ export function ErrorBanner({
   error: string | Error | null;
   onRetry?: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
   if (!error) {
     return null;
   }
@@ -22,6 +26,18 @@ export function ErrorBanner({
       {traceId ? (
         <p className="mt-2 text-xs text-secondary">
           {copy.traceLabel}: <code className="text-primary">{traceId}</code>
+          <Button
+            variant="link"
+            className="ml-3"
+            onClick={() => {
+              void navigator.clipboard.writeText(traceId).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+              });
+            }}
+          >
+            {copied ? copy.copied : copy.copyTrace}
+          </Button>
         </p>
       ) : null}
       {onRetry ? (

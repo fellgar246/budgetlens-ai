@@ -16,6 +16,19 @@ def test_overlong_csv_cell_is_rejected() -> None:
     assert exc.value.code == "UNSUPPORTED_FILE"
 
 
+def test_macro_enabled_workbook_is_rejected() -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+        archive.writestr("xl/vbaProject.bin", b"macro")
+    with pytest.raises(ValidationError) as exc:
+        parse_workbook("book.xlsm", buffer.getvalue())
+    assert exc.value.code == "UNSUPPORTED_FILE"
+    details = " ".join(item["message"] for item in exc.value.field_errors)
+    assert "macros" in details.lower()
+
+
 def test_disproportionate_xlsx_zip_is_rejected() -> None:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:

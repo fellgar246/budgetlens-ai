@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { SkipLink } from "@/components/layout/SkipLink";
+import { ToastProvider } from "@/components/ui/Toast";
 import { SessionProvider } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="font-sans antialiased">
         <SkipLink />
         <SessionProvider>
-          <AppShell>{children}</AppShell>
+          <ToastProvider>
+            <AppShell>{children}</AppShell>
+          </ToastProvider>
         </SessionProvider>
       </body>
     </html>

@@ -11,6 +11,7 @@ from budgetlens.adapters.persistence.finance_repositories import (
 from budgetlens.adapters.persistence.repositories import SqlAuditRepository
 from budgetlens.application.audit import record_audit
 from budgetlens.config import Settings
+from budgetlens.domain.audit import ACTOR_SYSTEM, IMPORT_FAILED, SYSTEM_WATCHDOG
 from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.observability import metrics_registry
 
@@ -34,13 +35,18 @@ def timeout_stale_jobs(
             clock=clock,
             ids=ids,
             organization_id=job.organization_id,
-            actor_id=job.created_by,
-            action="import.timeout",
+            actor_type=ACTOR_SYSTEM,
+            actor_ref=SYSTEM_WATCHDOG,
+            action=IMPORT_FAILED,
             resource_type="import_job",
             resource_id=job.id,
             trace_id=job.trace_id or trace_id,
             metadata={"failure_code": "JOB_TIMEOUT"},
             outcome="failed",
         )
-        metrics_registry().record_job_status("failed", timed_out=True)
+        metrics_registry().record_job_status(
+            "failed",
+            timed_out=True,
+            job_type=job.import_type.value,
+        )
     return len(stale)

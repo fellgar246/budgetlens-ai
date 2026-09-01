@@ -16,12 +16,16 @@ router = APIRouter(tags=["ops"])
 class OpsMetricsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     requests: list[dict[str, Any]]
+    request_duration_histogram: dict[str, int]
     active_requests: int
     db_pool: dict[str, int]
+    db_queries: list[dict[str, Any]]
     db_rollbacks: int
+    migration_version: str | None
     jobs: dict[str, Any]
     ai: dict[str, Any]
     rate_limited: int
+    error_codes: dict[str, int]
     cost_estimate_configured: bool
 
 
@@ -38,12 +42,16 @@ def get_ops_metrics(user: CurrentUser, settings: SettingsDep) -> OpsMetricsRespo
     )
     return OpsMetricsResponse(
         requests=snapshot["requests"],
+        request_duration_histogram=snapshot["request_duration_histogram"],
         active_requests=snapshot["active_requests"],
         db_pool=snapshot["db_pool"],
+        db_queries=snapshot["db_queries"],
         db_rollbacks=snapshot["db_rollbacks"],
+        migration_version=snapshot["migration_version"],
         jobs=snapshot["jobs"],
         ai=snapshot["ai"],
         rate_limited=snapshot["rate_limited"],
+        error_codes=snapshot["error_codes"],
         cost_estimate_configured=bool(
             settings.ai_input_unit_cost_micros or settings.ai_output_unit_cost_micros
         ),

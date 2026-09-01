@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
@@ -11,10 +11,25 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/api-client packages/api-client
 
+FROM deps AS development
+
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ARG NEXT_PUBLIC_APP_ENV=local
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
-    NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
+    NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
+    NEXT_TELEMETRY_DISABLED=1 \
+    WATCHPACK_POLLING=true
+
+EXPOSE 3000
+CMD ["pnpm", "--filter", "web", "dev"]
+
+FROM deps AS build
+
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_APP_ENV=local
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
+    NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm --filter web build
 

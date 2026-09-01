@@ -15,8 +15,10 @@ from budgetlens.adapters.persistence.repositories import (
     SqlBudgetVersionRepository,
 )
 from budgetlens.application.analytics import AnalyticsQuery, build_variance_metrics
+from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.domain.audit import SCENARIO_ARCHIVED, SCENARIO_CREATED, SCENARIO_UPDATED
 from budgetlens.domain.enums import (
     AccountType,
     Permission,
@@ -97,6 +99,18 @@ class ScenarioService:
             rules=tuple(rules),
         )
         self._repo(context.organization_id).add(scenario)
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action=SCENARIO_CREATED,
+            resource_type="scenario",
+            resource_id=scenario.id,
+            trace_id=context.trace_id,
+            metadata={"baseline_type": scenario.baseline_type.value, "fiscal_year": fiscal_year},
+        )
         return scenario
 
     def update(
@@ -111,12 +125,36 @@ class ScenarioService:
         current = self.get(context, scenario_id)
         updated = current.with_draft_update(now=self._clock.now(), name=name, rules=rules)
         self._repo(context.organization_id).save(updated)
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action=SCENARIO_UPDATED,
+            resource_type="scenario",
+            resource_id=updated.id,
+            trace_id=context.trace_id,
+            metadata={"status": updated.status.value},
+        )
         return updated
 
     def archive(self, context: TenantContext, *, scenario_id: UUID) -> Scenario:
         require_permission(context.role, Permission.CREATE_SCENARIOS)
         updated = self.get(context, scenario_id).archive(now=self._clock.now())
         self._repo(context.organization_id).save(updated)
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action=SCENARIO_ARCHIVED,
+            resource_type="scenario",
+            resource_id=updated.id,
+            trace_id=context.trace_id,
+            metadata={"status": updated.status.value},
+        )
         return updated
 
     def preview(

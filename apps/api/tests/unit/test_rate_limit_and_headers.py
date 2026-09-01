@@ -5,9 +5,9 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from budgetlens.application.rate_limit import enforce_limit, limiter
+from budgetlens.application.rate_limit import enforce_limit, limiter, try_limit
 from budgetlens.domain.errors import RateLimitError
-from budgetlens.observability import classify_failure, metrics_registry
+from budgetlens.observability import classify_failure, metrics_registry, reset_metrics
 
 
 def test_rate_limiter_blocks_after_limit() -> None:
@@ -19,6 +19,16 @@ def test_rate_limiter_blocks_after_limit() -> None:
         enforce_limit("upload", user, limit=2, window_seconds=60)
     assert exc.value.status_code == 429
     assert exc.value.retryable is True
+
+
+def test_try_limit_is_silent_after_window_fills() -> None:
+    limiter().reset()
+    reset_metrics()
+    user = UUID(int=11)
+    assert try_limit("login_succeeded", user, limit=1, window_seconds=60) is True
+    assert try_limit("login_succeeded", user, limit=1, window_seconds=60) is False
+    snapshot = metrics_registry().snapshot()
+    assert snapshot["rate_limited"] == 0
 
 
 def test_security_headers_are_present(client: TestClient) -> None:

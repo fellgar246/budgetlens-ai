@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from budgetlens.application.ai import CopilotAnswer
 from budgetlens.application.analytics import BreakdownItem, VarianceMetrics, VarianceSummary
-from budgetlens.domain.audit import AuditEvent, sanitized_metadata
+from budgetlens.domain.audit import AUDIT_SCHEMA_VERSION_LABEL, AuditEvent, sanitized_metadata
 from budgetlens.domain.conversation import Conversation
 from budgetlens.domain.enums import ScenarioType
 from budgetlens.domain.exporting import ExportJob
@@ -335,16 +335,34 @@ class CopilotMessageResponse(BaseModel):
     trace_id: str
 
 
+class AuditActorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["user", "system"]
+    id: str
+
+
+class AuditResourceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: str
+    id: UUID
+
+
 class AuditEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    id: UUID
-    actor_id: UUID
+    schema_version: str
+    event_id: UUID
+    occurred_at: datetime
+    organization_id: UUID | None
+    actor: AuditActorResponse
     action: str
+    resource: AuditResourceResponse
+    outcome: Literal["success", "denied", "failed"]
+    trace_id: str
+    metadata: dict[str, Any]
+    id: UUID
+    actor_id: str
     resource_type: str
     resource_id: UUID
-    outcome: str
-    metadata: dict[str, Any]
-    trace_id: str
     created_at: datetime
 
 
@@ -503,15 +521,28 @@ def copilot_response(answer: CopilotAnswer) -> CopilotMessageResponse:
 
 
 def audit_event_response(event: AuditEvent) -> AuditEventResponse:
+    actor_id = event.actor_identity()
+    actor_type: Literal["user", "system"] = "system" if event.actor_type == "system" else "user"
+    outcome: Literal["success", "denied", "failed"] = "success"
+    if event.outcome == "denied":
+        outcome = "denied"
+    elif event.outcome == "failed":
+        outcome = "failed"
     return AuditEventResponse(
-        id=event.id,
-        actor_id=event.actor_id,
+        schema_version=AUDIT_SCHEMA_VERSION_LABEL,
+        event_id=event.id,
+        occurred_at=event.created_at,
+        organization_id=event.organization_id,
+        actor=AuditActorResponse(type=actor_type, id=actor_id),
         action=event.action,
+        resource=AuditResourceResponse(type=event.resource_type, id=event.resource_id),
+        outcome=outcome,
+        trace_id=event.trace_id,
+        metadata=sanitized_metadata(event.metadata),
+        id=event.id,
+        actor_id=actor_id,
         resource_type=event.resource_type,
         resource_id=event.resource_id,
-        outcome=event.outcome,
-        metadata=sanitized_metadata(event.metadata),
-        trace_id=event.trace_id,
         created_at=event.created_at,
     )
 

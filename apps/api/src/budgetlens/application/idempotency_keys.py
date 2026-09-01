@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.models import IdempotencyRecordRow
@@ -50,18 +51,31 @@ def replay_or_reserve(
                 "La clave de idempotencia ya se usó con otra solicitud.",
             )
         return existing.resource_id
-    store.add(
-        IdempotencyRecordRow(
-            id=ids.new_id(),
-            organization_id=organization_id,
-            user_id=user_id,
-            operation=operation,
-            key=key,
-            request_hash=request_hash,
-            resource_id=resource_id,
-            created_at=clock.now(),
-        )
-    )
+    try:
+        with session.begin_nested():
+            store.add(
+                IdempotencyRecordRow(
+                    id=ids.new_id(),
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    operation=operation,
+                    key=key,
+                    request_hash=request_hash,
+                    resource_id=resource_id,
+                    created_at=clock.now(),
+                )
+            )
+            session.flush()
+    except IntegrityError:
+        existing = store.get(user_id=user_id, operation=operation, key=key)
+        if existing is None:
+            raise
+        if existing.request_hash != request_hash:
+            raise ConflictError(
+                "IDEMPOTENCY_CONFLICT",
+                "La clave de idempotencia ya se usó con otra solicitud.",
+            ) from None
+        return existing.resource_id
     return None
 
 

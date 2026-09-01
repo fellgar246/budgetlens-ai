@@ -1,5 +1,5 @@
-import { ScenariosPage } from "@/features/scenarios/ScenariosPage";
+import { ScenarioBuilderPage } from "@/features/scenarios/ScenarioBuilderPage";
 
 export default function Page() {
-  return <ScenariosPage />;
+  return <ScenarioBuilderPage />;
 }

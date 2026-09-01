@@ -59,7 +59,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 | FR-AI-006 | Must | Implemented |
 | FR-AI-007 | Must | Implemented |
 | FR-AI-008 | Must | Implemented |
-| FR-AI-009 | Must | Partial — stub eval exists; live Bedrock remains gated |
+| FR-AI-009 | Must | Partial — stub eval dataset and scoring are on every PR; live Bedrock remains gated |
 | FR-AUD-001 | Must | Implemented |
 | FR-AUD-002 | Must | Implemented |
 | FR-AUD-003 | Should | Implemented |
@@ -110,32 +110,32 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 
 | ID | Kind | Evidence |
 |---|---|---|
-| AC-001 | Suite + runbook | `README.md`, `scripts/bootstrap.sh`, web health card test |
-| AC-002 | Suite | Valid CSV/XLSX import integration test |
-| AC-003 | Suite | Invalid row blocks commit |
-| AC-004 | Suite | Idempotent commit retry |
-| AC-005 | Suite | Zero-budget variance + `N/A` display |
+| AC-001 | Suite + runbook | Local stack files, bootstrap script, migrated readiness, status-screen E2E |
+| AC-002 | Suite | Valid import applies once and dashboard totals match |
+| AC-003 | Suite | Invalid row blocks commit and leaves no entries |
+| AC-004 | Suite | Idempotent commit retry keeps the same row count |
+| AC-005 | Suite | Zero-budget variance is unbounded; UI shows `N/A` |
 | AC-006 | Suite | Expense over budget is unfavorable |
 | AC-007 | Suite | Revenue over budget is favorable |
-| AC-008 | Suite | Analytics totals and drill-down filters |
-| AC-009 | Suite | Authorized, expiring export download |
-| AC-010 | Suite | Scenario preview does not mutate entries |
-| AC-011 | Suite | Cross-tenant read is 403/404 |
-| AC-012 | Suite | Cross-tenant mutation is denied |
-| AC-013 | Suite | Organization switch does not leak the previous tenant |
-| AC-014 | Suite | Formula XLSX rejected |
-| AC-015 | Suite | `AUTH_MODE=dev` fails closed outside local/test |
-| AC-016 | Suite | Log sanitization |
-| AC-017 | Suite | Grounded copilot + stub eval |
-| AC-018 | Suite | No evidence, no invented cause |
-| AC-019 | Suite | Mutation request refused |
-| AC-020 | Suite | Safety eval treats injection as a label |
-| AC-021 | Suite | Tool args cannot retarget another tenant |
-| AC-022 | Suite | Tool-loop limit |
-| AC-023 | Suite | Live/ready health |
-| AC-024 | Suite | Empty and N-1 migrations |
-| AC-025 | Runbook | [Images and rollback](OPERATIONS.md#images-and-rollback) |
-| AC-026 | Runbook | [Restore](OPERATIONS.md#restore) |
+| AC-008 | Suite | Department breakdown sums to the filtered total; breadcrumb keeps filters |
+| AC-009 | Suite | Export CSV matches scope, currency, version, and totals |
+| AC-010 | Suite | Scenario preview matches save and leaves source unchanged |
+| AC-011 | Suite | Cross-tenant read is 403/404 and audits denial |
+| AC-012 | Suite | Cross-tenant mutation leaves Beta unchanged |
+| AC-013 | Suite | Organization switch drops the previous tenant |
+| AC-014 | Suite | Formula XLSX is rejected and not applied |
+| AC-015 | Suite | `AUTH_MODE=dev` fails closed before the API serves |
+| AC-016 | Suite | Logs and error bodies omit secrets |
+| AC-017 | Suite | Overspend answer uses breakdown with matching figures |
+| AC-018 | Suite | Without data the copilot reports insufficiency |
+| AC-019 | Suite | Mutation request refused; no mutable tool exists |
+| AC-020 | Suite | Injection in a dimension label does not change tenant |
+| AC-021 | Suite | Altered tool args cannot retarget another tenant |
+| AC-022 | Suite | Tool-loop limit stops and records a metric |
+| AC-023 | Suite | Readiness is 200 with DB, 503 quickly without; liveness stays 200 |
+| AC-024 | Suite | Empty and N-1 databases reach head |
+| AC-025 | Suite + runbook | Previous-image tag and [rollback](OPERATIONS.md#images-and-rollback) |
+| AC-026 | Suite + runbook | Isolated restore counts and [restore](OPERATIONS.md#restore) |
 
 AC-001 through AC-025 are required for release 1.0. AC-026 is required before calling the product production-ready.
 
@@ -166,3 +166,24 @@ The baseline is traceable when:
 - every high-impact risk in [RISKS.md](RISKS.md) has a mitigation and a signal.
 
 `make test` runs `apps/api/tests/unit/test_traceability.py`, which fails if any of those rules break.
+
+## Quality suite close
+
+The automated suite is organized around monetary accuracy, atomic imports, tenant isolation, HTTP contracts, upload safety, and grounded AI—not line count.
+
+Commands (local close, 2026-09-01):
+
+- `make lint` — format, lint, and types
+- `make test` — 211 API unit tests and 22 web unit tests
+- `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
+- `make test-contract` — OpenAPI snapshot
+- `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
+- `make coverage` — 85% branch coverage on the financial engine (98.68% on the measured domain modules) and 85.40% backend (gate 75%)
+- `make scan` — dependency, secret, and IaC scans
+- `make ci` — the same stages locally; GitHub Actions runs them on every pull request
+
+Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, the canonical AI eval dataset (Alpha FY2026 `Budget Final` plus exclusive Beta amounts), extra seed rows for a negative actual and UNASSIGNED, and the import workbooks under `sample-data/`.
+
+Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, AWS backup/restore, and deploy/OIDC. Plan 09 remains pending.
+
+Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).

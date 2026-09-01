@@ -22,6 +22,7 @@ from budgetlens.adapters.persistence.repositories import (
 from budgetlens.adapters.tenancy import apply_runtime_role, apply_tenant_gucs
 from budgetlens.application.ai import ConversationService
 from budgetlens.application.analytics import AnalyticsService
+from budgetlens.application.audit import record_login_failed, record_login_succeeded
 from budgetlens.application.budget_versions import BudgetVersionService
 from budgetlens.application.context import TenantContext
 from budgetlens.application.dimensions import DimensionService
@@ -82,13 +83,39 @@ def get_current_user(
     request: Request,
     identity: Annotated[IdentityProvider, Depends(get_identity_provider)],
     session: Annotated[Session, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
     token = _extract_bearer(authorization)
-    user = identity.authenticate(token)
+    organization_id = _audit_organization_id(request.headers.get("X-Organization-Id"))
+    trace_id = str(getattr(request.state, "trace_id", "unknown"))
+    try:
+        user = identity.authenticate(token)
+    except UnauthenticatedError:
+        record_login_failed(
+            organization_id=organization_id,
+            trace_id=trace_id,
+            metadata={"auth_mode": settings.auth_mode},
+        )
+        raise
     request.state.user_id = str(user.id)
     apply_tenant_gucs(session, user_id=user.id)
+    record_login_succeeded(
+        actor_id=user.id,
+        organization_id=organization_id,
+        trace_id=trace_id,
+        metadata={"auth_mode": settings.auth_mode},
+    )
     return user
+
+
+def _audit_organization_id(raw: str | None) -> UUID | None:
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError:
+        return None
 
 
 def get_optional_organization_id(

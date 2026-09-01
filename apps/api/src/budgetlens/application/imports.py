@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from time import perf_counter
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -39,6 +40,13 @@ from budgetlens.application.pagination import (
 from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.application.row_normalization import normalize_row
 from budgetlens.config import Settings
+from budgetlens.domain.audit import (
+    IMPORT_CANCELLED,
+    IMPORT_COMMITTED,
+    IMPORT_CREATED,
+    IMPORT_FAILED,
+    IMPORT_VALIDATED,
+)
 from budgetlens.domain.budget_version import BudgetVersion
 from budgetlens.domain.dimensions import Account, CostCenter, Department, normalize_code
 from budgetlens.domain.enums import (
@@ -204,11 +212,16 @@ class ImportService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="import.create",
+            action=IMPORT_CREATED,
             resource_type="import_job",
             resource_id=job.id,
             trace_id=context.trace_id,
             metadata={"import_type": import_type.value, "size_bytes": size_bytes},
+        )
+        metrics_registry().record_job_status(
+            job.status.value,
+            job_type=import_type.value,
+            bytes_processed=size_bytes,
         )
         return job
 
@@ -307,6 +320,7 @@ class ImportService:
         sheet_name: str | None,
         delimiter: str | None,
     ) -> ImportJob:
+        started = perf_counter()
         try:
             columns = validate_mapping(mapping)
             table = self._load_table(job, sheet_name=sheet_name, delimiter=delimiter)
@@ -385,7 +399,7 @@ class ImportService:
                 ids=self._ids,
                 organization_id=context.organization_id,
                 actor_id=context.user.id,
-                action="import.validated",
+                action=IMPORT_VALIDATED,
                 resource_type="import_job",
                 resource_id=updated.id,
                 trace_id=context.trace_id,
@@ -396,7 +410,15 @@ class ImportService:
                     "warning_count": updated.warning_count,
                 },
             )
-            metrics_registry().record_job_status(updated.status.value)
+            metrics_registry().record_job_status(
+                updated.status.value,
+                job_type=updated.import_type.value,
+                phase="validation",
+                duration_ms=(perf_counter() - started) * 1000,
+                rows_processed=updated.row_count,
+                rows_error=updated.error_count,
+                bytes_processed=updated.size_bytes,
+            )
             return updated
         except DomainError:
             self._jobs(context.organization_id).save(previous)
@@ -410,7 +432,7 @@ class ImportService:
                 ids=self._ids,
                 organization_id=context.organization_id,
                 actor_id=context.user.id,
-                action="import.failed",
+                action=IMPORT_FAILED,
                 resource_type="import_job",
                 resource_id=failed.id,
                 trace_id=context.trace_id,
@@ -632,6 +654,7 @@ class ImportService:
             self._require_version_for_create(
                 context, import_type=job.import_type, budget_version_id=job.budget_version_id
             )
+        started = perf_counter()
         entries = [self._to_entry(context, job, item, organization) for item in normalized]
         SqlFinancialEntryRepository(self._session, context.organization_id).add_many(entries)
         updated = job.mark_applied(now=self._clock.now())
@@ -642,13 +665,21 @@ class ImportService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="import.commit",
+            action=IMPORT_COMMITTED,
             resource_type="import_job",
             resource_id=updated.id,
             trace_id=context.trace_id,
             metadata={"valid_count": updated.valid_count, "error_count": updated.error_count},
         )
-        metrics_registry().record_job_status(updated.status.value)
+        metrics_registry().record_job_status(
+            updated.status.value,
+            job_type=updated.import_type.value,
+            phase="apply",
+            duration_ms=(perf_counter() - started) * 1000,
+            rows_processed=updated.valid_count,
+            rows_error=updated.error_count,
+            bytes_processed=updated.size_bytes,
+        )
         return updated
 
     def cancel(self, context: TenantContext, *, job_id: UUID) -> ImportJob:
@@ -662,7 +693,7 @@ class ImportService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="import.cancel",
+            action=IMPORT_CANCELLED,
             resource_type="import_job",
             resource_id=updated.id,
             trace_id=context.trace_id,

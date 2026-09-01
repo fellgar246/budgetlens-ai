@@ -27,3 +27,11 @@ def test_valid_traceparent_is_used(client: TestClient) -> None:
 def test_parse_traceparent_rejects_invalid() -> None:
     assert parse_traceparent("not-a-trace") is None
     assert parse_traceparent(None) is None
+
+
+def test_error_response_includes_matching_trace_id(client: TestClient) -> None:
+    response = client.get("/api/v1/me")
+    assert response.status_code == 401
+    trace_id = response.json()["trace_id"]
+    assert trace_id
+    assert response.headers["x-trace-id"] == trace_id

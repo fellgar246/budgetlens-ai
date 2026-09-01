@@ -1,3 +1,5 @@
+export type GroupByDimension = "department" | "account" | "cost_center";
+
 export type AnalysisFilters = {
   budgetVersionId: string;
   periodFrom: string;
@@ -6,6 +8,8 @@ export type AnalysisFilters = {
   accountId: string;
   costCenterId: string;
   sort: "unfavorable" | "variance_amount";
+  groupBy: GroupByDimension;
+  cursor: string;
 };
 
 export const EMPTY_ANALYSIS_FILTERS: AnalysisFilters = {
@@ -16,6 +20,8 @@ export const EMPTY_ANALYSIS_FILTERS: AnalysisFilters = {
   accountId: "",
   costCenterId: "",
   sort: "unfavorable",
+  groupBy: "department",
+  cursor: "",
 };
 
 const FILTER_PREFIX = "budgetlens.filters.";
@@ -23,6 +29,7 @@ const FILTER_PREFIX = "budgetlens.filters.";
 export function parseAnalysisFilters(search: string): AnalysisFilters {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const sort = params.get("sort");
+  const groupBy = params.get("group_by");
   return {
     budgetVersionId: params.get("version") ?? "",
     periodFrom: params.get("period_from") ?? "",
@@ -31,6 +38,11 @@ export function parseAnalysisFilters(search: string): AnalysisFilters {
     accountId: params.get("account") ?? "",
     costCenterId: params.get("cost_center") ?? "",
     sort: sort === "variance_amount" ? "variance_amount" : "unfavorable",
+    groupBy:
+      groupBy === "account" || groupBy === "cost_center" || groupBy === "department"
+        ? groupBy
+        : "department",
+    cursor: params.get("cursor") ?? "",
   };
 }
 
@@ -56,6 +68,12 @@ export function serializeAnalysisFilters(filters: AnalysisFilters): string {
   }
   if (filters.sort !== "unfavorable") {
     params.set("sort", filters.sort);
+  }
+  if (filters.groupBy && filters.groupBy !== "department") {
+    params.set("group_by", filters.groupBy);
+  }
+  if (filters.cursor) {
+    params.set("cursor", filters.cursor);
   }
   return params.toString();
 }

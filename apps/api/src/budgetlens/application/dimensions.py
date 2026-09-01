@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.repositories import (
     SqlAccountRepository,
+    SqlAuditRepository,
     SqlCostCenterRepository,
     SqlDepartmentRepository,
 )
+from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.domain.audit import DIMENSION_ARCHIVED, DIMENSION_CREATED, DIMENSION_UPDATED
 from budgetlens.domain.dimensions import (
     Account,
     CostCenter,
@@ -31,6 +34,29 @@ class DimensionService:
         self._session = session
         self._clock = clock
         self._ids = ids
+        self._audits = SqlAuditRepository(session)
+
+    def _record_dimension(
+        self,
+        context: TenantContext,
+        *,
+        action: str,
+        resource_type: str,
+        resource_id: UUID,
+        metadata: dict[str, object],
+    ) -> None:
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            trace_id=context.trace_id,
+            metadata=metadata,
+        )
 
     def list_accounts(
         self,
@@ -99,6 +125,13 @@ class DimensionService:
                 "CODE_TAKEN",
                 "El código de cuenta ya existe en esta organización.",
             ) from exc
+        self._record_dimension(
+            context,
+            action=DIMENSION_CREATED,
+            resource_type="account",
+            resource_id=account.id,
+            metadata={"code": account.code, "account_type": account.account_type.value},
+        )
         return account
 
     def update_account(
@@ -139,6 +172,21 @@ class DimensionService:
             status=status,
         )
         repo.save(updated)
+        action = (
+            DIMENSION_ARCHIVED
+            if status is DimensionStatus.INACTIVE and current.status is not DimensionStatus.INACTIVE
+            else DIMENSION_UPDATED
+        )
+        self._record_dimension(
+            context,
+            action=action,
+            resource_type="account",
+            resource_id=updated.id,
+            metadata={
+                "before": {"status": current.status.value},
+                "after": {"status": updated.status.value},
+            },
+        )
         return updated
 
     def list_departments(
@@ -191,6 +239,13 @@ class DimensionService:
                 "CODE_TAKEN",
                 "El código de departamento ya existe en esta organización.",
             ) from exc
+        self._record_dimension(
+            context,
+            action=DIMENSION_CREATED,
+            resource_type="department",
+            resource_id=department.id,
+            metadata={"code": department.code},
+        )
         return department
 
     def update_department(
@@ -210,6 +265,21 @@ class DimensionService:
             require_dimension_restructure(context.role)
         updated = current.with_updates(now=self._clock.now(), name=name, status=status)
         repo.save(updated)
+        action = (
+            DIMENSION_ARCHIVED
+            if status is DimensionStatus.INACTIVE and current.status is not DimensionStatus.INACTIVE
+            else DIMENSION_UPDATED
+        )
+        self._record_dimension(
+            context,
+            action=action,
+            resource_type="department",
+            resource_id=updated.id,
+            metadata={
+                "before": {"status": current.status.value},
+                "after": {"status": updated.status.value},
+            },
+        )
         return updated
 
     def list_cost_centers(
@@ -261,6 +331,13 @@ class DimensionService:
                 "CODE_TAKEN",
                 "El código de centro de costo ya existe en esta organización.",
             ) from exc
+        self._record_dimension(
+            context,
+            action=DIMENSION_CREATED,
+            resource_type="cost_center",
+            resource_id=item.id,
+            metadata={"code": item.code},
+        )
         return item
 
     def update_cost_center(
@@ -281,4 +358,19 @@ class DimensionService:
             require_dimension_restructure(context.role)
         updated = current.with_updates(now=self._clock.now(), name=name, status=status, code=code)
         repo.save(updated)
+        action = (
+            DIMENSION_ARCHIVED
+            if status is DimensionStatus.INACTIVE and current.status is not DimensionStatus.INACTIVE
+            else DIMENSION_UPDATED
+        )
+        self._record_dimension(
+            context,
+            action=action,
+            resource_type="cost_center",
+            resource_id=updated.id,
+            metadata={
+                "before": {"status": current.status.value, "code": current.code},
+                "after": {"status": updated.status.value, "code": updated.code},
+            },
+        )
         return updated

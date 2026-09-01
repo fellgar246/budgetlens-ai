@@ -7,6 +7,7 @@ from budgetlens.logging import JsonLogFormatter
 from budgetlens.observability import (
     classify_failure,
     hash_identifier,
+    logical_query_name,
     metrics_registry,
     reset_metrics,
     sanitize_log_payload,
@@ -80,4 +81,57 @@ def test_metrics_snapshot_has_no_tenant_labels() -> None:
     serialized = json.dumps(snapshot)
     assert "11111111" not in serialized
     assert snapshot["requests"][0]["route"] == "/api/v1/analytics/variance-summary"
+    assert "50" in snapshot["request_duration_histogram"]
+    reset_metrics()
+
+
+def test_logical_query_name_never_includes_sql_or_params() -> None:
+    named_explicit = logical_query_name(
+        "SELECT * FROM users WHERE id = '11111111'",
+        query_name="users.list",
+    )
+    assert named_explicit == "users.list"
+    named = logical_query_name("SELECT amount FROM financial_entries WHERE amount = 99.0000")
+    assert named == "sql.select"
+    assert "amount" not in named
+    assert "99.0000" not in named
+    assert "financial_entries" not in named
+
+
+def test_metrics_cover_import_ai_and_safe_error_codes() -> None:
+    reset_metrics()
+    registry = metrics_registry()
+    registry.record_job_status(
+        "validated",
+        job_type="budget",
+        phase="validation",
+        duration_ms=40,
+        rows_processed=10,
+        rows_error=2,
+        bytes_processed=2048,
+    )
+    registry.record_ai_run(
+        latency_ms=80,
+        input_units=12,
+        output_units=4,
+        tool_calls=2,
+        tool_failures=1,
+        grounding_failed=True,
+    )
+    registry.record_error_code("PERMISSION_DENIED")
+    registry.record_error_code("not-a-safe-code")
+    registry.record_query("sql.select", 3)
+    snapshot = registry.snapshot(input_unit_cost_micros=100, output_unit_cost_micros=200)
+    assert snapshot["jobs"]["by_type"] == {"budget": 1}
+    assert snapshot["jobs"]["rows_processed"] == 10
+    assert snapshot["jobs"]["rows_error"] == 2
+    assert snapshot["jobs"]["error_ratio"] == 0.2
+    assert snapshot["jobs"]["bytes_processed"] == 2048
+    assert snapshot["ai"]["grounding_failures"] == 1
+    assert snapshot["ai"]["input_units"] == 12
+    assert snapshot["ai"]["output_units"] == 4
+    assert snapshot["ai"]["estimated_cost"]["estimate"] is True
+    assert snapshot["error_codes"] == {"PERMISSION_DENIED": 1}
+    assert snapshot["db_queries"][0]["name"] == "sql.select"
+    assert "organization" not in json.dumps(snapshot).lower()
     reset_metrics()

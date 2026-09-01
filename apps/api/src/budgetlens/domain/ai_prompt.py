@@ -6,6 +6,7 @@ from uuid import UUID
 
 from budgetlens.domain.evidence import dimension_label_as_data
 
+PROMPT_VERSION = "2026-09-01.1"
 UNTRUSTED_OPEN = "<<<UNTRUSTED_ORGANIZATION_NAME"
 UNTRUSTED_CLOSE = "UNTRUSTED_ORGANIZATION_NAME>>>"
 

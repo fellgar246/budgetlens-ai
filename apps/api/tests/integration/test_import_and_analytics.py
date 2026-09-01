@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 import io
 from decimal import Decimal
-from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import pytest
@@ -19,95 +17,25 @@ from budgetlens.dev_identities import (
     BETA_ADMIN_ID,
     BETA_ORG_ID,
 )
-
-PREFIX = "/api/v1"
-ROOT = Path(__file__).resolve().parents[4]
-SAMPLE = ROOT / "sample-data"
-CANONICAL = {
-    "period": "period",
-    "account_code": "account_code",
-    "department_code": "department_code",
-    "cost_center_code": "cost_center_code",
-    "amount": "amount",
-    "currency": "currency",
-}
-
-
-def _headers(
-    user_id: UUID,
-    organization_id: UUID | None = None,
-    idempotency: str | None = None,
-) -> dict[str, str]:
-    headers = {"Authorization": f"Bearer {user_id}"}
-    if organization_id is not None:
-        headers["X-Organization-Id"] = str(organization_id)
-    if idempotency is not None:
-        headers["Idempotency-Key"] = idempotency
-    return headers
-
-
-def _read(name: str) -> bytes:
-    return (SAMPLE / name).read_bytes()
-
-
-def _create_version(client: TestClient, name: str = "Plan 2026") -> str:
-    created = client.post(
-        f"{PREFIX}/budget-versions",
-        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
-        json={"name": name, "fiscal_year": 2026},
-    )
-    assert created.status_code == 201, created.text
-    return created.json()["id"]
-
-
-def _import_file(
-    client: TestClient,
-    *,
-    content: bytes,
-    filename: str,
-    import_type: str,
-    version_id: str | None,
-    user: UUID = ALPHA_ANALYST_ID,
-    org: UUID = ALPHA_ORG_ID,
-    mapping: dict[str, str] | None = None,
-    commit: bool = True,
-    idempotency: str = "imp-1",
-    media_type: str | None = None,
-) -> dict[str, Any]:
-    digest = hashlib.sha256(content).hexdigest()
-    created = client.post(
-        f"{PREFIX}/imports",
-        headers=_headers(user, org),
-        json={
-            "import_type": import_type,
-            "budget_version_id": version_id,
-            "original_filename": filename,
-            "size_bytes": len(content),
-            "sha256": digest,
-            "template_version": "1.0",
-        },
-    )
-    assert created.status_code == 201, created.text
-    job_id = created.json()["id"]
-    uploaded = client.put(
-        f"{PREFIX}/imports/{job_id}/content",
-        headers={**_headers(user, org), "Content-Type": media_type or "text/csv"},
-        content=content,
-    )
-    assert uploaded.status_code == 200, uploaded.text
-    validated = client.post(
-        f"{PREFIX}/imports/{job_id}/validate",
-        headers=_headers(user, org),
-        json={"mapping": mapping or CANONICAL, "create_missing_dimensions": False},
-    )
-    assert validated.status_code == 200, validated.text
-    if not commit:
-        return validated.json()
-    committed = client.post(
-        f"{PREFIX}/imports/{job_id}/commit",
-        headers=_headers(user, org, idempotency),
-    )
-    return committed.json() | {"_status": committed.status_code, "_body": committed.json()}
+from tests.integration.import_support import (
+    CANONICAL,
+    PREFIX,
+)
+from tests.integration.import_support import (
+    account_id as _account_id,
+)
+from tests.integration.import_support import (
+    auth_headers as _headers,
+)
+from tests.integration.import_support import (
+    create_budget_version as _create_version,
+)
+from tests.integration.import_support import (
+    import_workbook as _import_file,
+)
+from tests.integration.import_support import (
+    sample_bytes as _read,
+)
 
 
 @pytest.mark.integration
@@ -501,12 +429,12 @@ def test_copilot_uses_tools_and_rejects_mutations(seeded_client: TestClient) -> 
     audits = seeded_client.get(
         f"{PREFIX}/audit-events",
         headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
-        params={"action": "conversation.delete"},
+        params={"action": "conversation.deleted"},
     )
     assert audits.status_code == 200
     events = audits.json()["items"]
     assert events
-    assert events[0]["metadata"] == {"deleted": True}
+    assert events[0]["metadata"]["deleted"] is True
     assert "content" not in events[0]["metadata"]
     assert "prompt" not in str(events[0]["metadata"]).lower()
 
@@ -695,11 +623,3 @@ def test_import_contract_fixtures_cover_normalization_and_preview(
     )
     assert replay["id"] == first["_body"]["id"]
     assert replay["status"] == "applied"
-
-
-def _account_id(client: TestClient, code: str) -> str:
-    accounts = client.get(f"{PREFIX}/accounts", headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID))
-    for item in accounts.json()["items"]:
-        if item["code"] == code:
-            return item["id"]
-    raise AssertionError(code)

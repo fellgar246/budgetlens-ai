@@ -29,12 +29,16 @@ A change to `packages/api-client/openapi.json` needs an explicit review. That fi
 
 Precedence: safe defaults, then the untracked local `.env`, then process environment variables, then Secrets Manager for secrets on AWS. Every new setting is added to `.env.example` with description, type, secrecy, and applicable environments.
 
+## Editor
+
+`.vscode/settings.json`, `tasks.json`, `launch.json`, and `extensions.json` are recommended, not required. They turn on format on save, the repository `uv` interpreter, workspace TypeScript, pytest discovery, and tasks for `dev`, `test`, and `lint`. Debug configs load the untracked `.env` and do not embed secrets.
+
 ## Definition of done
 
 - Requirement and acceptance are identified in the PR trailer.
 - Code and migrations (if any) are implemented.
 - Types, lint, and format are clean.
-- Positive, edge, and negative tests cover the change.
+- Positive, edge, and negative tests cover the change. A bug fix adds a regression test.
 - Errors stay safe; add telemetry when the change is observable.
 - Documentation and `.env.example` are updated in English.
 - No secrets or real data.

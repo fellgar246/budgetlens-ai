@@ -1,18 +1,28 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from uuid import UUID, uuid5
 
 from sqlalchemy import text
 
 from budgetlens.adapters.db import session_scope
+from budgetlens.adapters.persistence.finance_repositories import (
+    SqlFinancialEntryRepository,
+    SqlImportJobRepository,
+)
 from budgetlens.adapters.persistence.repositories import (
     SqlAccountRepository,
+    SqlBudgetVersionRepository,
     SqlCostCenterRepository,
     SqlDepartmentRepository,
     SqlMembershipRepository,
     SqlOrganizationRepository,
     SqlUserRepository,
+)
+from budgetlens.application.ai_eval_dataset import (
+    EVAL_BUDGET_VERSION_NAME,
+    seed_ledger_rows,
 )
 from budgetlens.dev_identities import (
     ALPHA_ADMIN_ID,
@@ -57,7 +67,7 @@ def _stable_id(name: str) -> UUID:
     return uuid5(SEED_NS, name)
 
 
-def run_seed() -> None:
+def run_seed(*, include_financials: bool = False) -> None:
     now = datetime.now(UTC)
     with session_scope() as session:
         session.execute(
@@ -206,6 +216,19 @@ def run_seed() -> None:
             ],
             now=now,
         )
+        if include_financials:
+            _seed_financials(
+                session,
+                organization=alpha,
+                created_by=ALPHA_ADMIN_ID,
+                now=now,
+            )
+            _seed_financials(
+                session,
+                organization=beta,
+                created_by=BETA_ADMIN_ID,
+                now=now,
+            )
 
 
 def _upsert_user(users: SqlUserRepository, user: User) -> None:
@@ -394,5 +417,184 @@ def _seed_org(
                 status=DimensionStatus.ACTIVE,
                 created_at=now,
                 updated_at=now,
+            )
+        )
+
+
+def _seed_financials(
+    session: object,
+    *,
+    organization: Organization,
+    created_by: UUID,
+    now: datetime,
+) -> None:
+    from sqlalchemy.orm import Session
+
+    from budgetlens.domain.budget_version import BudgetVersion
+    from budgetlens.domain.enums import BudgetVersionStatus, ScenarioType
+
+    assert isinstance(session, Session)
+    versions = SqlBudgetVersionRepository(session, organization.id)
+    fiscal_year = 2026 if organization.fiscal_year_start_month == 1 else 2027
+    version_name = EVAL_BUDGET_VERSION_NAME
+    version_id = _stable_id(f"version:{organization.slug}:{fiscal_year}")
+    existing = versions.get(version_id) or versions.get_by_name(fiscal_year, version_name)
+    if existing is not None:
+        return
+
+    version = BudgetVersion(
+        id=version_id,
+        organization_id=organization.id,
+        name=version_name,
+        fiscal_year=fiscal_year,
+        status=BudgetVersionStatus.PUBLISHED,
+        is_active=True,
+        published_at=now,
+        published_by=created_by,
+        created_at=now,
+        version=1,
+    )
+    versions.add(version)
+    session.flush()
+
+    accounts = SqlAccountRepository(session, organization.id)
+    departments = SqlDepartmentRepository(session, organization.id)
+    cost_centers = SqlCostCenterRepository(session, organization.id)
+    jobs = SqlImportJobRepository(session, organization.id)
+    entries = SqlFinancialEntryRepository(session, organization.id)
+
+    account_ids = {
+        code: accounts.get_by_code(code).id  # type: ignore[union-attr]
+        for code in ("4100", "6110", "6120", "6200", "6300", "6400")
+    }
+    department_ids = {
+        code: departments.get_by_code(code).id  # type: ignore[union-attr]
+        for code in ("SALES", "OPS", "PEO")
+    }
+    cost_center_ids = {
+        code: cost_centers.get_by_code(code).id  # type: ignore[union-attr]
+        for code in ("CC-GEN", "UNASSIGNED")
+    }
+
+    currency = organization.functional_currency
+    budget_rows, actual_rows = seed_ledger_rows(
+        january_start=organization.fiscal_year_start_month == 1
+    )
+    _add_seed_import(
+        session,
+        jobs,
+        entries,
+        organization=organization,
+        created_by=created_by,
+        now=now,
+        import_type=ScenarioType.BUDGET,
+        version_id=version.id,
+        filename=f"{organization.slug}-budget-seed.csv",
+        rows=budget_rows,
+        account_ids=account_ids,
+        department_ids=department_ids,
+        cost_center_ids=cost_center_ids,
+        currency=currency,
+        fiscal_year=fiscal_year,
+    )
+    _add_seed_import(
+        session,
+        jobs,
+        entries,
+        organization=organization,
+        created_by=created_by,
+        now=now,
+        import_type=ScenarioType.ACTUAL,
+        version_id=None,
+        filename=f"{organization.slug}-actuals-seed.csv",
+        rows=actual_rows,
+        account_ids=account_ids,
+        department_ids=department_ids,
+        cost_center_ids=cost_center_ids,
+        currency=currency,
+        fiscal_year=fiscal_year,
+    )
+
+
+def _add_seed_import(
+    session: object,
+    jobs: SqlImportJobRepository,
+    entries: SqlFinancialEntryRepository,
+    *,
+    organization: Organization,
+    created_by: UUID,
+    now: datetime,
+    import_type: object,
+    version_id: UUID | None,
+    filename: str,
+    rows: tuple[tuple[date, str, str, str, Decimal], ...],
+    account_ids: dict[str, UUID],
+    department_ids: dict[str, UUID],
+    cost_center_ids: dict[str, UUID],
+    currency: object,
+    fiscal_year: int,
+) -> None:
+    from sqlalchemy.orm import Session
+
+    from budgetlens.domain.enums import ImportJobStatus, ScenarioType
+    from budgetlens.domain.financial_entry import FinancialEntry
+    from budgetlens.domain.importing import ImportJob
+    from budgetlens.domain.money import Currency, MoneyAmount
+
+    assert isinstance(session, Session)
+    assert isinstance(import_type, ScenarioType)
+    assert isinstance(currency, Currency)
+    job_id = _stable_id(f"job:{organization.slug}:{import_type.value}:{fiscal_year}")
+    total = sum((amount for *_rest, amount in rows), Decimal("0"))
+    jobs.add(
+        ImportJob(
+            id=job_id,
+            organization_id=organization.id,
+            created_by=created_by,
+            import_type=import_type,
+            budget_version_id=version_id,
+            status=ImportJobStatus.APPLIED,
+            original_filename=filename,
+            object_key=f"seed/{organization.slug}/{filename}",
+            sha256="a" * 64,
+            size_bytes=256,
+            media_type="text/csv",
+            template_version="1.0",
+            mapping_json={"columns": {}},
+            row_count=len(rows),
+            valid_count=len(rows),
+            error_count=0,
+            warning_count=0,
+            period_min=min(period for period, *_rest in rows),
+            period_max=max(period for period, *_rest in rows),
+            valid_amount_total=f"{total:.4f}",
+            idempotency_fingerprint=None,
+            started_at=now,
+            completed_at=now,
+            created_at=now,
+            failure_code=None,
+            create_missing_dimensions=False,
+            sheet_name=None,
+        )
+    )
+    session.flush()
+    for index, (period, account, department, cost_center, amount) in enumerate(rows, start=2):
+        entries.add(
+            FinancialEntry(
+                id=_stable_id(f"entry:{job_id}:{index}"),
+                organization_id=organization.id,
+                import_job_id=job_id,
+                scenario_type=import_type,
+                budget_version_id=version_id,
+                period_start=period,
+                fiscal_year=organization.period_for(period).fiscal_year,
+                account_id=account_ids[account],
+                department_id=department_ids[department],
+                cost_center_id=cost_center_ids[cost_center],
+                amount=MoneyAmount(amount),
+                currency=currency,
+                source_row_number=index,
+                source_reference=None,
+                created_at=now,
             )
         )

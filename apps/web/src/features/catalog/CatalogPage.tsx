@@ -14,6 +14,9 @@ import {
   listBudgetVersions,
   listCostCenters,
   listDepartments,
+  patchAccount,
+  patchCostCenter,
+  patchDepartment,
   publishBudgetVersion,
   type Account,
   type BudgetVersion,
@@ -23,6 +26,7 @@ import {
 } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { personaLabel } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
 import { getAccessToken } from "@/lib/access-token";
@@ -57,6 +61,10 @@ export function CatalogPage() {
   const [departmentForm, setDepartmentForm] = useState({ code: "", name: "" });
   const [costCenterForm, setCostCenterForm] = useState({ code: "", name: "" });
   const [versionForm, setVersionForm] = useState({ name: "", fiscal_year: "2026" });
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    action: () => Promise<unknown>;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     const context = auth();
@@ -171,6 +179,19 @@ export function CatalogPage() {
               item.account_type,
               item.status,
             ])}
+            onArchive={
+              state.me.capabilities.can_manage_dimensions
+                ? (code) => {
+                    const item = state.accounts.find((account) => account.code === code);
+                    if (!item) return;
+                    const context = auth();
+                    if (!context) return;
+                    void runMutation(() =>
+                      patchAccount(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                    );
+                  }
+                : undefined
+            }
           />
           {state.me.capabilities.can_manage_dimensions ? (
             <form
@@ -225,6 +246,19 @@ export function CatalogPage() {
             empty={copy.emptyDepartments}
             columns={[copy.code, copy.name, copy.status]}
             rows={state.departments.map((item) => [item.code, item.name, item.status])}
+            onArchive={
+              state.me.capabilities.can_manage_dimensions
+                ? (code) => {
+                    const item = state.departments.find((department) => department.code === code);
+                    if (!item) return;
+                    const context = auth();
+                    if (!context) return;
+                    void runMutation(() =>
+                      patchDepartment(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                    );
+                  }
+                : undefined
+            }
           />
           {state.me.capabilities.can_manage_dimensions ? (
             <form
@@ -265,6 +299,19 @@ export function CatalogPage() {
             empty={copy.emptyCostCenters}
             columns={[copy.code, copy.name, copy.status]}
             rows={state.costCenters.map((item) => [item.code, item.name, item.status])}
+            onArchive={
+              state.me.capabilities.can_manage_dimensions
+                ? (code) => {
+                    const item = state.costCenters.find((center) => center.code === code);
+                    if (!item) return;
+                    const context = auth();
+                    if (!context) return;
+                    void runMutation(() =>
+                      patchCostCenter(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                    );
+                  }
+                : undefined
+            }
           />
           {state.me.capabilities.can_manage_dimensions ? (
             <form
@@ -324,18 +371,16 @@ export function CatalogPage() {
                           {version.status === "draft" ? (
                             <Button
                               variant="secondary"
-                              onClick={() => {
-                                if (!window.confirm(copy.confirmPublish)) {
-                                  return;
-                                }
-                                const context = auth();
-                                if (!context) {
-                                  return;
-                                }
-                                void runMutation(() =>
-                                  publishBudgetVersion(apiBaseUrl(), context, version.id),
-                                );
-                              }}
+                              onClick={() =>
+                                setConfirm({
+                                  title: copy.confirmPublish,
+                                  action: () => {
+                                    const context = auth();
+                                    if (!context) return Promise.resolve();
+                                    return publishBudgetVersion(apiBaseUrl(), context, version.id);
+                                  },
+                                })
+                              }
                             >
                               {copy.publish}
                             </Button>
@@ -343,18 +388,16 @@ export function CatalogPage() {
                           {version.status === "published" && !version.is_active ? (
                             <Button
                               variant="secondary"
-                              onClick={() => {
-                                if (!window.confirm(copy.confirmActivate)) {
-                                  return;
-                                }
-                                const context = auth();
-                                if (!context) {
-                                  return;
-                                }
-                                void runMutation(() =>
-                                  activateBudgetVersion(apiBaseUrl(), context, version.id),
-                                );
-                              }}
+                              onClick={() =>
+                                setConfirm({
+                                  title: copy.confirmActivate,
+                                  action: () => {
+                                    const context = auth();
+                                    if (!context) return Promise.resolve();
+                                    return activateBudgetVersion(apiBaseUrl(), context, version.id);
+                                  },
+                                })
+                              }
                             >
                               {copy.activate}
                             </Button>
@@ -362,18 +405,16 @@ export function CatalogPage() {
                           {version.status !== "archived" ? (
                             <Button
                               variant="ghost"
-                              onClick={() => {
-                                if (!window.confirm(copy.confirmArchive)) {
-                                  return;
-                                }
-                                const context = auth();
-                                if (!context) {
-                                  return;
-                                }
-                                void runMutation(() =>
-                                  archiveBudgetVersion(apiBaseUrl(), context, version.id),
-                                );
-                              }}
+                              onClick={() =>
+                                setConfirm({
+                                  title: copy.confirmArchive,
+                                  action: () => {
+                                    const context = auth();
+                                    if (!context) return Promise.resolve();
+                                    return archiveBudgetVersion(apiBaseUrl(), context, version.id);
+                                  },
+                                })
+                              }
                             >
                               {copy.archive}
                             </Button>
@@ -427,6 +468,28 @@ export function CatalogPage() {
           ) : null}
         </div>
       ) : null}
+      <Dialog
+        open={Boolean(confirm)}
+        title={confirm?.title ?? ""}
+        onClose={() => setConfirm(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirm(null)}>
+              {copy.cancel}
+            </Button>
+            <Button
+              onClick={() => {
+                if (!confirm) return;
+                void runMutation(confirm.action).then(() => setConfirm(null));
+              }}
+            >
+              {confirm?.title.includes(copy.publish) ? copy.publish : copy.archive}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-secondary">{confirm?.title}</p>
+      </Dialog>
     </div>
   );
 }
@@ -436,11 +499,13 @@ function CatalogTable({
   empty,
   columns,
   rows,
+  onArchive,
 }: {
   title: string;
   empty: string;
   columns: string[];
   rows: string[][];
+  onArchive?: (code: string) => void;
 }) {
   return (
     <section className="rounded-surface border border-border bg-surface p-6">
@@ -452,21 +517,29 @@ function CatalogTable({
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-secondary">
-                {columns.map((column) => (
-                  <th key={column} className="py-2 font-medium">
-                    {column}
-                  </th>
-                ))}
+                  {columns.map((column) => (
+                    <th key={column} className="py-2 font-medium">
+                      {column}
+                    </th>
+                  ))}
+                  {onArchive ? <th className="py-2 font-medium">{copy.archiveDimension}</th> : null}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.join("-")} className="border-b border-border last:border-0">
-                  {row.map((cell) => (
-                    <td key={cell} className="py-2 text-primary">
-                      {cell}
-                    </td>
-                  ))}
+                    {row.map((cell) => (
+                      <td key={cell} className="py-2 text-primary">
+                        {cell}
+                      </td>
+                    ))}
+                    {onArchive ? (
+                      <td className="py-2">
+                        <Button variant="ghost" onClick={() => onArchive(row[0])}>
+                          {copy.archiveDimension}
+                        </Button>
+                      </td>
+                    ) : null}
                 </tr>
               ))}
             </tbody>

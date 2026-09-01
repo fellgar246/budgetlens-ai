@@ -124,6 +124,20 @@ class DeterministicAIProvider:
                 output_units=8,
                 model_id="stub",
             )
+        if "desglosa" in text or "desglose" in text:
+            return ProviderResult(
+                text=None,
+                tool_requests=(
+                    ToolRequest(
+                        "get_variance_breakdown",
+                        {"group_by": "account", "limit": 20},
+                        request_id="call_breakdown",
+                    ),
+                ),
+                input_units=6,
+                output_units=4,
+                model_id="stub",
+            )
         if "100.000 filas" in text or "100,000 filas" in text or "100000 filas" in text:
             return ProviderResult(
                 text=None,
@@ -269,6 +283,11 @@ def _result_from_tool_results(tool_results: tuple[ToolResult, ...]) -> ProviderR
 
 
 def _answer_from_payload(payload: dict[str, Any], cited: list[str]) -> str:
+    if payload.get("error"):
+        return (
+            "No pude completar la consulta por un error interno. "
+            "Identificador de seguimiento: eval-trace."
+        )
     citation = f" Evidencia: {', '.join(cited)}." if cited else ""
     if "metrics" in payload and isinstance(payload["metrics"], dict):
         metrics = cast(dict[str, Any], payload["metrics"])

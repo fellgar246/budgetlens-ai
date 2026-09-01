@@ -34,7 +34,8 @@ def _headers(
 
 @pytest.mark.integration
 def test_seed_is_idempotent_and_isolates_tenants(seeded_client: TestClient) -> None:
-    run_seed()
+    run_seed(include_financials=True)
+    run_seed(include_financials=True)
     alpha = seeded_client.get(f"{PREFIX}/accounts", headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID))
     beta = seeded_client.get(f"{PREFIX}/accounts", headers=_headers(BETA_ADMIN_ID, BETA_ORG_ID))
     assert alpha.status_code == 200
@@ -219,6 +220,48 @@ def test_concurrent_activate_keeps_single_active(
     active = [item for item in listed if item["is_active"]]
     assert statuses.count(200) >= 1
     assert len(active) == 1
+
+
+@pytest.mark.integration
+def test_critical_actions_audit_success_and_denied(seeded_client: TestClient) -> None:
+    denied = seeded_client.post(
+        f"{PREFIX}/accounts",
+        headers=_headers(ALPHA_VIEWER_ID, ALPHA_ORG_ID),
+        json={"code": "8800", "name": "Denegado", "account_type": "expense"},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["trace_id"]
+    created = seeded_client.post(
+        f"{PREFIX}/accounts",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        json={"code": "8801", "name": "Auditoría", "account_type": "expense"},
+    )
+    assert created.status_code == 201
+    success_events = seeded_client.get(
+        f"{PREFIX}/audit-events",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        params={"action": "dimension.created"},
+    )
+    assert success_events.status_code == 200
+    items = success_events.json()["items"]
+    assert items
+    event = items[0]
+    assert event["outcome"] == "success"
+    assert event["schema_version"] == "1.0"
+    assert event["actor"]["type"] == "user"
+    assert event["resource"]["type"] == "account"
+    assert event["action"] == "dimension.created"
+    assert "amount" not in event["metadata"]
+    denied_events = seeded_client.get(
+        f"{PREFIX}/audit-events",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        params={"action": "security.access_denied"},
+    )
+    assert denied_events.status_code == 200
+    denied_items = denied_events.json()["items"]
+    assert denied_items
+    assert denied_items[0]["outcome"] == "denied"
+    assert denied_items[0]["trace_id"]
 
 
 def create_app_for(_url: str):

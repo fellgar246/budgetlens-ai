@@ -1,53 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  cancelImport,
-  commitImport,
-  createImportJob,
-  createOrganization,
-  downloadAuthorized,
-  importErrorReportUrl,
-  listImportErrors,
-  previewImport,
-  sha256Hex,
-  uploadImportContent,
-  validateImport,
-  type ImportErrorItem,
-  type ImportJob,
-  type ImportPreview,
-} from "@budgetlens/api-client";
+import { createOrganization, listImports, type ImportJob } from "@budgetlens/api-client";
 
 import { Button } from "@/components/ui/Button";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Input } from "@/components/ui/Input";
+import { Table } from "@/components/ui/Table";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useCatalogOptions } from "@/features/analysis/useCatalogOptions";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
 import { sessionAuth } from "@/lib/session-auth";
 import { downloadImportTemplate } from "@/lib/import-template";
 
-const CANONICAL = [
-  "period",
-  "account_code",
-  "account_name",
-  "account_type",
-  "department_code",
-  "department_name",
-  "cost_center_code",
-  "cost_center_name",
-  "amount",
-  "currency",
-  "source_reference",
-] as const;
-
 export function ImportsPage() {
   const { userId, organizationId, selectedOrganization, capabilities, setOrganizationId } =
     useSession();
-  const catalog = useCatalogOptions();
   const [form, setForm] = useState({
     name: "",
     slug: "",
@@ -55,36 +27,25 @@ export function ImportsPage() {
     fiscal_year_start_month: "1",
   });
   const [error, setError] = useState<Error | string | null>(null);
-  const [importType, setImportType] = useState<"budget" | "actual">("actual");
-  const [versionId, setVersionId] = useState("");
-  const [job, setJob] = useState<ImportJob | null>(null);
-  const [preview, setPreview] = useState<ImportPreview | null>(null);
-  const [errors, setErrors] = useState<ImportErrorItem[]>([]);
-  const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [delimiter, setDelimiter] = useState<"," | ";" | "\t" | "">("");
-  const [sheetName, setSheetName] = useState("");
-  const [createMissing, setCreateMissing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [working, setWorking] = useState(false);
+  const [jobs, setJobs] = useState<ImportJob[]>([]);
   const hasUser = Boolean(userId);
   const canImport = capabilities.can_import;
-  const commitEnabled = job?.status === "ready" && job.error_count === 0 && canImport;
   const allowed = capabilities.can_view_technical_metrics
     ? false
     : organizationId
       ? canImport
       : hasUser;
   const auth = useMemo(() => sessionAuth(userId, organizationId), [organizationId, userId]);
-  const draftVersions = catalog.versions.filter((item) => item.status === "draft");
 
   useEffect(() => {
-    if (!busy) {
-      setWorking(false);
+    if (!userId || !organizationId) {
+      setJobs([]);
       return;
     }
-    const timer = window.setTimeout(() => setWorking(true), 1000);
-    return () => window.clearTimeout(timer);
-  }, [busy]);
+    void listImports(apiBaseUrl(), auth)
+      .then((result) => setJobs(result.data.items))
+      .catch((err: Error) => setError(err));
+  }, [auth, organizationId, userId]);
 
   return (
     <CapabilityGate allowed={allowed} hasSession={hasUser} needsSession>
@@ -92,8 +53,14 @@ export function ImportsPage() {
         eyebrow={copy.appName}
         title={copy.importsTitle}
         description={copy.importsDescription}
+        actions={
+          organizationId ? (
+            <Link href="/imports/new">
+              <Button>{copy.newImport}</Button>
+            </Link>
+          ) : null
+        }
       />
-
       {!organizationId ? (
         <form
           className="mt-8 grid gap-3 rounded-surface border border-border bg-surface p-6 md:grid-cols-2"
@@ -111,27 +78,24 @@ export function ImportsPage() {
               .catch((err: Error) => setError(err));
           }}
         >
-          <h2 className="md:col-span-2 text-lg font-semibold text-primary">
+          <h2 className="text-lg font-semibold text-primary md:col-span-2">
             {copy.createOrganization}
           </h2>
-          <input
+          <Input
             required
-            className="h-10 rounded-control border border-border px-3 text-sm"
-            placeholder={copy.name}
+            label={copy.name}
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
-          <input
+          <Input
             required
-            className="h-10 rounded-control border border-border px-3 text-sm"
-            placeholder={copy.slugLabel}
+            label={copy.slugLabel}
             value={form.slug}
             onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
           />
-          <input
+          <Input
             required
-            className="h-10 rounded-control border border-border px-3 text-sm"
-            placeholder={copy.currencyLabel}
+            label={copy.currencyLabel}
             value={form.functional_currency}
             onChange={(event) =>
               setForm((current) => ({
@@ -140,13 +104,12 @@ export function ImportsPage() {
               }))
             }
           />
-          <input
+          <Input
             required
             type="number"
             min={1}
             max={12}
-            className="h-10 rounded-control border border-border px-3 text-sm"
-            placeholder={copy.fiscalStartLabel}
+            label={copy.fiscalStartLabel}
             value={form.fiscal_year_start_month}
             onChange={(event) =>
               setForm((current) => ({ ...current, fiscal_year_start_month: event.target.value }))
@@ -162,8 +125,7 @@ export function ImportsPage() {
           <div className="rounded-surface border border-border bg-surface p-6">
             <p className="text-sm text-secondary">
               {selectedOrganization?.name} · {copy.currencyLabel}{" "}
-              {selectedOrganization?.functional_currency} · {copy.fiscalStartLabel}{" "}
-              {selectedOrganization?.fiscal_year_start_month}
+              {selectedOrganization?.functional_currency}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="secondary" onClick={downloadImportTemplate}>
@@ -172,302 +134,43 @@ export function ImportsPage() {
             </div>
             <p className="mt-3 text-sm text-secondary">{copy.templateHint}</p>
           </div>
-          <div className="rounded-surface border border-border bg-surface p-6">
-            <h2 className="text-lg font-semibold text-primary">{copy.uploadFile}</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs">
-                <span className="font-medium text-secondary">{copy.importType}</span>
-                <select
-                  className="h-10 rounded-control border border-border px-3 text-sm"
-                  value={importType}
-                  onChange={(event) => setImportType(event.target.value as "budget" | "actual")}
-                >
-                  <option value="actual">{copy.importActual}</option>
-                  <option value="budget">{copy.importBudget}</option>
-                </select>
-              </label>
-              {importType === "budget" ? (
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className="font-medium text-secondary">{copy.filterVersion}</span>
-                  <select
-                    className="h-10 rounded-control border border-border px-3 text-sm"
-                    value={versionId}
-                    onChange={(event) => setVersionId(event.target.value)}
-                  >
-                    <option value="">{copy.chooseVersion}</option>
-                    {draftVersions.map((version) => (
-                      <option key={version.id} value={version.id}>
-                        {version.name} · {version.fiscal_year}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-            <input
-              className="mt-4 block text-sm"
-              type="file"
-              accept=".csv,.xlsx"
-              disabled={!canImport || busy || (importType === "budget" && !versionId)}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file || !userId || !organizationId) return;
-                setBusy(true);
-                setError(null);
-                void file
-                  .arrayBuffer()
-                  .then(async (buffer) => {
-                    const digest = await sha256Hex(buffer);
-                    const created = await createImportJob(apiBaseUrl(), auth, {
-                      import_type: importType,
-                      budget_version_id: importType === "budget" ? versionId : null,
-                      original_filename: file.name,
-                      size_bytes: file.size,
-                      sha256: digest,
-                    });
-                    await uploadImportContent(
-                      apiBaseUrl(),
-                      auth,
-                      created.data.id,
-                      file,
-                      file.type || "application/octet-stream",
-                    );
-                    const nextPreview = await previewImport(apiBaseUrl(), auth, created.data.id);
-                    setJob(created.data);
-                    setPreview(nextPreview.data);
-                    setMapping(nextPreview.data.proposed_mapping);
-                    setDelimiter((nextPreview.data.delimiter as "," | ";" | "\t" | "") || "");
-                    setSheetName(
-                      nextPreview.data.job.sheet_name ?? nextPreview.data.available_sheets[0] ?? "",
-                    );
-                  })
-                  .catch((err: Error) => setError(err))
-                  .finally(() => setBusy(false));
-              }}
+          {jobs.length === 0 ? (
+            <EmptyState
+              title={copy.importListEmpty}
+              detail={copy.emptyActuals}
+              action={
+                <Link className="text-sm font-medium text-brand-600" href="/imports/new">
+                  {copy.newImport}
+                </Link>
+              }
             />
-            <p className="mt-3 text-sm text-secondary">{copy.chooseFile}</p>
-          </div>
-          {preview ? (
-            <div className="rounded-surface border border-border bg-surface p-6">
-              <h2 className="text-lg font-semibold text-primary">{copy.mapColumns}</h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {CANONICAL.map((field) => (
-                  <label key={field} className="flex flex-col gap-1 text-xs">
-                    <span className="font-medium text-secondary">{field}</span>
-                    <select
-                      className="h-10 rounded-control border border-border px-3 text-sm"
-                      value={mapping[field] ?? ""}
-                      onChange={(event) =>
-                        setMapping((current) => ({ ...current, [field]: event.target.value }))
-                      }
-                    >
-                      <option value="">—</option>
-                      {preview.headers.map((header) => (
-                        <option key={header} value={header}>
-                          {header}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-              {preview.delimiter_ambiguous ? (
-                <p className="mt-4 text-sm text-warning">{copy.delimiterAmbiguous}</p>
-              ) : null}
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {preview.available_sheets.length > 1 ? (
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span className="font-medium text-secondary">{copy.sheetLabel}</span>
-                    <select
-                      className="h-10 rounded-control border border-border px-3 text-sm"
-                      value={sheetName}
-                      onChange={(event) => setSheetName(event.target.value)}
-                    >
-                      {preview.available_sheets.map((sheet) => (
-                        <option key={sheet} value={sheet}>
-                          {sheet}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                {preview.delimiter ? (
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span className="font-medium text-secondary">{copy.confirmDelimiter}</span>
-                    <select
-                      className="h-10 rounded-control border border-border px-3 text-sm"
-                      value={delimiter}
-                      onChange={(event) => setDelimiter(event.target.value as "," | ";" | "\t")}
-                    >
-                      <option value=",">{copy.delimiterComma}</option>
-                      <option value=";">{copy.delimiterSemicolon}</option>
-                      <option value={"\t"}>{copy.delimiterTab}</option>
-                    </select>
-                  </label>
-                ) : null}
-                <label className="flex items-center gap-2 text-sm text-secondary">
-                  <input
-                    type="checkbox"
-                    checked={createMissing}
-                    onChange={(event) => setCreateMissing(event.target.checked)}
-                  />
-                  {copy.createMissingDimensions}
-                </label>
-              </div>
-              <div className="mt-4">
-                <Button
-                  disabled={busy}
-                  onClick={() => {
-                    if (!job) return;
-                    setBusy(true);
-                    void validateImport(apiBaseUrl(), auth, job.id, {
-                      mapping,
-                      create_missing_dimensions: createMissing,
-                      sheet_name: sheetName || null,
-                      delimiter: delimiter || null,
-                    })
-                      .then(async (result) => {
-                        setJob(result.data);
-                        const [nextPreview, nextErrors] = await Promise.all([
-                          previewImport(apiBaseUrl(), auth, job.id),
-                          listImportErrors(apiBaseUrl(), auth, job.id),
-                        ]);
-                        setPreview(nextPreview.data);
-                        setErrors(nextErrors.data.items);
-                      })
-                      .catch((err: Error) => setError(err))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  {copy.previewTitle}
-                </Button>
-              </div>
-            </div>
           ) : (
-            <EmptyState title={copy.previewTitle} detail={copy.previewEmpty} />
+            <Table caption={copy.importsTitle}>
+              <thead>
+                <tr className="border-b border-border text-secondary">
+                  <th className="py-2 font-medium">{copy.name}</th>
+                  <th className="py-2 font-medium">{copy.status}</th>
+                  <th className="py-2 font-medium">{copy.importType}</th>
+                  <th className="py-2 font-medium">{copy.hashLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((job) => (
+                  <tr key={job.id} className="border-b border-border">
+                    <td className="py-2">
+                      <Link className="text-brand-600" href={`/imports/job/?id=${job.id}`}>
+                        {job.original_filename}
+                      </Link>
+                    </td>
+                    <td className="py-2">{job.status}</td>
+                    <td className="py-2">{job.import_type}</td>
+                    <td className="py-2">{job.sha256_short}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
           )}
-          {job && preview && job.status !== "created" ? (
-            <div className="rounded-surface border border-border bg-surface p-6">
-              <p className="text-sm text-secondary">
-                {job.original_filename} · {job.size_bytes} B · {job.sha256_short}
-                {job.sheet_name ? ` · ${job.sheet_name}` : ""}
-              </p>
-              <p className="mt-2 text-sm text-secondary">
-                {job.valid_count}/{job.row_count} · {job.error_count} err · {job.warning_count} warn
-                {job.period_min && job.period_max
-                  ? ` · ${copy.periodRange} ${job.period_min}–${job.period_max}`
-                  : ""}{" "}
-                · {job.valid_amount_total} {selectedOrganization?.functional_currency}
-              </p>
-              <p className="mt-2 text-sm text-secondary">
-                {copy.importImpact}: {copy.newDimensions}{" "}
-                {preview.new_accounts + preview.new_departments + preview.new_cost_centers} ·{" "}
-                {copy.replacedRecords} {preview.replaced_records}
-              </p>
-              {job.status === "ready" ? (
-                <p className="mt-2 text-sm text-success">{copy.importReady}</p>
-              ) : null}
-              {job.status === "invalid" ? (
-                <p className="mt-2 text-sm text-danger">{copy.importInvalid}</p>
-              ) : null}
-              {job.status === "applied" ? (
-                <p className="mt-2 text-sm text-success">{copy.importApplied}</p>
-              ) : null}
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-secondary">
-                      {["period", "account_code", "department_code", "amount", "currency"].map(
-                        (header) => (
-                          <th key={header} className="pb-2 pr-4 font-medium">
-                            {header}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.items.map((row) => (
-                      <tr key={row.row_number} className="border-t border-border">
-                        <td className="py-2 pr-4">{row.period}</td>
-                        <td className="py-2 pr-4">{row.account_code}</td>
-                        <td className="py-2 pr-4">{row.department_code}</td>
-                        <td className="py-2 pr-4 font-variant-numeric">{row.amount}</td>
-                        <td className="py-2 pr-4">{row.currency}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {preview.error_groups.length > 0 ? (
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-secondary">{copy.groupedErrors}</p>
-                  <ul className="mt-2 space-y-1 text-sm text-danger">
-                    {preview.error_groups.map((group) => (
-                      <li key={`${group.code}-${group.severity}`}>
-                        {group.code} · {group.count} · {group.sample_message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {errors.length > 0 ? (
-                <ul className="mt-4 space-y-1 text-sm text-danger">
-                  {errors.map((item) => (
-                    <li key={`${item.row_number}-${item.field}-${item.code}`}>
-                      Fila {item.row_number}: {item.code} · {item.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-          {working ? (
-            <p className="text-sm text-secondary" aria-live="polite">
-              {copy.importWorking}
-            </p>
-          ) : null}
           <ErrorBanner error={error} />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={!commitEnabled || busy}
-              title={commitEnabled ? copy.commitImport : copy.commitBlocked}
-              onClick={() => {
-                if (!job) return;
-                setBusy(true);
-                void commitImport(apiBaseUrl(), auth, job.id)
-                  .then((result) => setJob(result.data))
-                  .catch((err: Error) => setError(err))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              {copy.commitImport}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!job || job.error_count === 0}
-              onClick={() => {
-                if (!job) return;
-                void downloadAuthorized(
-                  importErrorReportUrl(apiBaseUrl(), job.id),
-                  auth,
-                  `budgetlens-import-errors-${job.id}.csv`,
-                );
-              }}
-            >
-              {copy.downloadErrors}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={!job || job.status === "applied" || busy}
-              onClick={() => {
-                if (!job) return;
-                void cancelImport(apiBaseUrl(), auth, job.id).then((result) => setJob(result.data));
-              }}
-            >
-              {copy.cancelImport}
-            </Button>
-          </div>
         </section>
       )}
     </CapabilityGate>

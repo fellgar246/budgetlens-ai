@@ -25,6 +25,7 @@ def test_worker_reuses_the_api_package() -> None:
     entrypoint = (REPO_ROOT / "apps" / "api" / "docker-entrypoint.sh").read_text(encoding="utf-8")
     assert "python -m budgetlens" in entrypoint
     assert "import-job" in entrypoint
+    assert "worker)" in entrypoint
     cli = (API_SRC / "cli.py").read_text(encoding="utf-8")
     assert "import-job" in cli
     assert "budgetlens.application.imports" in cli

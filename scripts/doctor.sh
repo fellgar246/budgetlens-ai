@@ -132,10 +132,30 @@ else
   warn "checkov is not installed. Required later for AWS environments; pin is infrastructure/terraform/.checkov-version."
 fi
 
+if have aws; then
+  aws_version="$(aws --version 2>&1 | awk '{print $1}')"
+  case "$(aws --version 2>&1)" in
+    aws-cli/2.*)
+      ok "aws ${aws_version}"
+      ;;
+    *)
+      warn "aws ${aws_version} found; AWS environments need AWS CLI v2. Not required to run the local app."
+      ;;
+  esac
+else
+  warn "aws CLI is not installed. Required later for AWS environments; not needed to run the local app."
+fi
+
+if have jq; then
+  ok "jq $(jq --version 2>/dev/null | sed 's/^jq-//')"
+else
+  warn "jq is not installed. Optional; useful for inspecting JSON logs and AWS CLI output."
+fi
+
 if have make; then
   ok "make $(make --version | head -n 1 | awk '{print $3}')"
 else
-  fail "make is not installed."
+  fail "make is not installed. Install Make or an equivalent task runner and retry."
 fi
 
 echo

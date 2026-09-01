@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql+psycopg://budgetlens:budgetlens_local_only@127.0.0.1:5433/budgetlens
+  APP_ENV: test
+  AUTH_MODE: dev
+
+jobs:
+  api:
+    name: API lint, types, unit, integration, contract
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: budgetlens
+          POSTGRES_PASSWORD: budgetlens_local_only
+          POSTGRES_DB: budgetlens
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U budgetlens -d budgetlens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: uv sync --frozen
+      - name: Format and lint
+        working-directory: apps/api
+        run: |
+          uv run ruff check src tests migrations
+          uv run ruff format --check src tests migrations
+      - name: Type check
+        working-directory: apps/api
+        run: uv run pyright
+      - name: Unit tests
+        working-directory: apps/api
+        run: uv run pytest -m "not integration and not perf"
+      - name: Integration tests
+        working-directory: apps/api
+        run: uv run pytest -m integration
+      - name: OpenAPI contract
+        working-directory: apps/api
+        run: uv run pytest tests/unit/test_openapi.py
+      - name: Coverage gates
+        working-directory: apps/api
+        run: |
+          uv run pytest tests/unit/domain \
+            --cov=budgetlens.domain.money --cov=budgetlens.domain.variance \
+            --cov=budgetlens.domain.fiscal --cov=budgetlens.domain.financial_entry \
+            --cov-branch --cov-fail-under=85 --cov-report=term-missing
+          uv run pytest -m "not perf" \
+            --cov=budgetlens --cov-report=term-missing --cov-fail-under=75
+
+  web:
+    name: Web lint, types, unit, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web lint
+      - run: pnpm --filter web format:check
+      - run: pnpm --filter web typecheck
+      - run: pnpm --filter web test
+      - run: pnpm --filter web build
+
+  e2e:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: budgetlens
+          POSTGRES_PASSWORD: budgetlens_local_only
+          POSTGRES_DB: budgetlens
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U budgetlens -d budgetlens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - working-directory: apps/api
+        run: uv sync --frozen
+      - name: Install Playwright Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Run E2E against a seeded stack
+        env:
+          APP_ENV: local
+          AUTH_MODE: dev
+          REQUIRE_E2E: "1"
+        run: |
+          chmod +x scripts/ci-e2e.sh
+          ./scripts/ci-e2e.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
+  security:
+    name: Dependency, secret, and IaC scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - working-directory: apps/api
+        run: uv sync --frozen
+      - name: Scan
+        run: |
+          chmod +x scripts/scan.sh
+          ./scripts/scan.sh

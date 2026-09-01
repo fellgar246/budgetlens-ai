@@ -54,7 +54,7 @@ export function MembersPage() {
         <table className="mt-8 w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr className="border-b border-border text-secondary">
-              <th className="py-2 font-medium">{copy.selectUser}</th>
+              <th className="py-2 font-medium">{copy.emailLabel}</th>
               <th className="py-2 font-medium">{copy.roleLabel}</th>
               <th className="py-2 font-medium">{copy.status}</th>
             </tr>
@@ -63,7 +63,9 @@ export function MembersPage() {
             {members.map((member) => (
               <tr key={member.id} className="border-b border-border">
                 <td className="py-2">
-                  {users.find((user) => user.id === member.user_id)?.display_name ?? member.user_id}
+                  {users.find((user) => user.id === member.user_id)?.email ??
+                    users.find((user) => user.id === member.user_id)?.display_name ??
+                    member.user_id}
                 </td>
                 <td className="py-2">{member.role}</td>
                 <td className="py-2">{member.status}</td>

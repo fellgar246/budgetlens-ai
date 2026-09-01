@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiRequestError } from "@budgetlens/api-client";
 
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Variance } from "@/components/ui/Variance";
 import { VarianceBadge } from "@/components/ui/VarianceBadge";
 import { copy } from "@/lib/copy";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -14,6 +15,20 @@ describe("financial display", () => {
     expect(formatMoney("9999999999999.1234", "MXN").replace(/[^\d.-]/g, "")).toBe(
       "9999999999999.1234",
     );
+  });
+
+  it("shows the zero-budget label when the budget is zero", () => {
+    render(
+      <Variance
+        amount="25.0000"
+        percent={null}
+        favorability="unfavorable"
+        currency="MXN"
+        budgetAmount="0.0000"
+      />,
+    );
+    expect(screen.getByText(copy.zeroBudgetPercent)).toBeInTheDocument();
+    expect(screen.getByTitle(copy.zeroBudgetHint)).toBeInTheDocument();
   });
 
   it("shows N/A when the percent is missing", () => {

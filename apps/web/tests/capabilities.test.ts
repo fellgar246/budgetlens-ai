@@ -43,5 +43,7 @@ describe("capability navigation", () => {
     expect(hrefs).toContain("/imports");
     expect(hrefs).toContain("/scenarios");
     expect(hrefs).toContain("/settings/members");
+    expect(hrefs).toContain("/settings/budget-versions");
+    expect(hrefs).toContain("/audit");
   });
 });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -15,9 +16,17 @@ ConversationContentMode = Literal["full_synthetic", "redacted"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
+def default_env_files() -> tuple[Path, ...]:
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "compose.yaml").is_file() and (parent / ".env.example").is_file():
+            return (parent / ".env", Path(".env"))
+    return (Path(".env"),)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=default_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -63,6 +72,8 @@ class Settings(BaseSettings):
     original_file_retention_days: int = Field(default=90, ge=1)
     error_report_retention_days: int = Field(default=30, ge=1)
     export_retention_hours: int = Field(default=24, ge=1)
+    audit_retention_days: int = Field(default=365, ge=1)
+    log_retention_days: int = Field(default=14, ge=1)
     csv_export_with_bom: bool = True
     rate_limit_upload_per_minute: int = Field(default=20, ge=1)
     rate_limit_export_per_minute: int = Field(default=20, ge=1)

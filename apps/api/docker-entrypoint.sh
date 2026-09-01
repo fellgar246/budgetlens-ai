@@ -12,7 +12,18 @@ fi
 case "${1:-api}" in
   api)
     alembic upgrade head
+    if [ "${API_RELOAD:-0}" = "1" ]; then
+      exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 \
+        --timeout-graceful-shutdown 30 --reload --reload-dir /app/src
+    fi
     exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 30
+    ;;
+  worker)
+    interval="${WORKER_POLL_SECONDS:-30}"
+    while true; do
+      python -m budgetlens watchdog
+      sleep "$interval"
+    done
     ;;
   seed|eval-ai|watchdog|retain-files|import-job)
     exec python -m budgetlens "$@"

@@ -38,7 +38,11 @@ export function useAnalysisFilters() {
 
   const update = useCallback(
     (patch: Partial<AnalysisFilters>) => {
-      replaceFilters({ ...filters, ...patch });
+      const next = { ...filters, ...patch };
+      if (!("cursor" in patch)) {
+        next.cursor = "";
+      }
+      replaceFilters(next);
     },
     [filters, replaceFilters],
   );

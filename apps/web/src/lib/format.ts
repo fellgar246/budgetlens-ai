@@ -12,6 +12,35 @@ export function formatMoney(amount: string, currency: string, locale = "es-MX"):
   return `${sign}${currency} ${grouped}.${decimals}`;
 }
 
+export function formatMoneyCompact(amount: string, currency: string, locale = "es-MX"): string {
+  const negative = amount.startsWith("-");
+  const raw = negative ? amount.slice(1) : amount;
+  const [whole = "0"] = raw.split(".");
+  const abs = BigInt(whole || "0");
+  const sign = negative ? "−" : "";
+  if (abs >= 1_000_000n) {
+    const millions = abs / 1_000_000n;
+    const remainder = abs % 1_000_000n;
+    const hundredths = remainder / 10_000n;
+    const grouped = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(millions);
+    return `${sign}${currency} ${grouped}.${String(hundredths).padStart(2, "0")} M`;
+  }
+  if (abs >= 1_000n) {
+    const thousands = abs / 1_000n;
+    const remainder = abs % 1_000n;
+    const tenths = remainder / 100n;
+    const grouped = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(thousands);
+    return `${sign}${currency} ${grouped}.${String(tenths)} k`;
+  }
+  return formatMoney(amount, currency, locale);
+}
+
+export function isZeroAmount(amount: string): boolean {
+  const raw = amount.startsWith("-") ? amount.slice(1) : amount;
+  const [whole = "0", fraction = ""] = raw.split(".");
+  return (whole.replace(/^0+/, "") === "" || whole === "0") && !/[1-9]/.test(fraction);
+}
+
 export function formatPercent(ratio: string | null, locale = "es-MX"): string {
   if (ratio === null) {
     return "N/A";

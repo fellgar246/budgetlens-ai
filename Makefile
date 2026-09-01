@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data
+.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -12,6 +12,7 @@ bootstrap:
 	$(ROOT)/scripts/bootstrap.sh
 
 dev:
+	mkdir -p "$(ROOT)/var/storage"
 	docker compose up --build
 
 stop:
@@ -26,6 +27,9 @@ migrate:
 seed:
 	cd "$(API)" && uv run python -m budgetlens seed
 
+eval-ai:
+	cd "$(API)" && uv run python -m budgetlens eval-ai
+
 test:
 	cd "$(API)" && uv run pytest -m "not integration and not perf"
 	$(PNPM) --filter web test
@@ -33,8 +37,15 @@ test:
 test-integration:
 	cd "$(API)" && uv run pytest -m integration
 
+test-contract:
+	cd "$(API)" && uv run pytest tests/unit/test_openapi.py
+
 test-e2e:
 	$(PNPM) --filter web test:e2e
+
+test-acceptance:
+	cd "$(API)" && uv run pytest -m acceptance
+	$(PNPM) --filter web test tests/acceptance-display.test.tsx
 
 lint:
 	cd "$(API)" && uv run ruff check src tests migrations
@@ -56,7 +67,7 @@ coverage:
 	cd "$(API)" && uv run pytest tests/unit/domain \
 		--cov=budgetlens.domain.money --cov=budgetlens.domain.variance \
 		--cov=budgetlens.domain.fiscal --cov=budgetlens.domain.financial_entry \
-		--cov-fail-under=85 --cov-report=term-missing
+		--cov-branch --cov-fail-under=85 --cov-report=term-missing
 	cd "$(API)" && uv run pytest -m "not perf" \
 		--cov=budgetlens --cov-report=term-missing --cov-fail-under=75
 
@@ -95,9 +106,9 @@ build:
 		exit 1; \
 	fi
 
-ci: lint test openapi
-	$(PNPM) --filter web build
-	$(ROOT)/scripts/scan.sh
+ci:
+	chmod +x "$(ROOT)/scripts/ci.sh" "$(ROOT)/scripts/ci-e2e.sh"
+	$(ROOT)/scripts/ci.sh
 	@if docker info >/dev/null 2>&1; then \
 		docker image inspect budgetlens-api:local >/dev/null 2>&1 && docker tag budgetlens-api:local budgetlens-api:previous || true; \
 		docker image inspect budgetlens-web:local >/dev/null 2>&1 && docker tag budgetlens-web:local budgetlens-web:previous || true; \
@@ -108,7 +119,8 @@ ci: lint test openapi
 	fi
 
 clean-generated:
-	rm -rf apps/web/.next apps/web/out apps/api/.ruff_cache apps/api/.pytest_cache apps/api/.coverage
+	rm -rf apps/web/.next apps/web/out apps/web/playwright-report apps/web/test-results \
+		apps/api/.ruff_cache apps/api/.pytest_cache apps/api/.coverage apps/api/htmlcov
 
 reset-local-data:
 	CONFIRM="$(CONFIRM)" $(ROOT)/scripts/reset-local-data.sh

@@ -245,18 +245,35 @@ export type OpsMetrics = {
     errors: number;
     duration_ms_p95: number | null;
   }>;
+  request_duration_histogram: Record<string, number>;
   active_requests: number;
-  db_pool: { checked_out: number; overflow: number; size: number };
+  db_pool: { checked_out: number; overflow: number; size: number; wait: number };
+  db_queries: Array<{ name: string; count: number; duration_ms_p95: number | null }>;
   db_rollbacks: number;
-  jobs: { timed_out: number; by_status: Record<string, number> };
+  migration_version: string | null;
+  jobs: {
+    timed_out: number;
+    by_status: Record<string, number>;
+    by_type: Record<string, number>;
+    validation_duration_ms_p95: number | null;
+    apply_duration_ms_p95: number | null;
+    rows_processed: number;
+    rows_error: number;
+    error_ratio: number | null;
+    bytes_processed: number;
+  };
   ai: {
     runs: number;
     tool_calls: number;
     tool_failures: number;
+    grounding_failures: number;
+    input_units: number;
+    output_units: number;
     latency_ms_p95: number | null;
     estimated_cost: { currency: string; amount: string; estimate: boolean } | null;
   };
   rate_limited: number;
+  error_codes: Record<string, number>;
   cost_estimate_configured: boolean;
 };
 
@@ -750,6 +767,15 @@ function analyticsQuery(query: AnalyticsQuery): string {
   return params.toString();
 }
 
+export function listImports(baseUrl: string, auth: AuthContext, query?: PageQuery) {
+  return requestJson<Paginated<ImportJob>>(
+    baseUrl,
+    `${API_PREFIX}/imports` + queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
+}
+
 export function createImportJob(
   baseUrl: string,
   auth: AuthContext,
@@ -1003,14 +1029,20 @@ export function deleteConversation(baseUrl: string, auth: AuthContext, conversat
 }
 
 export type AuditEvent = {
+  schema_version: string;
+  event_id: string;
+  occurred_at: string;
+  organization_id: string | null;
+  actor: { type: "user" | "system"; id: string };
+  action: string;
+  resource: { type: string; id: string };
+  outcome: "success" | "denied" | "failed";
+  trace_id: string;
+  metadata: Record<string, unknown>;
   id: string;
   actor_id: string;
-  action: string;
   resource_type: string;
   resource_id: string;
-  outcome: string;
-  metadata: Record<string, unknown>;
-  trace_id: string;
   created_at: string;
 };
 

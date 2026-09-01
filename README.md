@@ -8,7 +8,7 @@ This repository is a monorepo:
 - `apps/api` — FastAPI service with domain, application, ports, adapters, and HTTP routes
 - `packages/api-client` — typed HTTP client and OpenAPI snapshot
 - `infrastructure/terraform` — `bootstrap/`, `modules/`, and `environments/` for AWS; version pins only until those roots are filled
-- `compose.yaml` — local web, API, and PostgreSQL
+- `compose.yaml` — local Next.js dev server, API (optional reload), PostgreSQL, and an optional worker profile
 
 ## Pinned toolchain
 
@@ -43,15 +43,19 @@ make bootstrap
 make dev
 ```
 
-`make dev` builds and starts PostgreSQL, the API, and the web app. The API applies migrations on startup. Seeds are never applied automatically.
+`make doctor` only reports missing tools; it does not install anything. `make dev` builds and starts PostgreSQL, the API with source reload, and the Next.js dev server. The API applies migrations on startup. Seeds are never applied automatically, including on AWS.
 
 In another terminal:
 
 ```text
+make migrate
 make seed
 make test
-make lint
 ```
+
+`make migrate` is idempotent. Compose already upgrades the database when the API starts; run it on the host when you are not using the API container.
+
+After seed, open http://localhost:3000, sign in as a demo user, and choose Alpha or Beta. API docs stay local-only at http://localhost:8000/docs. Readiness is `GET /api/v1/health/ready`.
 
 To run the API on the host (PostgreSQL still in Docker):
 
@@ -68,19 +72,23 @@ pnpm --filter web dev
 |---|---|
 | `make doctor` | Check required tools. Does not install anything. |
 | `make bootstrap` | Create `.env` if missing, install dependencies, create local storage. |
-| `make dev` | Start Compose services. |
+| `make dev` | Start Compose services (`COMPOSE_PROFILES=worker make dev` also starts the worker). |
 | `make stop` | Stop containers without deleting volumes. |
 | `make logs` | Follow Compose logs. |
 | `make migrate` | Apply Alembic migrations using host `DATABASE_URL`. |
-| `make seed` | Upsert Alpha/Beta tenants, local users, and catalog dimensions. Idempotent. |
+| `make seed` | Upsert Alpha/Beta tenants, local users, catalog dimensions, and a synthetic financial dataset. Idempotent. |
+| `make eval-ai` | Run the stub copilot evaluation dataset (AI-E01–E12, AI-S01–S08). Live Bedrock: `python -m budgetlens eval-ai --live`. |
 | `make test` | API unit tests and web unit tests. |
 | `make test-integration` | API tests that need PostgreSQL. |
-| `make test-e2e` | Playwright smoke against a running app (`E2E_BASE_URL`, default http://localhost:3000). |
+| `make test-contract` | OpenAPI snapshot and TypeScript client path checks. |
+| `make test-e2e` | Playwright journeys against a running app (`E2E_BASE_URL`, default http://localhost:3000). |
+| `make test-acceptance` | Release catalog AC-001–AC-026 (API suite plus web display checks). |
 | `make lint` | Ruff, Pyright, ESLint, TypeScript, Prettier check. |
 | `make format` | Apply formatters. |
 | `make openapi` | Refresh `packages/api-client/openapi.json`. |
-| `make ci` | Lint, coverage gates, OpenAPI export, web build, image builds when Docker is up. |
-| `make coverage` | 85% on the financial engine and 75% backend with the integration suite. |
+| `make clean-generated` | Delete regenerable caches and build outputs. Never deletes database or `var/storage`. |
+| `make ci` | Lint, types, unit, integration when PostgreSQL is up, OpenAPI contract, web build, security scan, and image builds when Docker is up. |
+| `make coverage` | 85% branch coverage on the financial engine and 75% backend with the integration suite. |
 | `make coverage-unit` | Informational unit coverage, no fail threshold. |
 | `make scan` | Dependency, secret, Terraform (fmt/TFLint/Checkov), and optional image scans. Critical findings fail the command. |
 | `make watchdog` | Mark stale processing import jobs as timed out. |
@@ -92,7 +100,7 @@ pnpm --filter web dev
 
 ## Configuration
 
-Copy `.env.example` to `.env`. Every variable is documented there with type, secrecy, and environments. Precedence: safe defaults, then the untracked `.env`, then process environment variables, then Secrets Manager for secrets on AWS.
+Copy `.env.example` to `.env`. Every variable is documented there with type, secrecy, and environments. Precedence: safe defaults, then the untracked repository-root `.env` (also used when commands run from `apps/api`), then process environment variables, then Secrets Manager for secrets on AWS.
 
 `AUTH_MODE=dev` is rejected when `APP_ENV=prod`. API docs are enabled only when `APP_ENV` is `local` or `test`.
 
@@ -100,13 +108,17 @@ The browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`). 
 
 ## Local identity
 
-`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. The web header lists those identities. Publish, activate, archive, and import commit require `Idempotency-Key`. JSON uses `snake_case`; amounts and ratios are decimal strings; every response includes `X-Trace-Id`.
+`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. It also loads a synthetic financial dataset: revenue and expense, zero-budget rows, a negative actual, UNASSIGNED cost centers, overlapping account codes, and several periods. The web header lists those identities. Publish, activate, archive, and import commit require `Idempotency-Key`. JSON uses `snake_case`; amounts and ratios are decimal strings; every response includes `X-Trace-Id`.
 
 `GET /me` returns the active role, persona, and capability matrix. Changing organization clears incompatible filters and cached view state. A forged `organization_id` in the URL, payload, or `X-Organization-Id` header returns `403` or `404` without saying whether the other tenant exists. The operator can open `/estado` and never receives financial rows by default.
 
 The web shell follows the product journeys: summary, variances, imports, scenarios, copilot, settings, and operation. Those views load live tenant data when a local session is selected; empty, loading, and error states stay visible when there is nothing to show. `/catalogo` remains a harness for dimensions and budget versions. Amounts stay as four-decimal values; the API never returns infinity or `NaN` for variance.
 
-If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env`.
+If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env`. Internal Compose URLs stay the same. Also update `CORS_ORIGINS` and `NEXT_PUBLIC_API_BASE_URL` when those host ports change.
+
+Set `API_RELOAD=0` to start the API container without uvicorn reload. Object uploads use `LocalObjectStorage` at `./var/storage` (bind-mounted into the API). There is no local AWS emulator.
+
+Recommended editor settings live in `.vscode/`: format on save, the `uv` interpreter, workspace TypeScript, pytest and Vitest discovery, tasks for `dev` / `test` / `lint`, and debug configs for FastAPI and Next.js. Those files do not embed secrets.
 
 ## Troubleshooting
 
@@ -122,9 +134,11 @@ If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.e
 
 **`uv sync` fails.** Confirm `python3 --version` is 3.12.x and that you are in `apps/api` or using the Makefile targets.
 
-**Local storage permission errors.** The default path is `./var/storage` (ignored by Git). Recreate it with `mkdir -p var/storage`.
+**Local storage permission errors.** Compose bind-mounts `./var/storage` (ignored by Git) into the API. Recreate it with `mkdir -p var/storage`. `make bootstrap` and `make dev` create the directory if it is missing.
 
 **Playwright browsers are missing.** Install Chromium once: `pnpm --filter web exec playwright install chromium`. Start the app with `make dev`, then run `make test-e2e`.
+
+**Acceptance catalog.** `make test-acceptance` runs the mapped API cases. With the stack up, `scripts/acceptance-local-stack.sh` checks web, API, and readiness. `scripts/acceptance-rollback.sh` and `scripts/acceptance-restore.sh` document the local rollback and restore checks.
 
 **Readiness returns 503.** PostgreSQL is not reachable. Check `docker compose ps` and `DATABASE_URL`. Liveness stays 200 while the process can serve requests.
 

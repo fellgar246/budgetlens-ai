@@ -15,6 +15,12 @@ from budgetlens.adapters.persistence.repositories import (
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.domain.audit import (
+    BUDGET_VERSION_ACTIVATED,
+    BUDGET_VERSION_ARCHIVED,
+    BUDGET_VERSION_CREATED,
+    BUDGET_VERSION_PUBLISHED,
+)
 from budgetlens.domain.budget_version import BudgetVersion
 from budgetlens.domain.enums import BudgetVersionStatus, Permission
 from budgetlens.domain.errors import ConflictError, NotFoundError, ValidationError
@@ -85,6 +91,18 @@ class BudgetVersionService:
                 "VERSION_NAME_TAKEN",
                 "Ya existe una versión con ese nombre en el año fiscal.",
             ) from exc
+        record_audit(
+            self._audits,
+            clock=self._clock,
+            ids=self._ids,
+            organization_id=context.organization_id,
+            actor_id=context.user.id,
+            action=BUDGET_VERSION_CREATED,
+            resource_type="budget_version",
+            resource_id=version.id,
+            trace_id=context.trace_id,
+            metadata={"fiscal_year": version.fiscal_year, "status": version.status.value},
+        )
         return version
 
     def update(
@@ -169,7 +187,7 @@ class BudgetVersionService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="budget_version.activate",
+            action=BUDGET_VERSION_ACTIVATED,
             resource_type="budget_version",
             resource_id=updated.id,
             trace_id=context.trace_id,
@@ -222,13 +240,18 @@ class BudgetVersionService:
             return existing
         updated = apply(current)
         repo.save(updated)
+        action = (
+            BUDGET_VERSION_PUBLISHED
+            if operation == "budget_version.publish"
+            else BUDGET_VERSION_ARCHIVED
+        )
         record_audit(
             self._audits,
             clock=self._clock,
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action=operation,
+            action=action,
             resource_type="budget_version",
             resource_id=updated.id,
             trace_id=context.trace_id,

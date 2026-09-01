@@ -13,6 +13,7 @@ from budgetlens.adapters.persistence.repositories import (
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
+from budgetlens.domain.audit import MEMBERSHIP_CREATED, MEMBERSHIP_DISABLED, MEMBERSHIP_ROLE_CHANGED
 from budgetlens.domain.enums import MembershipStatus, Permission, Role
 from budgetlens.domain.errors import ConflictError, NotFoundError
 from budgetlens.domain.identities import Clock, IdFactory
@@ -69,7 +70,7 @@ class MembershipService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="membership.create",
+            action=MEMBERSHIP_CREATED,
             resource_type="membership",
             resource_id=membership.id,
             trace_id=context.trace_id,
@@ -100,16 +101,26 @@ class MembershipService:
         )
         updated = current.with_updates(now=self._clock.now(), role=role, status=status)
         repo.save(updated)
+        if (
+            updated.status is MembershipStatus.DISABLED
+            and current.status is not MembershipStatus.DISABLED
+        ):
+            action = MEMBERSHIP_DISABLED
+        else:
+            action = MEMBERSHIP_ROLE_CHANGED
         record_audit(
             self._audits,
             clock=self._clock,
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="membership.update",
+            action=action,
             resource_type="membership",
             resource_id=updated.id,
             trace_id=context.trace_id,
-            metadata={"role": updated.role.value, "status": updated.status.value},
+            metadata={
+                "before": {"role": current.role.value, "status": current.status.value},
+                "after": {"role": updated.role.value, "status": updated.status.value},
+            },
         )
         return updated

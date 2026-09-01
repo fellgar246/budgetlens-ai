@@ -308,7 +308,7 @@ class AnalyticsService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="export.create",
+            action="export.created",
             resource_type="export_job",
             resource_id=job.id,
             trace_id=context.trace_id,

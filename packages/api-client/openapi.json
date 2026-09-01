@@ -12663,6 +12663,29 @@
         ],
         "title": "AnalyticsSort"
       },
+      "AuditActorResponse": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "user",
+              "system"
+            ],
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "id"
+        ],
+        "title": "AuditActorResponse"
+      },
       "AuditEventListResponse": {
         "properties": {
           "items": {
@@ -12686,6 +12709,60 @@
       },
       "AuditEventResponse": {
         "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditActorResponse"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/AuditResourceResponse"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "denied",
+              "failed"
+            ],
+            "title": "Outcome"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -12693,12 +12770,7 @@
           },
           "actor_id": {
             "type": "string",
-            "format": "uuid",
             "title": "Actor Id"
-          },
-          "action": {
-            "type": "string",
-            "title": "Action"
           },
           "resource_type": {
             "type": "string",
@@ -12709,19 +12781,6 @@
             "format": "uuid",
             "title": "Resource Id"
           },
-          "outcome": {
-            "type": "string",
-            "title": "Outcome"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
-          },
-          "trace_id": {
-            "type": "string",
-            "title": "Trace Id"
-          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -12731,17 +12790,43 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "schema_version",
+          "event_id",
+          "occurred_at",
+          "organization_id",
+          "actor",
+          "action",
+          "resource",
+          "outcome",
+          "trace_id",
+          "metadata",
           "id",
           "actor_id",
-          "action",
           "resource_type",
           "resource_id",
-          "outcome",
-          "metadata",
-          "trace_id",
           "created_at"
         ],
         "title": "AuditEventResponse"
+      },
+      "AuditResourceResponse": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "id"
+        ],
+        "title": "AuditResourceResponse"
       },
       "BreakdownItemResponse": {
         "properties": {
@@ -14286,6 +14371,13 @@
             "type": "array",
             "title": "Requests"
           },
+          "request_duration_histogram": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Request Duration Histogram"
+          },
           "active_requests": {
             "type": "integer",
             "title": "Active Requests"
@@ -14297,9 +14389,28 @@
             "type": "object",
             "title": "Db Pool"
           },
+          "db_queries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Db Queries"
+          },
           "db_rollbacks": {
             "type": "integer",
             "title": "Db Rollbacks"
+          },
+          "migration_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migration Version"
           },
           "jobs": {
             "additionalProperties": true,
@@ -14315,6 +14426,13 @@
             "type": "integer",
             "title": "Rate Limited"
           },
+          "error_codes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Error Codes"
+          },
           "cost_estimate_configured": {
             "type": "boolean",
             "title": "Cost Estimate Configured"
@@ -14324,12 +14442,16 @@
         "type": "object",
         "required": [
           "requests",
+          "request_duration_histogram",
           "active_requests",
           "db_pool",
+          "db_queries",
           "db_rollbacks",
+          "migration_version",
           "jobs",
           "ai",
           "rate_limited",
+          "error_codes",
           "cost_estimate_configured"
         ],
         "title": "OpsMetricsResponse"

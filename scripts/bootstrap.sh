@@ -44,5 +44,6 @@ echo
 echo "Bootstrap complete. Next:"
 echo "  make doctor"
 echo "  make dev"
-echo "  make migrate   # if you run the API on the host instead of Compose"
+echo "  make migrate   # Compose already migrates; required when the API runs on the host"
+echo "  make seed"
 echo "  make test"

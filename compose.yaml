@@ -1,5 +1,27 @@
 name: budgetlens
 
+x-api-environment: &api-environment
+  APP_ENV: local
+  APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  GIT_SHA: ${GIT_SHA:-unknown}
+  BUILD_TIME: ${BUILD_TIME:-unknown}
+  DATABASE_URL: postgresql+psycopg://budgetlens:budgetlens_local_only@postgres:5432/budgetlens
+  OBJECT_STORAGE_BACKEND: local
+  LOCAL_STORAGE_PATH: /var/lib/budgetlens/storage
+  AUTH_MODE: dev
+  AI_PROVIDER: stub
+  IMPORT_EXECUTOR: ${IMPORT_EXECUTOR:-inline}
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+  DB_READY_TIMEOUT_SECONDS: ${DB_READY_TIMEOUT_SECONDS:-2}
+  JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-600}
+  ORIGINAL_FILE_RETENTION_DAYS: ${ORIGINAL_FILE_RETENTION_DAYS:-90}
+  RATE_LIMIT_UPLOAD_PER_MINUTE: ${RATE_LIMIT_UPLOAD_PER_MINUTE:-20}
+  RATE_LIMIT_EXPORT_PER_MINUTE: ${RATE_LIMIT_EXPORT_PER_MINUTE:-20}
+  RATE_LIMIT_AI_PER_MINUTE: ${RATE_LIMIT_AI_PER_MINUTE:-10}
+  PYTHONPATH: /app/src
+
 services:
   postgres:
     image: postgres:16.6-alpine
@@ -26,29 +48,14 @@ services:
         BUILD_TIME: ${BUILD_TIME:-unknown}
         APP_VERSION: ${APP_VERSION:-0.1.0}
     environment:
-      APP_ENV: local
-      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
-      APP_VERSION: ${APP_VERSION:-0.1.0}
-      GIT_SHA: ${GIT_SHA:-unknown}
-      BUILD_TIME: ${BUILD_TIME:-unknown}
-      DATABASE_URL: postgresql+psycopg://budgetlens:budgetlens_local_only@postgres:5432/budgetlens
-      OBJECT_STORAGE_BACKEND: local
-      LOCAL_STORAGE_PATH: /var/lib/budgetlens/storage
-      AUTH_MODE: dev
-      AI_PROVIDER: stub
-      IMPORT_EXECUTOR: ${IMPORT_EXECUTOR:-inline}
-      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      DB_READY_TIMEOUT_SECONDS: ${DB_READY_TIMEOUT_SECONDS:-2}
-      JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-600}
-      ORIGINAL_FILE_RETENTION_DAYS: ${ORIGINAL_FILE_RETENTION_DAYS:-90}
-      RATE_LIMIT_UPLOAD_PER_MINUTE: ${RATE_LIMIT_UPLOAD_PER_MINUTE:-20}
-      RATE_LIMIT_EXPORT_PER_MINUTE: ${RATE_LIMIT_EXPORT_PER_MINUTE:-20}
-      RATE_LIMIT_AI_PER_MINUTE: ${RATE_LIMIT_AI_PER_MINUTE:-10}
+      <<: *api-environment
+      API_RELOAD: ${API_RELOAD:-1}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - local_storage:/var/lib/budgetlens/storage
+      - ./apps/api/src:/app/src
+      - ./apps/api/migrations:/app/migrations
+      - ./var/storage:/var/lib/budgetlens/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,24 +76,55 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      target: development
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
         NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-local}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-local}
+      WATCHPACK_POLLING: "true"
     ports:
       - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./packages/api-client/src:/app/packages/api-client/src
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 18
+      start_period: 90s
+
+  worker:
+    profiles: ["worker"]
+    build:
+      context: ./apps/api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    environment:
+      <<: *api-environment
+      IMPORT_EXECUTOR: process
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-30}
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./var/storage:/var/lib/budgetlens/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["worker"]
+    restart: on-failure
 
 volumes:
   postgres_data:
-  local_storage:

@@ -17,6 +17,12 @@
   --bl-focus: #175cd3;
   --bl-radius-control: 8px;
   --bl-radius-surface: 12px;
+  --bl-radius-pill: 999px;
+  --bl-shadow-overlay: 0 16px 40px rgba(16, 24, 40, 0.16);
+  --bl-success-50: #ecfdf3;
+  --bl-warning-50: #fffaeb;
+  --bl-danger-50: #fef3f2;
+  --bl-info-50: #eff8ff;
 }
 
 html,

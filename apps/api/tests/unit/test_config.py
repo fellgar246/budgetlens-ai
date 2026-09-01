@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from budgetlens.config import Settings
+from budgetlens.config import Settings, default_env_files
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
@@ -115,6 +115,12 @@ def test_env_example_documents_every_setting() -> None:
             if token not in block:
                 missing.append(f"{env_name} missing {token}")
     assert missing == []
+
+
+def test_default_env_files_include_the_repository_root() -> None:
+    files = default_env_files()
+    assert files[0] == REPO_ROOT / ".env"
+    assert Path(".env") in files
 
 
 def test_env_example_includes_initial_variables() -> None:

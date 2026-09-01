@@ -23,6 +23,10 @@ const config: Config = {
       borderRadius: {
         control: "var(--bl-radius-control)",
         surface: "var(--bl-radius-surface)",
+        pill: "var(--bl-radius-pill)",
+      },
+      boxShadow: {
+        overlay: "var(--bl-shadow-overlay)",
       },
       fontFamily: {
         sans: [

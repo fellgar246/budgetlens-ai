@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from budgetlens.application.audit import record_access_denied
 from budgetlens.domain.errors import DomainError, PermissionDeniedError, database_unavailable
+from budgetlens.observability import metrics_registry
 from budgetlens.presentation.middleware import TRACE_HEADER
 
 logger = logging.getLogger("budgetlens.errors")
@@ -43,6 +44,7 @@ def error_body(
 
 async def validation_handler(request: Request, _exc: Exception) -> JSONResponse:
     trace_id = _trace_id(request)
+    metrics_registry().record_error_code("INVALID_REQUEST")
     return JSONResponse(
         status_code=400,
         content=error_body(
@@ -89,6 +91,7 @@ async def domain_handler(request: Request, exc: Exception) -> JSONResponse:
             trace_id=trace_id,
             metadata={"route": request.url.path, "method": request.method},
         )
+    metrics_registry().record_error_code(error.code)
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(
@@ -117,6 +120,7 @@ async def http_handler(request: Request, exc: Exception) -> JSONResponse:
     else:
         message = "La solicitud no se pudo completar."
         code = "HTTP_ERROR"
+    metrics_registry().record_error_code(code)
     return JSONResponse(
         status_code=status_code,
         content=error_body(
@@ -132,6 +136,7 @@ async def http_handler(request: Request, exc: Exception) -> JSONResponse:
 async def database_unavailable_handler(request: Request, _exc: Exception) -> JSONResponse:
     trace_id = _trace_id(request)
     error = database_unavailable()
+    metrics_registry().record_error_code(error.code)
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(
@@ -150,6 +155,7 @@ async def unhandled_handler(request: Request, _exc: Exception) -> JSONResponse:
         "http.unhandled_error",
         extra={"event": "http.unhandled_error", "trace_id": trace_id, "outcome": "error"},
     )
+    metrics_registry().record_error_code("INTERNAL_ERROR")
     return JSONResponse(
         status_code=500,
         content=error_body(

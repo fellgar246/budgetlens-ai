@@ -669,6 +669,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-017", "AC-018", "AC-019", "AC-020", "AC-021", "AC-022"],
         "evidence": [
             "apps/api/src/budgetlens/application/ai_eval.py",
+            "apps/api/src/budgetlens/application/ai_eval_dataset.py",
             "apps/api/tests/unit/test_ai_eval.py",
         ],
     },
@@ -680,7 +681,11 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "primary_specs": ["Observability/audit"],
         "plans": ["01", "02", "05", "07"],
         "acceptance": ["AC-011", "AC-016"],
-        "evidence": ["apps/api/src/budgetlens/application/audit.py"],
+        "evidence": [
+            "apps/api/src/budgetlens/application/audit.py",
+            "apps/api/src/budgetlens/domain/audit.py",
+            "apps/api/tests/integration/test_domain_api.py::test_critical_actions_audit_success_and_denied",
+        ],
     },
     {
         "id": "FR-AUD-002",
@@ -879,6 +884,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "plans": ["02", "07", "09", "10"],
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_invalid_row_blocks_commit_and_leaves_no_entries",
+            "apps/api/tests/integration/test_risk_invariants.py::test_injected_commit_failure_leaves_no_entries",
         ],
     },
     {
@@ -952,6 +958,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_formula_xlsx_is_rejected",
+            "apps/api/tests/unit/test_upload_boundaries.py::test_macro_enabled_workbook_is_rejected",
         ],
     },
     {
@@ -999,6 +1006,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "evidence": [
             "apps/web/src/app/globals.css",
             "apps/web/src/components/layout/AppSidebar.tsx",
+            "apps/web/e2e/journeys.spec.ts",
         ],
     },
     {
@@ -1030,7 +1038,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Coverage at least 85% on financial-core and 75% backend overall",
         "status": "implemented",
         "plans": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09"],
-        "evidence": ["Makefile"],
+        "evidence": ["Makefile", ".github/workflows/ci.yml"],
     },
     {
         "id": "NFR-MNT-002",
@@ -1119,14 +1127,22 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "id": "AC-001",
         "summary": "Clean clone bootstrap starts web, API, and PostgreSQL",
         "kind": "both",
-        "evidence": ["README.md", "scripts/bootstrap.sh", "apps/web/tests/health-card.test.tsx"],
+        "evidence": [
+            "README.md",
+            "scripts/bootstrap.sh",
+            "scripts/acceptance-local-stack.sh",
+            "apps/api/tests/unit/test_local_environment.py",
+            "apps/api/tests/integration/acceptance/test_operations.py::test_migrated_stack_is_ready_and_at_head",
+            "apps/web/tests/health-card.test.tsx",
+            "apps/web/e2e/acceptance.spec.ts",
+        ],
     },
     {
         "id": "AC-002",
         "summary": "Valid import applies once and dashboard totals match",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_valid_csv_and_xlsx_import_same_totals",
+            "apps/api/tests/integration/acceptance/test_product.py::test_valid_import_applies_once_and_dashboard_matches",
         ],
     },
     {
@@ -1134,7 +1150,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Invalid row blocks commit and leaves no entries",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_invalid_row_blocks_commit_and_leaves_no_entries",
+            "apps/api/tests/integration/acceptance/test_product.py::test_invalid_row_blocks_commit_and_leaves_no_entries",
         ],
     },
     {
@@ -1142,7 +1158,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Retry with the same key does not change row counts",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_commit_retry_is_idempotent_and_analytics_match",
+            "apps/api/tests/integration/acceptance/test_product.py::test_commit_retry_keeps_the_same_row_count",
+            "apps/api/tests/integration/test_risk_invariants.py::test_concurrent_commit_does_not_duplicate_rows",
         ],
     },
     {
@@ -1150,8 +1167,9 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Zero budget yields amount, null percent, unbounded, and N/A",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/unit/domain/test_variance.py::test_zero_budget_nonzero_actual_is_unbounded",
-            "apps/web/tests/format-and-variance.test.tsx",
+            "apps/api/tests/integration/acceptance/test_product.py::test_zero_budget_is_unbounded_with_null_percent",
+            "apps/api/tests/unit/acceptance/test_rules_and_startup.py::test_zero_budget_nonzero_actual_is_unbounded",
+            "apps/web/tests/acceptance-display.test.tsx",
         ],
     },
     {
@@ -1159,7 +1177,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Expense over budget is unfavorable",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/unit/domain/test_variance.py::test_expense_over_budget_is_unfavorable",
+            "apps/api/tests/integration/acceptance/test_product.py::test_expense_over_budget_is_unfavorable",
+            "apps/api/tests/unit/acceptance/test_rules_and_startup.py::test_expense_over_budget_is_unfavorable",
         ],
     },
     {
@@ -1167,7 +1186,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Revenue over budget is favorable",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/unit/domain/test_variance.py::test_revenue_over_budget_is_favorable",
+            "apps/api/tests/integration/acceptance/test_product.py::test_revenue_over_budget_is_favorable",
+            "apps/api/tests/unit/acceptance/test_rules_and_startup.py::test_revenue_over_budget_is_favorable",
         ],
     },
     {
@@ -1175,8 +1195,9 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Drill-down parts sum to the filtered total",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_commit_retry_is_idempotent_and_analytics_match",
-            "apps/web/tests/analysis-filters.test.ts",
+            "apps/api/tests/integration/acceptance/test_product.py::test_department_breakdown_sums_to_filtered_total",
+            "apps/web/tests/acceptance-display.test.tsx",
+            "apps/web/e2e/acceptance.spec.ts",
         ],
     },
     {
@@ -1184,7 +1205,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Export CSV matches the filtered scope and totals",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_export_download_is_authorized_and_expires",
+            "apps/api/tests/integration/acceptance/test_product.py::test_export_csv_matches_scope_currency_version_and_totals",
         ],
     },
     {
@@ -1192,7 +1213,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Scenario preview does not mutate budget or actuals",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_scenario_preview_does_not_mutate_entries",
+            "apps/api/tests/integration/acceptance/test_product.py::test_scenario_preview_matches_saved_and_leaves_source_unchanged",
         ],
     },
     {
@@ -1200,8 +1221,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Cross-tenant read returns 403/404 and audits denial",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_domain_api.py::test_alpha_cannot_read_or_mutate_beta",
-            "apps/api/tests/integration/test_personas_and_tenancy.py::test_forged_organization_id_does_not_reveal_existence",
+            "apps/api/tests/integration/acceptance/test_security.py::test_cross_tenant_read_is_denied_without_metadata",
         ],
     },
     {
@@ -1209,8 +1229,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Cross-tenant mutation does not change the other tenant",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_domain_api.py::test_alpha_cannot_read_or_mutate_beta",
-            "apps/api/tests/integration/test_import_and_analytics.py::test_viewer_cannot_import_and_alpha_cannot_read_beta_job",
+            "apps/api/tests/integration/acceptance/test_security.py::test_cross_tenant_mutations_leave_beta_unchanged",
         ],
     },
     {
@@ -1218,8 +1237,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Switching organization drops the previous tenant cache",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_personas_and_tenancy.py::test_switching_organization_does_not_leak_other_tenant",
-            "apps/web/tests/analysis-filters.test.ts",
+            "apps/api/tests/integration/acceptance/test_security.py::test_switching_organization_uses_the_new_membership",
+            "apps/web/e2e/acceptance.spec.ts",
         ],
     },
     {
@@ -1227,7 +1246,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "XLSX formulas are rejected and never evaluated",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_formula_xlsx_is_rejected",
+            "apps/api/tests/integration/acceptance/test_security.py::test_formula_workbook_is_rejected_and_not_applied",
         ],
     },
     {
@@ -1235,27 +1254,26 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "AUTH_MODE=dev fails closed unless APP_ENV is local or test",
         "kind": "suite",
         "evidence": [
+            "apps/api/tests/unit/acceptance/test_rules_and_startup.py::test_create_app_rejects_dev_auth_in_prod_before_serving",
             "apps/api/tests/unit/test_dev_auth.py::test_create_app_rejects_dev_auth_in_prod",
-            "apps/api/tests/unit/test_dev_auth.py::test_create_app_rejects_dev_auth_outside_local_test",
             "apps/api/tests/unit/test_config.py::test_prod_rejects_dev_auth",
-            "apps/api/tests/unit/test_config.py::test_dev_env_rejects_dev_auth",
         ],
     },
     {
         "id": "AC-016",
         "summary": "Logs and error bodies do not contain secrets",
         "kind": "suite",
-        "evidence": ["apps/api/tests/unit/test_logging_sanitization.py"],
+        "evidence": [
+            "apps/api/tests/integration/acceptance/test_security.py::test_error_responses_and_logs_omit_secrets",
+            "apps/api/tests/unit/test_logging_sanitization.py",
+        ],
     },
     {
         "id": "AC-017",
         "summary": "Copilot answers with a grounded tool and matching figures",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_copilot_uses_tools_and_rejects_mutations",
-            "apps/api/tests/unit/test_ai_eval.py",
-            "apps/api/tests/unit/domain/test_grounding.py",
-            "apps/api/tests/unit/domain/test_tools.py",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_overspend_answer_uses_breakdown_and_matching_figures",
         ],
     },
     {
@@ -1263,8 +1281,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Without data the copilot reports insufficiency",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/unit/domain/test_permissions_and_rules.py::test_ai_cannot_conclude_without_authorized_evidence",
-            "apps/api/tests/unit/test_ai_eval.py",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_period_without_data_does_not_invent_causes",
         ],
     },
     {
@@ -1272,8 +1289,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Mutation requests are refused; no mutable tool exists",
         "kind": "suite",
         "evidence": [
-            "apps/api/tests/integration/test_import_and_analytics.py::test_copilot_uses_tools_and_rejects_mutations",
-            "apps/api/src/budgetlens/application/ai_eval.py",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_mutation_request_is_refused_and_no_mutable_tool_exists",
         ],
     },
     {
@@ -1281,8 +1297,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Prompt injection in a label does not change tenant or tools",
         "kind": "suite",
         "evidence": [
-            "apps/api/src/budgetlens/application/ai_eval.py",
-            "apps/api/tests/unit/test_ai_eval.py",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_injection_label_does_not_change_tenant",
         ],
     },
     {
@@ -1290,8 +1305,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Altered tool args cannot target another tenant",
         "kind": "suite",
         "evidence": [
-            "apps/api/src/budgetlens/application/ai.py",
-            "apps/api/tests/integration/test_import_and_analytics.py::test_copilot_uses_tools_and_rejects_mutations",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_altered_tool_args_cannot_retarget_another_tenant",
         ],
     },
     {
@@ -1299,9 +1313,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Unbounded tool loops stop at the configured limit",
         "kind": "suite",
         "evidence": [
-            "apps/api/src/budgetlens/application/ai.py",
-            "apps/api/tests/unit/test_ai_eval.py",
-            "apps/api/tests/unit/test_ai_concurrency.py",
+            "apps/api/tests/integration/acceptance/test_ai.py::test_unbounded_tool_loop_stops_and_records_a_metric",
         ],
     },
     {
@@ -1309,28 +1321,38 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "summary": "Readiness is 200 with DB and 503 without; liveness stays 200",
         "kind": "suite",
         "evidence": [
+            "apps/api/tests/integration/acceptance/test_operations.py::test_readiness_fails_fast_when_database_is_down_and_liveness_stays_up",
             "apps/api/tests/unit/test_health_live.py",
             "apps/api/tests/unit/test_health_ready.py",
-            "apps/api/tests/integration/test_health_ready.py",
         ],
     },
     {
         "id": "AC-024",
         "summary": "Empty database and N-1 snapshot reach head",
         "kind": "suite",
-        "evidence": ["apps/api/tests/integration/test_migrations.py"],
+        "evidence": [
+            "apps/api/tests/integration/acceptance/test_operations.py::test_empty_and_n_minus_one_databases_reach_head",
+        ],
     },
     {
         "id": "AC-025",
         "summary": "Application rollback restores the previous image without schema downgrade",
-        "kind": "runbook",
-        "evidence": ["docs/OPERATIONS.md#images-and-rollback"],
+        "kind": "both",
+        "evidence": [
+            "docs/OPERATIONS.md#images-and-rollback",
+            "scripts/acceptance-rollback.sh",
+            "apps/api/tests/integration/acceptance/test_operations.py::test_application_rollback_keeps_the_previous_image_without_schema_downgrade",
+        ],
     },
     {
         "id": "AC-026",
         "summary": "An isolated snapshot restore preserves counts and tenant invariants",
-        "kind": "runbook",
-        "evidence": ["docs/OPERATIONS.md#restore"],
+        "kind": "both",
+        "evidence": [
+            "docs/OPERATIONS.md#restore",
+            "scripts/acceptance-restore.sh",
+            "apps/api/tests/integration/acceptance/test_operations.py::test_isolated_restore_preserves_counts_and_tenant_invariants",
+        ],
     },
 ]
 
@@ -1650,6 +1672,7 @@ RISKS: list[RiskRecord] = [
         "evidence": [
             "apps/api/tests/unit/domain/test_variance.py",
             "apps/api/tests/unit/domain/test_money.py",
+            "apps/api/tests/unit/domain/test_financial_properties.py",
         ],
         "blocks_release": [],
     },
@@ -1682,6 +1705,7 @@ RISKS: list[RiskRecord] = [
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_formula_xlsx_is_rejected",
             "apps/api/tests/unit/test_large_preview.py",
+            "apps/api/tests/unit/test_upload_boundaries.py::test_macro_enabled_workbook_is_rejected",
         ],
         "blocks_release": [],
     },
@@ -1782,7 +1806,11 @@ RISKS: list[RiskRecord] = [
         "trigger": "CI contract failure",
         "category": "quality",
         "mitigation_status": "verified",
-        "evidence": ["apps/api/tests/unit/test_openapi.py", "packages/api-client/openapi.json"],
+        "evidence": [
+            "apps/api/tests/unit/test_openapi.py",
+            "packages/api-client/openapi.json",
+            ".github/workflows/ci.yml",
+        ],
         "blocks_release": [],
     },
     {

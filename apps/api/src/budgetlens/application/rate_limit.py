@@ -42,7 +42,14 @@ class SlidingWindowLimiter:
         self._events: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
 
-    def check(self, key: str, *, limit: int, window_seconds: int) -> None:
+    def check(
+        self,
+        key: str,
+        *,
+        limit: int,
+        window_seconds: int,
+        record_metric: bool = True,
+    ) -> None:
         now = time.monotonic()
         cutoff = now - window_seconds
         with self._lock:
@@ -50,7 +57,8 @@ class SlidingWindowLimiter:
             while bucket and bucket[0] <= cutoff:
                 bucket.popleft()
             if len(bucket) >= limit:
-                metrics_registry().record_rate_limited()
+                if record_metric:
+                    metrics_registry().record_rate_limited()
                 raise RateLimitError()
             bucket.append(now)
 
@@ -92,3 +100,21 @@ def enforce_limit(
     if organization_id is not None:
         key = f"{action}:{organization_id}:{user_id}"
     _LIMITER.check(key, limit=limit, window_seconds=window_seconds)
+
+
+def try_limit(
+    action: str,
+    user_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    limit: int,
+    window_seconds: int = 60,
+) -> bool:
+    key = f"{action}:{user_id}"
+    if organization_id is not None:
+        key = f"{action}:{organization_id}:{user_id}"
+    try:
+        _LIMITER.check(key, limit=limit, window_seconds=window_seconds, record_metric=False)
+    except RateLimitError:
+        return False
+    return True

@@ -37,6 +37,7 @@ testpaths = ["tests"]
 addopts = "-q"
 markers = [
     "integration: requires a reachable PostgreSQL instance",
+    "acceptance: cataloged release acceptance criterion",
     "perf: large fixtures or timed local measurements",
 ]
 

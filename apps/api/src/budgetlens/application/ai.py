@@ -32,6 +32,14 @@ from budgetlens.domain.ai_prompt import (
     build_view_context_block,
     correction_instruction,
 )
+from budgetlens.domain.audit import (
+    AI_GROUNDING_FAILED,
+    AI_MESSAGE_REQUESTED,
+    AI_RESPONSE_COMPLETED,
+    AI_RESPONSE_FAILED,
+    AI_TOOL_EXECUTED,
+    CONVERSATION_DELETED,
+)
 from budgetlens.domain.conversation import (
     AiRun,
     Conversation,
@@ -168,7 +176,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="conversation.delete",
+            action=CONVERSATION_DELETED,
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,
@@ -204,7 +212,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="ai.message_requested",
+            action=AI_MESSAGE_REQUESTED,
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,
@@ -228,7 +236,7 @@ class ConversationService:
                 ids=self._ids,
                 organization_id=context.organization_id,
                 actor_id=context.user.id,
-                action="ai.response_failed",
+                action=AI_RESPONSE_FAILED,
                 resource_type="conversation",
                 resource_id=conversation.id,
                 trace_id=context.trace_id,
@@ -401,7 +409,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="ai.response_completed",
+            action=AI_RESPONSE_COMPLETED,
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,
@@ -428,6 +436,7 @@ class ConversationService:
             tool_failures=sum(
                 1 for item in pending_tools if item.status is not ToolExecutionStatus.SUCCEEDED
             ),
+            grounding_failed=status is AiRunStatus.GROUNDING_FAILED,
         )
         scope = {
             "fiscal_year": query.fiscal_year,
@@ -543,7 +552,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="ai.grounding_failed",
+            action=AI_GROUNDING_FAILED,
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,
@@ -613,7 +622,7 @@ class ConversationService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="ai.tool_executed",
+            action=AI_TOOL_EXECUTED,
             resource_type="conversation",
             resource_id=conversation.id,
             trace_id=context.trace_id,

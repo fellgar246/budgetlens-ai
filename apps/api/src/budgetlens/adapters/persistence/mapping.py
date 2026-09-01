@@ -228,10 +228,13 @@ def apply_budget_version(row: BudgetVersionRow, entity: BudgetVersion) -> None:
 
 
 def audit_from_row(row: AuditEventRow) -> AuditEvent:
+    actor_ref = row.actor_ref or (str(row.actor_id) if row.actor_id is not None else "auth")
     return AuditEvent(
         id=row.id,
         organization_id=row.organization_id,
+        actor_type=row.actor_type,
         actor_id=row.actor_id,
+        actor_ref=actor_ref,
         action=row.action,
         resource_type=row.resource_type,
         resource_id=row.resource_id,
@@ -246,7 +249,9 @@ def audit_from_row(row: AuditEventRow) -> AuditEvent:
 def apply_audit(row: AuditEventRow, entity: AuditEvent) -> None:
     row.id = entity.id
     row.organization_id = entity.organization_id
+    row.actor_type = entity.actor_type
     row.actor_id = entity.actor_id
+    row.actor_ref = entity.actor_ref
     row.action = entity.action
     row.resource_type = entity.resource_type
     row.resource_id = entity.resource_id

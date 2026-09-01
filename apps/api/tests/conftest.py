@@ -18,6 +18,13 @@ DEFAULT_DATABASE_URL = (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_rate_limits() -> Iterator[None]:
+    limiter().reset()
+    yield
+    limiter().reset()
+
+
 @pytest.fixture
 def env_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_ENV", "test")

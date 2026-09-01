@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import re
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -45,6 +46,8 @@ BLOCKED_LOG_KEYS = frozenset(
         "presigned",
     }
 )
+SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{1,64}$")
+DURATION_BUCKETS_MS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000)
 _active_requests = 0
 _active_lock = threading.Lock()
 
@@ -79,6 +82,15 @@ def status_class(status_code: int) -> str:
     return f"{status_code // 100}xx"
 
 
+def logical_query_name(statement: str, *, query_name: str | None = None) -> str:
+    if query_name and re.fullmatch(r"[a-z][a-z0-9._-]{1,64}", query_name):
+        return query_name
+    head = statement.lstrip().split(None, 1)[0].upper() if statement.strip() else "OTHER"
+    if head in {"SELECT", "INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "ROLLBACK"}:
+        return f"sql.{head.lower()}"
+    return "sql.other"
+
+
 @dataclass
 class _MetricSeries:
     count: int = 0
@@ -107,16 +119,29 @@ class MetricsRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._requests: dict[tuple[str, str, str], _MetricSeries] = defaultdict(_MetricSeries)
+        self._duration_histogram: dict[str, int] = {
+            str(bucket): 0 for bucket in DURATION_BUCKETS_MS
+        }
+        self._duration_histogram["+Inf"] = 0
         self._jobs_timed_out = 0
         self._jobs_by_status: dict[str, int] = defaultdict(int)
+        self._jobs_by_type: dict[str, int] = defaultdict(int)
+        self._validation_ms = _MetricSeries()
+        self._apply_ms = _MetricSeries()
+        self._rows_processed = 0
+        self._rows_error = 0
+        self._bytes_processed = 0
         self._ai_runs = 0
         self._ai_tool_calls = 0
         self._ai_tool_failures = 0
+        self._ai_grounding_failures = 0
         self._ai_input_units = 0
         self._ai_output_units = 0
         self._ai_latency_ms = _MetricSeries()
+        self._queries: dict[str, _MetricSeries] = defaultdict(_MetricSeries)
         self._rollbacks = 0
         self._rate_limited = 0
+        self._error_codes: dict[str, int] = defaultdict(int)
 
     def record_request(
         self,
@@ -129,12 +154,40 @@ class MetricsRegistry:
         key = (method, route, status_class(status_code))
         with self._lock:
             self._requests[key].observe(duration_ms, error=status_code >= 500)
+            placed = False
+            for bucket in DURATION_BUCKETS_MS:
+                if duration_ms <= bucket:
+                    self._duration_histogram[str(bucket)] += 1
+                    placed = True
+                    break
+            if not placed:
+                self._duration_histogram["+Inf"] += 1
 
-    def record_job_status(self, status: str, *, timed_out: bool = False) -> None:
+    def record_job_status(
+        self,
+        status: str,
+        *,
+        timed_out: bool = False,
+        job_type: str | None = None,
+        phase: str | None = None,
+        duration_ms: float | None = None,
+        rows_processed: int = 0,
+        rows_error: int = 0,
+        bytes_processed: int = 0,
+    ) -> None:
         with self._lock:
             self._jobs_by_status[status] += 1
+            if job_type:
+                self._jobs_by_type[job_type] += 1
             if timed_out:
                 self._jobs_timed_out += 1
+            if duration_ms is not None and phase == "validation":
+                self._validation_ms.observe(duration_ms, error=status == "failed")
+            if duration_ms is not None and phase == "apply":
+                self._apply_ms.observe(duration_ms, error=status == "failed")
+            self._rows_processed += rows_processed
+            self._rows_error += rows_error
+            self._bytes_processed += bytes_processed
 
     def record_ai_run(
         self,
@@ -144,6 +197,7 @@ class MetricsRegistry:
         output_units: int,
         tool_calls: int,
         tool_failures: int,
+        grounding_failed: bool = False,
     ) -> None:
         with self._lock:
             self._ai_runs += 1
@@ -151,7 +205,13 @@ class MetricsRegistry:
             self._ai_tool_failures += tool_failures
             self._ai_input_units += input_units
             self._ai_output_units += output_units
-            self._ai_latency_ms.observe(latency_ms, error=tool_failures > 0)
+            if grounding_failed:
+                self._ai_grounding_failures += 1
+            self._ai_latency_ms.observe(latency_ms, error=tool_failures > 0 or grounding_failed)
+
+    def record_query(self, name: str, duration_ms: float) -> None:
+        with self._lock:
+            self._queries[name].observe(duration_ms, error=False)
 
     def record_rollback(self) -> None:
         with self._lock:
@@ -160,6 +220,12 @@ class MetricsRegistry:
     def record_rate_limited(self) -> None:
         with self._lock:
             self._rate_limited += 1
+
+    def record_error_code(self, code: str) -> None:
+        if not SAFE_ERROR_CODE.fullmatch(code):
+            return
+        with self._lock:
+            self._error_codes[code] += 1
 
     def snapshot(
         self,
@@ -179,9 +245,18 @@ class MetricsRegistry:
                 }
                 for (method, route, klass), series in sorted(self._requests.items())
             ]
+            rows_processed = self._rows_processed
+            rows_error = self._rows_error
             jobs = {
                 "timed_out": self._jobs_timed_out,
                 "by_status": dict(self._jobs_by_status),
+                "by_type": dict(self._jobs_by_type),
+                "validation_duration_ms_p95": self._validation_ms.percentile(0.95),
+                "apply_duration_ms_p95": self._apply_ms.percentile(0.95),
+                "rows_processed": rows_processed,
+                "rows_error": rows_error,
+                "error_ratio": (round(rows_error / rows_processed, 6) if rows_processed else None),
+                "bytes_processed": self._bytes_processed,
             }
             estimated_cost = None
             if input_unit_cost_micros or output_unit_cost_micros:
@@ -198,22 +273,39 @@ class MetricsRegistry:
                 "runs": self._ai_runs,
                 "tool_calls": self._ai_tool_calls,
                 "tool_failures": self._ai_tool_failures,
+                "grounding_failures": self._ai_grounding_failures,
+                "input_units": self._ai_input_units,
+                "output_units": self._ai_output_units,
                 "latency_ms_p95": self._ai_latency_ms.percentile(0.95),
                 "estimated_cost": estimated_cost,
             }
+            queries = [
+                {
+                    "name": name,
+                    "count": series.count,
+                    "duration_ms_p95": series.percentile(0.95),
+                }
+                for name, series in sorted(self._queries.items())
+            ]
             rollbacks = self._rollbacks
             rate_limited = self._rate_limited
+            error_codes = dict(self._error_codes)
+            duration_histogram = dict(self._duration_histogram)
         pool = _pool_snapshot()
         with _active_lock:
             active = _active_requests
         return {
             "requests": requests,
+            "request_duration_histogram": duration_histogram,
             "active_requests": active,
             "db_pool": pool,
+            "db_queries": queries,
             "db_rollbacks": rollbacks,
+            "migration_version": _migration_version(),
             "jobs": jobs,
             "ai": ai,
             "rate_limited": rate_limited,
+            "error_codes": error_codes,
         }
 
 
@@ -245,11 +337,27 @@ def _pool_snapshot() -> dict[str, int]:
     try:
         pool = get_engine().pool
     except Exception:
-        return {"checked_out": 0, "overflow": 0, "size": 0}
+        return {"checked_out": 0, "overflow": 0, "size": 0, "wait": 0}
     checked_out = int(getattr(pool, "checkedout", lambda: 0)())
     overflow = int(getattr(pool, "overflow", lambda: 0)())
     size = int(getattr(pool, "size", lambda: 0)())
-    return {"checked_out": checked_out, "overflow": overflow, "size": size}
+    return {
+        "checked_out": checked_out,
+        "overflow": overflow,
+        "size": size,
+        "wait": max(0, overflow),
+    }
+
+
+def _migration_version() -> str | None:
+    try:
+        from sqlalchemy import text
+
+        with get_engine().connect() as connection:
+            value = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    except Exception:
+        return None
+    return str(value) if value is not None else None
 
 
 def bind_log_record(record: logging.LogRecord, extra: dict[str, Any]) -> None:

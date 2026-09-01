@@ -4,6 +4,7 @@ from datetime import date
 from uuid import UUID
 
 from budgetlens.domain.ai_prompt import (
+    PROMPT_VERSION,
     UNTRUSTED_CLOSE,
     UNTRUSTED_OPEN,
     build_system_prompt,
@@ -30,3 +31,4 @@ def test_system_prompt_declares_read_only_role_and_delimits_org_name() -> None:
     assert UNTRUSTED_CLOSE in prompt
     assert "MXN" in prompt
     assert delimit_untrusted_name("Alpha").startswith(UNTRUSTED_OPEN)
+    assert PROMPT_VERSION
