@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from sqlalchemy import select
 
-from budgetlens.adapters.persistence.models import MembershipRow, OrganizationRow
 from budgetlens.adapters.persistence.repositories import SqlUserRepository
 from budgetlens.domain.errors import NotFoundError
 from budgetlens.presentation.deps import DbSession, SettingsDep
@@ -20,15 +18,11 @@ router = APIRouter(tags=["dev"])
 def list_dev_identities(settings: SettingsDep, session: DbSession) -> DevIdentityListResponse:
     if settings.auth_mode != "dev" or settings.app_env not in {"local", "test"}:
         raise NotFoundError()
-    users = SqlUserRepository(session).list_all()
+    repository = SqlUserRepository(session)
+    users = repository.list_all()
     items: list[DevIdentity] = []
     for user in users:
-        rows = session.execute(
-            select(MembershipRow, OrganizationRow)
-            .join(OrganizationRow, OrganizationRow.id == MembershipRow.organization_id)
-            .where(MembershipRow.user_id == user.id)
-            .order_by(OrganizationRow.name)
-        ).all()
+        memberships = repository.list_memberships_with_organizations(user.id)
         items.append(
             DevIdentity(
                 id=user.id,
@@ -37,11 +31,11 @@ def list_dev_identities(settings: SettingsDep, session: DbSession) -> DevIdentit
                 platform_role=user.platform_role.value if user.platform_role else None,
                 memberships=[
                     DevMembership(
-                        organization_id=org.id,
-                        organization_name=org.name,
-                        role=membership.role,
+                        organization_id=organization.id,
+                        organization_name=organization.name,
+                        role=membership.role.value,
                     )
-                    for membership, org in rows
+                    for membership, organization in memberships
                 ],
             )
         )

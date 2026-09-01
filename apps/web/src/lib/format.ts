@@ -1,3 +1,5 @@
+import { copy } from "./copy";
+
 export function formatMoney(amount: string, currency: string, locale = "es-MX"): string {
   const negative = amount.startsWith("-");
   const raw = negative ? amount.slice(1) : amount;
@@ -31,10 +33,10 @@ export function formatPercent(ratio: string | null, locale = "es-MX"): string {
 }
 
 export function favorabilityLabel(value: string): string {
-  if (value === "favorable") return "Favorable";
-  if (value === "unfavorable") return "Desfavorable";
-  if (value === "neutral") return "Neutral";
-  return "Sin clasificar";
+  if (value === "favorable") return copy.favorable;
+  if (value === "unfavorable") return copy.unfavorable;
+  if (value === "neutral") return copy.neutral;
+  return copy.unknownFavorability;
 }
 
 export function fiscalYearBounds(

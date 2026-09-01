@@ -34,7 +34,7 @@ test-integration:
 	cd "$(API)" && uv run pytest -m integration
 
 test-e2e:
-	@echo "End-to-end browser tests are not part of the walking skeleton. Install Playwright browsers when that suite is added."
+	$(PNPM) --filter web test:e2e
 
 lint:
 	cd "$(API)" && uv run ruff check src tests migrations

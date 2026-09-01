@@ -35,18 +35,19 @@ else
 fi
 
 echo "Scanning tracked files for secrets..."
-if git -C "$ROOT" grep -I -E "AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE KEY|aws_secret_access_key" -- ':!.env.example' >"$TMPDIR/budgetlens-secret-scan.txt" 2>/dev/null; then
+if git -C "$ROOT" grep -I -E "AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE KEY|aws_secret_access_key" -- ':!.env.example' ':!scripts/scan.sh' >"$TMPDIR/budgetlens-secret-scan.txt" 2>/dev/null; then
   fail "possible secret material in tracked files"
   cat "$TMPDIR/budgetlens-secret-scan.txt"
 else
   echo "PASS  secret scan"
 fi
 
-TF_FILE=$(find "$ROOT/infrastructure" -name "*.tf" -print -quit 2>/dev/null || true)
+TF_DIR="$ROOT/infrastructure/terraform"
+TF_FILE=$(find "$TF_DIR" -name "*.tf" -print -quit 2>/dev/null || true)
 if [ -n "$TF_FILE" ]; then
   echo "Checking Terraform formatting..."
   if command -v terraform >/dev/null 2>&1; then
-    if terraform -chdir="$ROOT/infrastructure/terraform" fmt -check; then
+    if terraform -chdir="$TF_DIR" fmt -check; then
       echo "PASS  terraform fmt"
     else
       fail "terraform fmt -check failed"
@@ -54,8 +55,40 @@ if [ -n "$TF_FILE" ]; then
   else
     echo "NOTE  terraform binary is not installed"
   fi
+
+  echo "Linting Terraform..."
+  if command -v tflint >/dev/null 2>&1; then
+    pinned_tflint="$(cat "$TF_DIR/.tflint-version")"
+    found_tflint="$(tflint --version 2>/dev/null | awk 'NR==1 { print $3 }' | tr -d 'v')"
+    if [ -n "$found_tflint" ] && [ "$found_tflint" != "$pinned_tflint" ]; then
+      echo "NOTE  tflint $found_tflint found; repository pin is $pinned_tflint"
+    fi
+    if tflint --chdir="$TF_DIR"; then
+      echo "PASS  tflint"
+    else
+      fail "tflint failed"
+    fi
+  else
+    echo "NOTE  tflint is not installed (pin $TF_DIR/.tflint-version)"
+  fi
+
+  echo "Scanning Terraform..."
+  if command -v checkov >/dev/null 2>&1; then
+    pinned_checkov="$(cat "$TF_DIR/.checkov-version")"
+    found_checkov="$(checkov --version 2>/dev/null | awk 'NR==1 { print $NF }' | tr -d 'v')"
+    if [ -n "$found_checkov" ] && [ "$found_checkov" != "$pinned_checkov" ]; then
+      echo "NOTE  checkov $found_checkov found; repository pin is $pinned_checkov"
+    fi
+    if checkov -d "$TF_DIR" --config-file "$TF_DIR/.checkov.yaml" --framework terraform; then
+      echo "PASS  checkov"
+    else
+      fail "checkov reported a finding"
+    fi
+  else
+    echo "NOTE  checkov is not installed (pin $TF_DIR/.checkov-version)"
+  fi
 else
-  echo "NOTE  no Terraform files to format yet"
+  echo "NOTE  no Terraform files to lint or scan yet"
 fi
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && command -v trivy >/dev/null 2>&1; then

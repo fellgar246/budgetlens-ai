@@ -73,6 +73,20 @@ class SqlUserRepository:
         rows = self._session.scalars(select(UserRow).order_by(UserRow.email, UserRow.id)).all()
         return [user_from_row(row) for row in rows]
 
+    def list_memberships_with_organizations(
+        self, user_id: UUID
+    ) -> list[tuple[Membership, Organization]]:
+        rows = self._session.execute(
+            select(MembershipRow, OrganizationRow)
+            .join(OrganizationRow, OrganizationRow.id == MembershipRow.organization_id)
+            .where(MembershipRow.user_id == user_id)
+            .order_by(OrganizationRow.name, OrganizationRow.id)
+        ).all()
+        return [
+            (membership_from_row(membership), organization_from_row(organization))
+            for membership, organization in rows
+        ]
+
 
 class SqlOrganizationRepository:
     def __init__(self, session: Session) -> None:

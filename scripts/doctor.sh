@@ -108,6 +108,30 @@ else
   warn "terraform is not installed. Required later for AWS environments; not needed to run the local app."
 fi
 
+if have tflint; then
+  tflint_version="$(tflint --version 2>/dev/null | awk 'NR==1 { print $3 }' | tr -d 'v')"
+  pinned_tflint="$(cat "$ROOT/infrastructure/terraform/.tflint-version")"
+  if [ "$tflint_version" = "$pinned_tflint" ]; then
+    ok "tflint $tflint_version"
+  else
+    warn "tflint $tflint_version found; repository pin is $pinned_tflint. Local app does not require TFLint."
+  fi
+else
+  warn "tflint is not installed. Required later for AWS environments; pin is infrastructure/terraform/.tflint-version."
+fi
+
+if have checkov; then
+  checkov_version="$(checkov --version 2>/dev/null | awk 'NR==1 { print $NF }' | tr -d 'v')"
+  pinned_checkov="$(cat "$ROOT/infrastructure/terraform/.checkov-version")"
+  if [ "$checkov_version" = "$pinned_checkov" ]; then
+    ok "checkov $checkov_version"
+  else
+    warn "checkov $checkov_version found; repository pin is $pinned_checkov. Local app does not require Checkov."
+  fi
+else
+  warn "checkov is not installed. Required later for AWS environments; pin is infrastructure/terraform/.checkov-version."
+fi
+
 if have make; then
   ok "make $(make --version | head -n 1 | awk '{print $3}')"
 else

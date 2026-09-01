@@ -98,4 +98,4 @@ The read threshold is p95 < 500 ms, excluding AI. Preview of a 25 MiB CSV must f
 make scan
 ```
 
-A confirmed critical vulnerability blocks the release.
+The scan covers Python and JavaScript dependencies, a secret-pattern grep, Terraform `fmt` / TFLint / Checkov when `.tf` files exist, and an optional image scan. A confirmed critical vulnerability blocks the release.

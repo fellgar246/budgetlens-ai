@@ -7,7 +7,7 @@ This repository is a monorepo:
 - `apps/web` — Next.js static web app
 - `apps/api` — FastAPI service with domain, application, ports, adapters, and HTTP routes
 - `packages/api-client` — typed HTTP client and OpenAPI snapshot
-- `infrastructure/terraform` — version pin only in this walking skeleton
+- `infrastructure/terraform` — `bootstrap/`, `modules/`, and `environments/` for AWS; version pins only until those roots are filled
 - `compose.yaml` — local web, API, and PostgreSQL
 
 ## Pinned toolchain
@@ -20,6 +20,9 @@ This repository is a monorepo:
 | uv | latest compatible with the lockfile | `apps/api/uv.lock` |
 | PostgreSQL | 16.6 | `compose.yaml` |
 | Terraform | 1.13.5 | `infrastructure/terraform/.terraform-version` |
+| TFLint | 0.64.0 | `infrastructure/terraform/.tflint-version` |
+| Checkov | 3.3.9 | `infrastructure/terraform/.checkov-version` |
+| Playwright | 1.62.1 | `apps/web/package.json` |
 
 Task runner: **Make**. Type checker: **Pyright** (strict). Database access: **synchronous SQLAlchemy 2** with the `psycopg` driver so Alembic and the API share one model.
 
@@ -72,13 +75,14 @@ pnpm --filter web dev
 | `make seed` | Upsert Alpha/Beta tenants, local users, and catalog dimensions. Idempotent. |
 | `make test` | API unit tests and web unit tests. |
 | `make test-integration` | API tests that need PostgreSQL. |
+| `make test-e2e` | Playwright smoke against a running app (`E2E_BASE_URL`, default http://localhost:3000). |
 | `make lint` | Ruff, Pyright, ESLint, TypeScript, Prettier check. |
 | `make format` | Apply formatters. |
 | `make openapi` | Refresh `packages/api-client/openapi.json`. |
 | `make ci` | Lint, coverage gates, OpenAPI export, web build, image builds when Docker is up. |
-| `make coverage` | 85% en el motor financiero y 75% backend con la suite de integración. |
-| `make coverage-unit` | Cobertura unitaria informativa, sin umbral de fallo. |
-| `make scan` | Dependency, secret, and optional image scans. Critical findings fail the command. |
+| `make coverage` | 85% on the financial engine and 75% backend with the integration suite. |
+| `make coverage-unit` | Informational unit coverage, no fail threshold. |
+| `make scan` | Dependency, secret, Terraform (fmt/TFLint/Checkov), and optional image scans. Critical findings fail the command. |
 | `make watchdog` | Mark stale processing import jobs as timed out. |
 | `python -m budgetlens import-job validate\|apply <job-id>` | Run the same import modules as a worker process. |
 | `make retain-files` | Delete original import files older than the retention window. |
@@ -88,7 +92,7 @@ pnpm --filter web dev
 
 ## Configuration
 
-Copy `.env.example` to `.env`. Every variable is documented there with type, secrecy, and environments. Precedence: safe defaults, then `.env`, then process environment.
+Copy `.env.example` to `.env`. Every variable is documented there with type, secrecy, and environments. Precedence: safe defaults, then the untracked `.env`, then process environment variables, then Secrets Manager for secrets on AWS.
 
 `AUTH_MODE=dev` is rejected when `APP_ENV=prod`. API docs are enabled only when `APP_ENV` is `local` or `test`.
 
@@ -120,7 +124,7 @@ If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.e
 
 **Local storage permission errors.** The default path is `./var/storage` (ignored by Git). Recreate it with `mkdir -p var/storage`.
 
-**Playwright browsers are missing.** The walking skeleton does not run browser end-to-end tests. `make test-e2e` explains this until that suite exists.
+**Playwright browsers are missing.** Install Chromium once: `pnpm --filter web exec playwright install chromium`. Start the app with `make dev`, then run `make test-e2e`.
 
 **Readiness returns 503.** PostgreSQL is not reachable. Check `docker compose ps` and `DATABASE_URL`. Liveness stays 200 while the process can serve requests.
 
@@ -128,4 +132,6 @@ If a host port is busy, change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.e
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
 
-Operational runbooks for rollback, restore, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`.
+Operational runbooks for rollback, restore, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
+
+`packages/api-client/openapi.json` is generated (`make openapi`). A snapshot change needs an explicit review; do not edit that file by hand.

@@ -199,6 +199,7 @@ export const copy = {
   figuresError: "No se pudieron cargar las cifras.",
   favorable: "Favorable",
   unfavorable: "Desfavorable",
+  neutral: "Neutral",
   unknownFavorability: "Sin clasificar",
   cancelImport: "Cancelar importación",
   errorCorrective: "Revisa los datos, corrige lo indicado e inténtalo de nuevo.",
