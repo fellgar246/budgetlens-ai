@@ -149,6 +149,7 @@ class AiRunStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     LIMITED = "limited"
+    GROUNDING_FAILED = "grounding_failed"
 
 
 class ToolExecutionStatus(StrEnum):

@@ -102,6 +102,8 @@ def test_s3_adapter_round_trip_and_missing_object() -> None:
         bucket="budgetlens-data", region="us-east-1", prefix="files", client=client
     )
     key = storage.generate_key(organization_id=UUID(int=1), namespace="imports/a", name="book.csv")
+    assert str(UUID(int=1)) not in key
+    assert "book.csv" in key
     storage.put(key, b"period,amount", content_type="text/csv")
     assert storage.exists(key) is True
     assert storage.get(key) == b"period,amount"

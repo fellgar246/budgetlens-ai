@@ -13,6 +13,7 @@ import {
 } from "@budgetlens/api-client";
 
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 import { useSession } from "@/features/session/SessionProvider";
 
 export function useCatalogOptions() {
@@ -30,7 +31,7 @@ export function useCatalogOptions() {
     if (!userId || !organizationId) {
       return;
     }
-    const auth = { token: userId, organizationId };
+    const auth = sessionAuth(userId, organizationId);
     void Promise.all([
       listAccounts(apiBaseUrl(), auth),
       listDepartments(apiBaseUrl(), auth),

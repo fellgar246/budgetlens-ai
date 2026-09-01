@@ -29,6 +29,7 @@ import { EMPTY_CAPABILITIES } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
 import { readDevOrganizationId, readDevUserId, writeDevSession } from "@/lib/dev-session";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 
 type SessionContextValue = {
   userId: string;
@@ -72,7 +73,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
     const loadOrganizations = () => {
-      void listOrganizations(apiBaseUrl(), { token: userId })
+      void listOrganizations(apiBaseUrl(), sessionAuth(userId))
         .then((result) => {
           setOrganizations(result.data.items);
           if (organizationId && !result.data.items.some((item) => item.id === organizationId)) {
@@ -93,10 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
     const loadMe = () => {
-      void getMe(apiBaseUrl(), {
-        token: userId,
-        organizationId: organizationId || undefined,
-      })
+      void getMe(apiBaseUrl(), sessionAuth(userId, organizationId || undefined))
         .then((result) => setMe(result.data))
         .catch(() => setMe(null));
     };

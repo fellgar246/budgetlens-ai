@@ -31,6 +31,9 @@ MAX_SHEETS = 8
 MAX_ROWS = 100_000
 MAX_COLUMNS = 40
 MAX_CELLS = 500_000
+MAX_CELL_LENGTH = 500
+MAX_UNCOMPRESSED_BYTES = 80_000_000
+MAX_COMPRESSION_RATIO = 20
 DANGEROUS_ZIP_NAMES = (
     "xl/vbaProject.bin",
     "xl/externalLinks/",
@@ -128,7 +131,7 @@ def _parse_csv(content: bytes) -> WorkbookTable:
                 field_issue("file", "MISSING_COLUMN", "La primera fila debe ser el encabezado.")
             ],
         )
-    headers = [cell.strip() for cell in raw_rows[0]]
+    headers = [_bounded_text(cell.strip()) for cell in raw_rows[0]]
     if not any(headers):
         raise ValidationError(
             "MISSING_COLUMN",
@@ -141,7 +144,9 @@ def _parse_csv(content: bytes) -> WorkbookTable:
     for index, raw in enumerate(raw_rows[1:], start=2):
         if len(rows) >= MAX_ROWS:
             raise PayloadTooLargeError("El archivo excede el número máximo de filas.")
-        values = {headers[i]: (raw[i] if i < len(raw) else "") for i in range(len(headers))}
+        values = {
+            headers[i]: _bounded_text(raw[i] if i < len(raw) else "") for i in range(len(headers))
+        }
         rows.append(ParsedCellRow(row_number=index, values=values, formula_fields=()))
     return WorkbookTable(headers=headers, rows=rows, sheet_name="csv", delimiter=delimiter)
 
@@ -150,6 +155,7 @@ def _reject_dangerous_xlsx(content: bytes) -> None:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             names = archive.namelist()
+            _reject_zip_bomb(archive)
     except zipfile.BadZipFile as exc:
         raise ValidationError(
             "UNSUPPORTED_FILE",
@@ -241,11 +247,37 @@ def _sheet_table(sheet: Worksheet) -> WorkbookTable:
     return WorkbookTable(headers=headers, rows=rows, sheet_name=sheet.title, delimiter=None)
 
 
+def _reject_zip_bomb(archive: zipfile.ZipFile) -> None:
+    uncompressed = 0
+    compressed = 0
+    for info in archive.infolist():
+        uncompressed += max(0, info.file_size)
+        compressed += max(0, info.compress_size)
+        if info.file_size > MAX_UNCOMPRESSED_BYTES:
+            raise PayloadTooLargeError("El archivo comprimido excede el tamaño permitido.")
+    if uncompressed > MAX_UNCOMPRESSED_BYTES:
+        raise PayloadTooLargeError("El archivo comprimido excede el tamaño permitido.")
+    if compressed > 0 and uncompressed / compressed > MAX_COMPRESSION_RATIO:
+        raise PayloadTooLargeError("El archivo comprimido está desproporcionado.")
+
+
+def _bounded_text(value: str) -> str:
+    if len(value) > MAX_CELL_LENGTH:
+        raise ValidationError(
+            "UNSUPPORTED_FILE",
+            "Una celda excede la longitud máxima permitida.",
+            field_errors=[
+                field_issue("file", "UNSUPPORTED_FILE", "Reduce el tamaño de las celdas.")
+            ],
+        )
+    return value
+
+
 def _cell_text(cell: object) -> str:
     value = getattr(cell, "value", None)
     if value is None:
         return ""
-    return str(value)
+    return _bounded_text(str(value))
 
 
 def _is_formula(cell: object) -> bool:

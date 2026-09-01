@@ -67,7 +67,7 @@ from budgetlens.domain.importing import (
 )
 from budgetlens.domain.organization import Organization, normalize_name
 from budgetlens.domain.permissions import can_create_missing_dimensions, require_permission
-from budgetlens.domain.text_safety import redact_cell
+from budgetlens.domain.text_safety import redact_cell, sanitize_filename
 from budgetlens.observability import metrics_registry
 from budgetlens.ports.imports import ImportExecutor
 from budgetlens.ports.parsing import WorkbookParser
@@ -141,8 +141,8 @@ class ImportService:
             raise PayloadTooLargeError()
         if len(sha256) != 64 or any(char not in "0123456789abcdefABCDEF" for char in sha256):
             raise ValidationError("UNSUPPORTED_FILE", "La huella del archivo no es válida.")
-        filename = Path(original_filename).name
-        if not filename:
+        filename = sanitize_filename(original_filename)
+        if filename == "upload.bin" and not Path(original_filename).name.strip():
             raise ValidationError("UNSUPPORTED_FILE", "El nombre de archivo no es válido.")
         organization = self._require_org(context.organization_id)
         version = self._require_version_for_create(
@@ -206,6 +206,7 @@ class ImportService:
         enforce_limit(
             "upload",
             context.user.id,
+            organization_id=context.organization_id,
             limit=self._settings.rate_limit_upload_per_minute,
         )
         job = self.get(context, job_id)

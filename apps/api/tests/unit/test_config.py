@@ -58,12 +58,26 @@ def test_prod_rejects_dev_auth() -> None:
         )
 
 
+def test_dev_env_rejects_dev_auth() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "app_env": "dev",
+                "auth_mode": "dev",
+                "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+            }
+        )
+
+
 def test_prod_accepts_oidc() -> None:
     settings = Settings.model_validate(
         {
             "app_env": "prod",
             "auth_mode": "oidc",
             "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+            "oidc_issuer": "https://cognito.example/pool",
+            "oidc_audience": "web-client",
+            "oidc_jwks_url": "https://cognito.example/jwks",
         }
     )
     assert settings.docs_enabled is False

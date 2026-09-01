@@ -19,6 +19,17 @@ def test_create_app_rejects_dev_auth_in_prod() -> None:
         )
 
 
+def test_create_app_rejects_dev_auth_outside_local_test() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "app_env": "dev",
+                "auth_mode": "dev",
+                "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+            }
+        )
+
+
 def test_oidc_mode_does_not_serve_dev_identities(
     env_settings: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

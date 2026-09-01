@@ -12,6 +12,7 @@ import { useCatalogOptions } from "@/features/analysis/useCatalogOptions";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 import { fiscalYearBounds, formatMoney, percentToRatio } from "@/lib/format";
 
 export function ScenariosPage() {
@@ -103,19 +104,15 @@ export function ScenariosPage() {
             onClick={() => {
               if (!version || !bounds || !userId || !organizationId) return;
               setError(null);
-              void previewScenario(
-                apiBaseUrl(),
-                { token: userId, organizationId },
-                {
-                  fiscal_year: version.fiscal_year,
-                  period_from: bounds.from,
-                  period_to: bounds.to,
-                  budget_version_id: version.id,
-                  baseline_type: "budget",
-                  department_ids: departmentId ? [departmentId] : [],
-                  rules: rulePayload(),
-                },
-              )
+              void previewScenario(apiBaseUrl(), sessionAuth(userId, organizationId), {
+                fiscal_year: version.fiscal_year,
+                period_from: bounds.from,
+                period_to: bounds.to,
+                budget_version_id: version.id,
+                baseline_type: "budget",
+                department_ids: departmentId ? [departmentId] : [],
+                rules: rulePayload(),
+              })
                 .then((result) => setPreview(result.data))
                 .catch((err: Error) => setError(err));
             }}
@@ -128,17 +125,13 @@ export function ScenariosPage() {
             disabled={!preview || !name || !version || !userId || !organizationId}
             onClick={() => {
               if (!version || !userId || !organizationId) return;
-              void createScenario(
-                apiBaseUrl(),
-                { token: userId, organizationId },
-                {
-                  name,
-                  baseline_type: "budget",
-                  budget_version_id: version.id,
-                  fiscal_year: version.fiscal_year,
-                  rules: rulePayload(),
-                },
-              ).catch((err: Error) => setError(err));
+              void createScenario(apiBaseUrl(), sessionAuth(userId, organizationId), {
+                name,
+                baseline_type: "budget",
+                budget_version_id: version.id,
+                fiscal_year: version.fiscal_year,
+                rules: rulePayload(),
+              }).catch((err: Error) => setError(err));
             }}
           >
             {copy.saveScenario}

@@ -26,6 +26,7 @@ import { useSession } from "@/features/session/SessionProvider";
 import { withPathFilters } from "@/lib/analysis-filters";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { queryFromFilters } from "@/lib/query-from-filters";
 
@@ -57,7 +58,7 @@ export function DashboardPage() {
       setStatus("idle");
       return;
     }
-    const auth = { token: userId, organizationId };
+    const auth = sessionAuth(userId, organizationId);
     setStatus("loading");
     void Promise.all([
       getVarianceSummary(apiBaseUrl(), auth, query),
@@ -96,13 +97,13 @@ export function DashboardPage() {
               if (!query || !userId || !organizationId) return;
               void createExport(
                 apiBaseUrl(),
-                { token: userId, organizationId },
+                sessionAuth(userId, organizationId),
                 query,
                 "account",
               ).then((result) =>
                 downloadAuthorized(
                   exportDownloadUrl(apiBaseUrl(), result.data.id),
-                  { token: userId, organizationId },
+                  sessionAuth(userId, organizationId),
                   result.data.filename,
                 ),
               );

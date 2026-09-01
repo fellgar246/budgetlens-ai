@@ -583,6 +583,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-017"],
         "evidence": [
             "apps/api/src/budgetlens/application/ai.py",
+            "apps/api/src/budgetlens/domain/tools.py",
             "apps/api/tests/integration/test_import_and_analytics.py::test_copilot_uses_tools_and_rejects_mutations",
         ],
     },
@@ -629,7 +630,11 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "primary_specs": ["AI architecture/dataset"],
         "plans": ["05", "06"],
         "acceptance": ["AC-022"],
-        "evidence": ["apps/api/src/budgetlens/application/ai.py"],
+        "evidence": [
+            "apps/api/src/budgetlens/application/ai.py",
+            "apps/api/src/budgetlens/application/rate_limit.py",
+            "apps/api/tests/unit/test_ai_concurrency.py",
+        ],
     },
     {
         "id": "FR-AI-007",
@@ -922,6 +927,8 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "evidence": [
             "apps/api/tests/integration/test_domain_api.py::test_alpha_cannot_read_or_mutate_beta",
             "apps/api/tests/integration/test_import_and_analytics.py::test_viewer_cannot_import_and_alpha_cannot_read_beta_job",
+            "apps/api/tests/integration/test_rls_and_idor.py::test_cross_tenant_idor_covers_jobs_scenarios_conversations_and_exports",
+            "apps/api/tests/integration/test_rls_and_idor.py::test_runtime_role_has_no_bypass_and_rls_requires_org_guc",
         ],
     },
     {
@@ -1220,11 +1227,13 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
     },
     {
         "id": "AC-015",
-        "summary": "APP_ENV=prod and AUTH_MODE=dev fail closed at startup",
+        "summary": "AUTH_MODE=dev fails closed unless APP_ENV is local or test",
         "kind": "suite",
         "evidence": [
             "apps/api/tests/unit/test_dev_auth.py::test_create_app_rejects_dev_auth_in_prod",
+            "apps/api/tests/unit/test_dev_auth.py::test_create_app_rejects_dev_auth_outside_local_test",
             "apps/api/tests/unit/test_config.py::test_prod_rejects_dev_auth",
+            "apps/api/tests/unit/test_config.py::test_dev_env_rejects_dev_auth",
         ],
     },
     {
@@ -1240,6 +1249,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_copilot_uses_tools_and_rejects_mutations",
             "apps/api/tests/unit/test_ai_eval.py",
+            "apps/api/tests/unit/domain/test_grounding.py",
+            "apps/api/tests/unit/domain/test_tools.py",
         ],
     },
     {
@@ -1285,6 +1296,7 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "evidence": [
             "apps/api/src/budgetlens/application/ai.py",
             "apps/api/tests/unit/test_ai_eval.py",
+            "apps/api/tests/unit/test_ai_concurrency.py",
         ],
     },
     {

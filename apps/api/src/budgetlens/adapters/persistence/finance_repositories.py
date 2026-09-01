@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, delete, or_, select
@@ -31,6 +31,7 @@ from budgetlens.adapters.persistence.models import (
     ImportErrorRow,
     ImportJobRow,
     MessageRow,
+    OrganizationRow,
     ScenarioRow,
     ScenarioRuleRow,
     ToolExecutionRow,
@@ -124,6 +125,22 @@ def list_stale_processing(session: Session, *, cutoff: datetime) -> list[ImportJ
         )
     ).all()
     return [import_job_from_row(row) for row in rows]
+
+
+def list_expired_conversations(session: Session, *, now: datetime) -> list[Conversation]:
+    candidates = list(
+        session.scalars(select(ConversationRow).where(ConversationRow.deleted_at.is_(None))).all()
+    )
+    orgs = {
+        row.id: row.conversation_retention_days
+        for row in session.scalars(select(OrganizationRow)).all()
+    }
+    expired: list[Conversation] = []
+    for row in candidates:
+        days = orgs.get(row.organization_id, 90)
+        if row.updated_at <= now - timedelta(days=days):
+            expired.append(conversation_from_row(row))
+    return expired
 
 
 def list_jobs_with_expired_originals(session: Session, *, cutoff: datetime) -> list[ImportJob]:

@@ -19,6 +19,7 @@ from budgetlens.adapters.persistence.repositories import (
     SqlMembershipRepository,
     SqlOrganizationRepository,
 )
+from budgetlens.adapters.tenancy import apply_runtime_role, apply_tenant_gucs
 from budgetlens.application.ai import ConversationService
 from budgetlens.application.analytics import AnalyticsService
 from budgetlens.application.budget_versions import BudgetVersionService
@@ -42,6 +43,7 @@ from budgetlens.ports.storage import ObjectStorage
 def get_db_session() -> Generator[Session, None, None]:
     session = get_session_factory()()
     try:
+        apply_runtime_role(session, get_settings().database_runtime_role)
         yield session
         session.commit()
     except Exception:
@@ -79,11 +81,13 @@ def get_identity_provider(
 def get_current_user(
     request: Request,
     identity: Annotated[IdentityProvider, Depends(get_identity_provider)],
+    session: Annotated[Session, Depends(get_db_session)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
     token = _extract_bearer(authorization)
     user = identity.authenticate(token)
     request.state.user_id = str(user.id)
+    apply_tenant_gucs(session, user_id=user.id)
     return user
 
 
@@ -106,6 +110,7 @@ def get_tenant_context(
 ) -> TenantContext:
     if organization_id is None:
         raise PermissionDeniedError("Selecciona una organización válida.")
+    apply_tenant_gucs(session, user_id=user.id, organization_id=organization_id)
     membership = SqlMembershipRepository(session, organization_id).get_for_user(user.id)
     if membership is None or not membership.is_active():
         raise PermissionDeniedError()

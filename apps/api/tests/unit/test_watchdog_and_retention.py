@@ -5,9 +5,10 @@ from uuid import UUID
 
 import pytest
 
-from budgetlens.application.retention import purge_expired_originals
+from budgetlens.application.retention import purge_expired_conversations, purge_expired_originals
 from budgetlens.application.watchdog import timeout_stale_jobs
 from budgetlens.config import Settings
+from budgetlens.domain.conversation import Conversation
 from budgetlens.domain.enums import ImportJobStatus, ScenarioType
 from budgetlens.domain.identities import FrozenClock, SequentialIdFactory
 from budgetlens.domain.importing import ImportJob
@@ -173,3 +174,37 @@ def test_retention_deletes_originals_and_keeps_metadata(monkeypatch: pytest.Monk
     assert deleted == ["org/imports/a.csv"]
     assert saved[0].object_key is None
     assert saved[0].id == job.id
+
+
+def test_expired_conversations_are_soft_deleted(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime(2026, 8, 31, tzinfo=UTC)
+    conversation = Conversation(
+        id=UUID(int=9),
+        organization_id=UUID(int=2),
+        user_id=UUID(int=3),
+        title="Consulta",
+        context_filters={},
+        created_at=now - timedelta(days=120),
+        updated_at=now - timedelta(days=120),
+        deleted_at=None,
+    )
+    saved: list[Conversation] = []
+
+    class Repo:
+        def __init__(self, _session: object, _org: object) -> None:
+            del _session, _org
+
+        def save(self, item: Conversation) -> None:
+            saved.append(item)
+
+    monkeypatch.setattr(
+        "budgetlens.application.retention.list_expired_conversations",
+        lambda _session, *, now: [conversation],
+    )
+    monkeypatch.setattr(
+        "budgetlens.application.retention.SqlConversationRepository",
+        Repo,
+    )
+    purged = purge_expired_conversations(object(), clock=FrozenClock(now))  # type: ignore[arg-type]
+    assert purged == 1
+    assert saved[0].deleted_at == now

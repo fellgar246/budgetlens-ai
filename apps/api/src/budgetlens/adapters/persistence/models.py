@@ -61,6 +61,10 @@ class OrganizationRow(Base):
             "char_length(functional_currency) = 3",
             name="ck_organizations_functional_currency",
         ),
+        CheckConstraint(
+            "conversation_retention_days BETWEEN 7 AND 365",
+            name="ck_organizations_conversation_retention_days",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -72,6 +76,7 @@ class OrganizationRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
+    conversation_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
 
 
 class MembershipRow(Base):
@@ -585,7 +590,7 @@ class AiRunRow(Base):
             name="fk_ai_runs_conversation_same_org",
         ),
         CheckConstraint(
-            "status IN ('succeeded', 'failed', 'limited')",
+            "status IN ('succeeded', 'failed', 'limited', 'grounding_failed')",
             name="ck_ai_runs_status",
         ),
     )

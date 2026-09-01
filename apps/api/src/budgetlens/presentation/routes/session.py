@@ -123,5 +123,6 @@ def patch_organization(
         name=payload.name,
         fiscal_year_start_month=payload.fiscal_year_start_month,
         status=OrganizationStatus(payload.status) if payload.status else None,
+        conversation_retention_days=payload.conversation_retention_days,
     )
     return organization_response(organization, role=context.role.value)

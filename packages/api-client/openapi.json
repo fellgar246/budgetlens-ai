@@ -6869,6 +6869,10 @@
             "type": "integer",
             "title": "Version"
           },
+          "conversation_retention_days": {
+            "type": "integer",
+            "title": "Conversation Retention Days"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -6890,6 +6894,7 @@
           "fiscal_year_start_month",
           "status",
           "version",
+          "conversation_retention_days",
           "created_at",
           "updated_at"
         ],
@@ -7157,6 +7162,19 @@
               }
             ],
             "title": "Status"
+          },
+          "conversation_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 365.0,
+                "minimum": 7.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Retention Days"
           }
         },
         "additionalProperties": false,

@@ -30,6 +30,7 @@ from budgetlens.domain.idempotency import import_idempotency_fingerprint, sha256
 from budgetlens.domain.money import Currency, MoneyAmount
 from budgetlens.domain.permissions import (
     can_create_missing_dimensions,
+    can_restructure_dimensions,
     capabilities_for,
     capabilities_for_persona,
     persona_for,
@@ -110,6 +111,11 @@ def test_operator_cannot_use_financial_capabilities() -> None:
         platform_role=PlatformRole.OPERATOR,
         capability=Capability.VIEW_TECHNICAL_METRICS,
     )
+
+
+def test_analyst_cannot_restructure_dimensions() -> None:
+    assert can_restructure_dimensions(Role.ANALYST) is False
+    assert can_restructure_dimensions(Role.ADMIN) is True
 
 
 def test_missing_dimensions_require_admin_flag() -> None:

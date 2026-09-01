@@ -124,7 +124,7 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | AC-012 | Suite | Cross-tenant mutation is denied |
 | AC-013 | Suite | Organization switch does not leak the previous tenant |
 | AC-014 | Suite | Formula XLSX rejected |
-| AC-015 | Suite | `prod` + `AUTH_MODE=dev` fails closed |
+| AC-015 | Suite | `AUTH_MODE=dev` fails closed outside local/test |
 | AC-016 | Suite | Log sanitization |
 | AC-017 | Suite | Grounded copilot + stub eval |
 | AC-018 | Suite | No evidence, no invented cause |

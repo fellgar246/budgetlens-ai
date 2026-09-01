@@ -9,6 +9,7 @@ import { StatusPage } from "@/features/status/StatusPage";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 
 export function OpsPage({ requireOperator = false }: { requireOperator?: boolean }) {
   const { capabilities, userId } = useSession();
@@ -20,7 +21,7 @@ export function OpsPage({ requireOperator = false }: { requireOperator?: boolean
     if (!userId || !capabilities.can_view_technical_metrics) {
       return;
     }
-    void getOpsMetrics(apiBaseUrl(), { token: userId })
+    void getOpsMetrics(apiBaseUrl(), sessionAuth(userId))
       .then((result) => setMetrics(result.data))
       .catch(() => setMetrics(null));
   }, [capabilities.can_view_technical_metrics, userId]);

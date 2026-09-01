@@ -174,3 +174,12 @@ def require_capability(
 
 def can_create_missing_dimensions(*, flag: bool, role: Role) -> bool:
     return flag and role is Role.ADMIN
+
+
+def can_restructure_dimensions(role: Role) -> bool:
+    return role is Role.ADMIN
+
+
+def require_dimension_restructure(role: Role) -> None:
+    if not can_restructure_dimensions(role):
+        raise PermissionDeniedError()

@@ -90,6 +90,7 @@ def organization_from_row(row: OrganizationRow) -> Organization:
         created_at=row.created_at,
         updated_at=row.updated_at,
         version=row.version,
+        conversation_retention_days=row.conversation_retention_days,
     )
 
 
@@ -103,6 +104,7 @@ def apply_organization(row: OrganizationRow, entity: Organization) -> None:
     row.created_at = entity.created_at
     row.updated_at = entity.updated_at
     row.version = entity.version
+    row.conversation_retention_days = entity.conversation_retention_days
 
 
 def membership_from_row(row: MembershipRow) -> Membership:

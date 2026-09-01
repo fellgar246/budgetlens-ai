@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { personaLabel } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
+import { getAccessToken } from "@/lib/access-token";
 import { readDevOrganizationId, readDevUserId } from "@/lib/dev-session";
 import { apiBaseUrl } from "@/lib/env";
 
@@ -42,7 +43,7 @@ type CatalogState =
     };
 
 function auth() {
-  const token = readDevUserId();
+  const token = getAccessToken() ?? readDevUserId();
   const organizationId = readDevOrganizationId();
   if (!token || !organizationId) {
     return null;

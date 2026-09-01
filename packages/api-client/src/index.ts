@@ -41,6 +41,7 @@ export type Organization = {
   status: string;
   role: string | null;
   version: number;
+  conversation_retention_days: number;
   created_at: string;
   updated_at: string;
 };
@@ -306,6 +307,7 @@ export function patchOrganization(
     name?: string | null;
     fiscal_year_start_month?: number | null;
     status?: "active" | "archived" | null;
+    conversation_retention_days?: number | null;
   },
 ) {
   return requestJson<Organization>(

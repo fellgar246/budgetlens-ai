@@ -36,7 +36,7 @@ make watchdog
 make retain-files
 ```
 
-The initial retention window for original files is 90 days (`ORIGINAL_FILE_RETENTION_DAYS`). After a purge, job metadata is kept.
+The initial retention window for original files is 90 days (`ORIGINAL_FILE_RETENTION_DAYS`). After a purge, job metadata is kept. Conversation retention is configured per organization (7–365 days, default 90) and expired conversations are soft-deleted by the same command.
 
 Business entities use logical archive or disable flags. Original files and exports expire by lifecycle. Local demo data is purged only with an explicit administrative command outside the 1.0 UI:
 
@@ -52,7 +52,7 @@ Exports expire. Creating and downloading them requires authorization. URLs are n
 
 ## Conversations
 
-Deletion is logical. Audit keeps metadata (identifiers, outcome) and not the conversation text.
+Deletion is logical. Audit keeps metadata (identifiers, outcome) and not the conversation text. Prompts and full answers are not written to CloudWatch by default; usage metadata and hashes are retained.
 
 ## Images and rollback
 
@@ -81,7 +81,16 @@ On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance. Che
 
 ## Encryption and credentials
 
-On AWS, traffic uses TLS and storage uses managed encryption. CI uses roles/OIDC, not permanent access keys. Domain and use-case code does not import AWS SDKs.
+On AWS, traffic uses TLS and storage uses managed encryption. CI uses roles/OIDC, not permanent access keys. Domain and use-case code does not import AWS SDKs. Cognito IDs and public issuer URLs are configuration, not secrets. Database credentials and operational secrets live in Secrets Manager. Terraform state is private, versioned, encrypted, and least-privilege; mark sensitive outputs and do not print them in CI.
+
+## Vulnerability response
+
+1. Classify severity and blast radius (tenant leak, secret exposure, upload abuse, AI exfiltration).
+2. Revoke affected credentials or sessions.
+3. Contain the issue and keep a safe evidence copy.
+4. Patch and deploy through the pipeline.
+5. Re-run isolation and indicator checks (IDOR matrix, RLS, upload boundaries).
+6. Record the incident, the fix, and the preventive follow-up.
 
 ## Load
 

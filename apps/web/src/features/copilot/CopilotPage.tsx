@@ -16,6 +16,7 @@ import { useAnalysisFilters } from "@/features/session/useAnalysisFilters";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 import { queryFromFilters } from "@/lib/query-from-filters";
 
 export function CopilotPage() {
@@ -107,7 +108,7 @@ export function CopilotPage() {
               if (!userId || !organizationId || !query) return;
               setBusy(true);
               setError(null);
-              const auth = { token: userId, organizationId };
+              const auth = sessionAuth(userId, organizationId);
               void createConversation(apiBaseUrl(), auth, { title: question.slice(0, 80), context })
                 .then((conversation) =>
                   sendConversationMessage(apiBaseUrl(), auth, conversation.data.id, {

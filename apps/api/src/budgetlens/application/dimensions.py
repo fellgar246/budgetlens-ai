@@ -23,7 +23,7 @@ from budgetlens.domain.enums import AccountType, DimensionStatus, Permission
 from budgetlens.domain.errors import ConflictError, NotFoundError
 from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.domain.organization import normalize_name
-from budgetlens.domain.permissions import require_permission
+from budgetlens.domain.permissions import require_dimension_restructure, require_permission
 
 
 class DimensionService:
@@ -117,6 +117,11 @@ class DimensionService:
         current = repo.get(account_id)
         if current is None:
             raise NotFoundError()
+        structural = (
+            account_type is not None or parent_id is not None or clear_parent or status is not None
+        )
+        if structural:
+            require_dimension_restructure(context.role)
         next_parent = None if clear_parent else parent_id or current.parent_id
         if next_parent is not None and repo.get(next_parent) is None:
             raise NotFoundError("No se encontró la cuenta superior.")
@@ -201,6 +206,8 @@ class DimensionService:
         current = repo.get(department_id)
         if current is None:
             raise NotFoundError()
+        if status is not None:
+            require_dimension_restructure(context.role)
         updated = current.with_updates(now=self._clock.now(), name=name, status=status)
         repo.save(updated)
         return updated
@@ -270,6 +277,8 @@ class DimensionService:
         current = repo.get(cost_center_id)
         if current is None:
             raise NotFoundError()
+        if status is not None or code is not None:
+            require_dimension_restructure(context.role)
         updated = current.with_updates(now=self._clock.now(), name=name, status=status, code=code)
         repo.save(updated)
         return updated

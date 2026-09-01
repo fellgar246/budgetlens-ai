@@ -5,7 +5,9 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.finance_repositories import (
+    SqlConversationRepository,
     SqlImportJobRepository,
+    list_expired_conversations,
     list_jobs_with_expired_originals,
 )
 from budgetlens.config import Settings
@@ -27,5 +29,16 @@ def purge_expired_originals(
         if job.object_key:
             storage.delete(job.object_key)
         SqlImportJobRepository(session, job.organization_id).save(job.clear_object_key())
+        purged += 1
+    return purged
+
+
+def purge_expired_conversations(session: Session, *, clock: Clock) -> int:
+    expired = list_expired_conversations(session, now=clock.now())
+    purged = 0
+    now = clock.now()
+    for conversation in expired:
+        updated = conversation.soft_delete(now=now)
+        SqlConversationRepository(session, conversation.organization_id).save(updated)
         purged += 1
     return purged

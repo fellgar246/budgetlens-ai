@@ -30,6 +30,7 @@ class OrganizationResponse(BaseModel):
     status: str
     role: str | None = None
     version: int
+    conversation_retention_days: int
     created_at: datetime
     updated_at: datetime
 
@@ -54,6 +55,7 @@ class PatchOrganizationRequest(BaseModel):
     name: str | None = None
     fiscal_year_start_month: int | None = Field(default=None, ge=1, le=12)
     status: Literal["active", "archived"] | None = None
+    conversation_retention_days: int | None = Field(default=None, ge=7, le=365)
 
 
 class Capabilities(BaseModel):
@@ -274,6 +276,7 @@ def organization_response(
         status=organization.status.value,
         role=role,
         version=organization.version,
+        conversation_retention_days=organization.conversation_retention_days,
         created_at=organization.created_at,
         updated_at=organization.updated_at,
     )

@@ -132,7 +132,9 @@ export const copy = {
   copilotUnavailable:
     "El copiloto necesita datos analíticos autorizados para responder con evidencia.",
   settingsTitle: "Organización",
-  settingsDescription: "Moneda funcional y comienzo fiscal de la organización activa.",
+  settingsDescription:
+    "Moneda funcional, comienzo fiscal y retención de conversaciones de la organización activa.",
+  conversationRetentionLabel: "Retención de conversaciones (días)",
   saveOrganization: "Guardar organización",
   membersTitle: "Miembros",
   membersDescription: "Administra quién pertenece a la organización y con qué rol.",

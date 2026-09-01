@@ -16,6 +16,9 @@ def test_docs_are_enabled_in_test(client: TestClient) -> None:
 def test_docs_are_disabled_outside_local_and_test(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("AUTH_MODE", "oidc")
+    monkeypatch.setenv("OIDC_ISSUER", "https://cognito.example/pool")
+    monkeypatch.setenv("OIDC_AUDIENCE", "web-client")
+    monkeypatch.setenv("OIDC_JWKS_URL", "https://cognito.example/jwks")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",

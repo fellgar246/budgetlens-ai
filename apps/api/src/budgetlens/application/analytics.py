@@ -231,6 +231,7 @@ class AnalyticsService:
         enforce_limit(
             "export",
             context.user.id,
+            organization_id=context.organization_id,
             limit=get_settings().rate_limit_export_per_minute,
         )
         summary = self.summary(context, query)

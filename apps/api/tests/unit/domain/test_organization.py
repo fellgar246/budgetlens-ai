@@ -48,6 +48,18 @@ def test_organization_update_keeps_created_at() -> None:
     assert updated.created_at == created
     assert updated.updated_at == later
     assert updated.version == 2
+    with pytest.raises(ValidationError):
+        organization.with_updates(
+            expected_version=1,
+            now=later,
+            conversation_retention_days=400,
+        )
+    retained = organization.with_updates(
+        expected_version=1,
+        now=later,
+        conversation_retention_days=30,
+    )
+    assert retained.conversation_retention_days == 30
 
 
 def test_same_organization_is_required() -> None:

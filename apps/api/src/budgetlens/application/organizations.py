@@ -10,6 +10,7 @@ from budgetlens.adapters.persistence.repositories import (
     SqlOrganizationRepository,
     SqlUserRepository,
 )
+from budgetlens.adapters.tenancy import apply_tenant_gucs
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
@@ -31,6 +32,7 @@ from budgetlens.domain.fiscal import validate_fiscal_year_start_month
 from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.domain.money import Currency
 from budgetlens.domain.organization import (
+    CONVERSATION_RETENTION_DEFAULT_DAYS,
     Membership,
     Organization,
     User,
@@ -85,9 +87,15 @@ class OrganizationService:
             created_at=now,
             updated_at=now,
             version=1,
+            conversation_retention_days=CONVERSATION_RETENTION_DEFAULT_DAYS,
         )
         if self._orgs.get_by_slug(organization.slug) is not None:
             raise ConflictError("SLUG_TAKEN", "Ya existe una organización con ese identificador.")
+        apply_tenant_gucs(
+            self._session,
+            user_id=user.id,
+            organization_id=organization.id,
+        )
         memberships = SqlMembershipRepository(self._session, organization.id)
         cost_centers = SqlCostCenterRepository(self._session, organization.id)
         try:
@@ -139,6 +147,7 @@ class OrganizationService:
         name: str | None,
         fiscal_year_start_month: int | None,
         status: OrganizationStatus | None,
+        conversation_retention_days: int | None = None,
     ) -> Organization:
         require_permission(context.role, Permission.MANAGE_ORGANIZATION)
         if organization_id != context.organization_id:
@@ -152,6 +161,7 @@ class OrganizationService:
             name=name,
             fiscal_year_start_month=fiscal_year_start_month,
             status=status,
+            conversation_retention_days=conversation_retention_days,
         )
         self._orgs.save(updated)
         record_audit(

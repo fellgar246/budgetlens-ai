@@ -10,11 +10,13 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 
 export function OrganizationSettingsPage() {
   const { userId, organizationId, selectedOrganization, capabilities } = useSession();
   const [name, setName] = useState("");
   const [fiscalMonth, setFiscalMonth] = useState("1");
+  const [retentionDays, setRetentionDays] = useState("90");
   const [message, setMessage] = useState<string | Error | null>(null);
   const hasSession = Boolean(userId && organizationId);
 
@@ -24,6 +26,7 @@ export function OrganizationSettingsPage() {
     }
     setName(selectedOrganization.name);
     setFiscalMonth(String(selectedOrganization.fiscal_year_start_month));
+    setRetentionDays(String(selectedOrganization.conversation_retention_days ?? 90));
   }, [selectedOrganization]);
 
   return (
@@ -40,11 +43,17 @@ export function OrganizationSettingsPage() {
             return;
           }
           setMessage(null);
-          void patchOrganization(apiBaseUrl(), { token: userId, organizationId }, organizationId, {
-            version: selectedOrganization.version,
-            name,
-            fiscal_year_start_month: Number(fiscalMonth),
-          })
+          void patchOrganization(
+            apiBaseUrl(),
+            sessionAuth(userId, organizationId),
+            organizationId,
+            {
+              version: selectedOrganization.version,
+              name,
+              fiscal_year_start_month: Number(fiscalMonth),
+              conversation_retention_days: Number(retentionDays),
+            },
+          )
             .then(() => {
               window.dispatchEvent(new Event("budgetlens-session"));
               setMessage(copy.saveOrganization);
@@ -79,6 +88,18 @@ export function OrganizationSettingsPage() {
             value={fiscalMonth}
             disabled={!capabilities.can_manage_organization}
             onChange={(event) => setFiscalMonth(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="font-medium text-secondary">{copy.conversationRetentionLabel}</span>
+          <input
+            type="number"
+            min={7}
+            max={365}
+            className="h-10 rounded-control border border-border px-3 text-sm"
+            value={retentionDays}
+            disabled={!capabilities.can_manage_organization}
+            onChange={(event) => setRetentionDays(event.target.value)}
           />
         </label>
         {capabilities.can_manage_organization ? (

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     oidc_issuer: str = ""
     oidc_audience: str = ""
     oidc_jwks_url: str = ""
+    oidc_jwks_cache_seconds: int = Field(default=300, ge=30)
+    database_runtime_role: str = "budgetlens_app"
+    storage_key_pepper: str = "budgetlens-local-storage-pepper"
     ai_provider: AiProvider = "stub"
     bedrock_region: str = "us-east-1"
     bedrock_model_id: str = ""
@@ -45,6 +48,7 @@ class Settings(BaseSettings):
     ai_max_context_turns: int = Field(default=12, ge=1)
     ai_max_result_rows: int = Field(default=50, ge=1)
     ai_timeout_seconds: int = Field(default=20, ge=1)
+    ai_max_concurrent_conversations: int = Field(default=2, ge=1)
     import_executor: ImportExecutorMode = "inline"
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
     cors_origins: str = "http://localhost:3000"
@@ -77,9 +81,14 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def reject_dev_auth_in_prod(self) -> Self:
-        if self.app_env == "prod" and self.auth_mode == "dev":
-            raise ValueError("AUTH_MODE=dev cannot be used when APP_ENV=prod")
+    def reject_dev_auth_outside_local_test(self) -> Self:
+        if self.auth_mode == "dev" and self.app_env not in {"local", "test"}:
+            raise ValueError("AUTH_MODE=dev can only be used when APP_ENV is local or test")
+        if self.auth_mode == "oidc" and self.app_env in {"dev", "prod"}:
+            if not (self.oidc_issuer and self.oidc_audience and self.oidc_jwks_url):
+                raise ValueError(
+                    "OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL are required when AUTH_MODE=oidc"
+                )
         return self
 
     @property

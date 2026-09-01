@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import importlib
 from pathlib import Path
 from typing import Any, Protocol, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from budgetlens.domain.errors import NotFoundError, ValidationError, storage_unavailable
+from budgetlens.domain.text_safety import sanitize_filename
 from budgetlens.ports.storage import ObjectStorage
 
-__all__ = ["LocalObjectStorage", "ObjectStorage", "S3ObjectStorage"]
+__all__ = ["LocalObjectStorage", "ObjectStorage", "S3ObjectStorage", "object_key", "tenant_prefix"]
+
+DEFAULT_KEY_PEPPER = "budgetlens-local-storage-pepper"
 
 
 class _S3Client(Protocol):
@@ -21,9 +26,23 @@ class _S3Client(Protocol):
     def head_object(self, **kwargs: Any) -> Any: ...
 
 
-def object_key(*, organization_id: UUID, namespace: str, name: str) -> str:
-    safe_name = Path(name).name.replace("..", "")
-    return f"{organization_id}/{namespace}/{safe_name}"
+def tenant_prefix(organization_id: UUID, pepper: str) -> str:
+    return hmac.new(
+        pepper.encode("utf-8"),
+        str(organization_id).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+
+
+def object_key(
+    *,
+    organization_id: UUID,
+    namespace: str,
+    name: str,
+    pepper: str = DEFAULT_KEY_PEPPER,
+) -> str:
+    safe_name = sanitize_filename(name)
+    return f"{tenant_prefix(organization_id, pepper)}/{namespace}/{uuid4().hex}/{safe_name}"
 
 
 def assert_safe_key(key: str) -> str:
@@ -33,12 +52,18 @@ def assert_safe_key(key: str) -> str:
 
 
 class LocalObjectStorage:
-    def __init__(self, root: str) -> None:
+    def __init__(self, root: str, *, key_pepper: str = DEFAULT_KEY_PEPPER) -> None:
         self._root = Path(root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
+        self._key_pepper = key_pepper
 
     def generate_key(self, *, organization_id: UUID, namespace: str, name: str) -> str:
-        return object_key(organization_id=organization_id, namespace=namespace, name=name)
+        return object_key(
+            organization_id=organization_id,
+            namespace=namespace,
+            name=name,
+            pepper=self._key_pepper,
+        )
 
     def _path(self, key: str) -> Path:
         path = (self._root / assert_safe_key(key)).resolve()
@@ -96,15 +121,22 @@ class S3ObjectStorage:
         prefix: str = "",
         endpoint_url: str = "",
         client: _S3Client | None = None,
+        key_pepper: str = DEFAULT_KEY_PEPPER,
     ) -> None:
         self._bucket = bucket.strip()
         self._region = region
         self._prefix = prefix.strip().strip("/")
         self._endpoint_url = endpoint_url.strip()
         self._client = client
+        self._key_pepper = key_pepper
 
     def generate_key(self, *, organization_id: UUID, namespace: str, name: str) -> str:
-        return object_key(organization_id=organization_id, namespace=namespace, name=name)
+        return object_key(
+            organization_id=organization_id,
+            namespace=namespace,
+            name=name,
+            pepper=self._key_pepper,
+        )
 
     def _object_key(self, key: str) -> str:
         cleaned = assert_safe_key(key)

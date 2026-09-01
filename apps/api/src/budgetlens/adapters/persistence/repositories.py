@@ -57,6 +57,10 @@ class SqlUserRepository:
         )
         return user_from_row(row) if row else None
 
+    def get_by_external_subject(self, subject: str) -> User | None:
+        row = self._session.scalar(select(UserRow).where(UserRow.external_subject == subject))
+        return user_from_row(row) if row else None
+
     def add(self, user: User) -> None:
         row = UserRow()
         apply_user(row, user)

@@ -9,7 +9,7 @@ from budgetlens.domain.enums import ImportJobStatus, ScenarioType
 from budgetlens.domain.errors import ConflictError, ValidationError
 from budgetlens.domain.exporting import render_csv
 from budgetlens.domain.importing import ImportJob, propose_mapping, validate_mapping
-from budgetlens.domain.text_safety import neutralize_csv_text
+from budgetlens.domain.text_safety import neutralize_csv_text, sanitize_filename
 
 
 def test_mapping_requires_canonical_fields() -> None:
@@ -111,6 +111,12 @@ def test_processing_job_can_timeout() -> None:
     timed = processing.mark_timed_out(now=now)
     assert timed.status is ImportJobStatus.FAILED
     assert timed.failure_code == "JOB_TIMEOUT"
+
+
+def test_original_filename_is_sanitized_for_presentation() -> None:
+    assert sanitize_filename("../../etc/passwd.csv") == "passwd.csv"
+    assert sanitize_filename("=cmd.xlsx") == "cmd.xlsx"
+    assert sanitize_filename("") == "upload.bin"
 
 
 def test_csv_injection_is_neutralized() -> None:

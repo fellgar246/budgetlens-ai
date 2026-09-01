@@ -27,6 +27,7 @@ import { useCatalogOptions } from "@/features/analysis/useCatalogOptions";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 import { downloadImportTemplate } from "@/lib/import-template";
 
 const CANONICAL = [
@@ -65,7 +66,7 @@ export function ImportsPage() {
     : organizationId
       ? canImport
       : hasUser;
-  const auth = useMemo(() => ({ token: userId, organizationId }), [organizationId, userId]);
+  const auth = useMemo(() => sessionAuth(userId, organizationId), [organizationId, userId]);
   const draftVersions = catalog.versions.filter((item) => item.status === "draft");
 
   useEffect(() => {
@@ -92,16 +93,12 @@ export function ImportsPage() {
             event.preventDefault();
             if (!userId) return;
             setError(null);
-            void createOrganization(
-              apiBaseUrl(),
-              { token: userId },
-              {
-                name: form.name,
-                slug: form.slug,
-                functional_currency: form.functional_currency,
-                fiscal_year_start_month: Number(form.fiscal_year_start_month),
-              },
-            )
+            void createOrganization(apiBaseUrl(), sessionAuth(userId), {
+              name: form.name,
+              slug: form.slug,
+              functional_currency: form.functional_currency,
+              fiscal_year_start_month: Number(form.fiscal_year_start_month),
+            })
               .then((result) => setOrganizationId(result.data.id))
               .catch((err: Error) => setError(err));
           }}

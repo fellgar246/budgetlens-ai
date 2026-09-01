@@ -18,10 +18,11 @@ from budgetlens.adapters.persistence.repositories import (
     SqlMembershipRepository,
     SqlUserRepository,
 )
+from budgetlens.adapters.tenancy import apply_tenant_gucs
 from budgetlens.application.ai_eval import run_stub_eval
 from budgetlens.application.context import TenantContext
 from budgetlens.application.imports import ImportService
-from budgetlens.application.retention import purge_expired_originals
+from budgetlens.application.retention import purge_expired_conversations, purge_expired_originals
 from budgetlens.application.watchdog import timeout_stale_jobs
 from budgetlens.config import get_settings, reset_settings_cache
 from budgetlens.domain.errors import NotFoundError
@@ -53,7 +54,17 @@ def main(argv: list[str] | None = None) -> None:
         print(json.dumps(result, indent=2, ensure_ascii=True))
         passed = result["passed"]
         total = result["total"]
-        if not isinstance(passed, int) or not isinstance(total, int) or passed != total:
+        gates = result.get("gates")
+        gates_ok = False
+        if isinstance(gates, dict):
+            typed_gates = cast(dict[object, object], gates)
+            gates_ok = all(bool(value) for value in typed_gates.values())
+        if (
+            not isinstance(passed, int)
+            or not isinstance(total, int)
+            or passed != total
+            or not gates_ok
+        ):
             raise SystemExit(1)
         return
     if args == ["watchdog"]:
@@ -70,13 +81,20 @@ def main(argv: list[str] | None = None) -> None:
     if args == ["retain-files"]:
         settings = get_settings()
         with session_scope() as session:
+            clock = SystemClock()
             purged = purge_expired_originals(
                 session,
                 build_object_storage(settings),
-                clock=SystemClock(),
+                clock=clock,
                 settings=settings,
             )
-        print(json.dumps({"purged": purged}, ensure_ascii=True))
+            conversations = purge_expired_conversations(session, clock=clock)
+        print(
+            json.dumps(
+                {"purged": purged, "conversations_purged": conversations},
+                ensure_ascii=True,
+            )
+        )
         return
     if len(args) == 3 and args[0] == "import-job":
         _run_import_job(operation=args[1], job_id=args[2])
@@ -96,6 +114,7 @@ def _run_import_job(*, operation: str, job_id: str) -> None:
         user = SqlUserRepository(session).get(job.created_by)
         if user is None:
             raise NotFoundError()
+        apply_tenant_gucs(session, user_id=user.id, organization_id=job.organization_id)
         membership = SqlMembershipRepository(session, job.organization_id).get_for_user(user.id)
         if membership is None or not membership.is_active():
             raise NotFoundError()

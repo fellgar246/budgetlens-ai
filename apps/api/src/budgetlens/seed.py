@@ -243,6 +243,7 @@ def _upsert_org(orgs: SqlOrganizationRepository, organization: Organization) -> 
             created_at=existing.created_at,
             updated_at=organization.updated_at,
             version=existing.version,
+            conversation_retention_days=existing.conversation_retention_days,
         )
     )
 

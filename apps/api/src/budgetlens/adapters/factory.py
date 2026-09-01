@@ -23,8 +23,9 @@ def build_object_storage(settings: Settings) -> ObjectStorage:
             region=settings.s3_region,
             prefix=settings.s3_prefix,
             endpoint_url=settings.s3_endpoint_url,
+            key_pepper=settings.storage_key_pepper,
         )
-    return LocalObjectStorage(settings.local_storage_path)
+    return LocalObjectStorage(settings.local_storage_path, key_pepper=settings.storage_key_pepper)
 
 
 def build_ai_provider(settings: Settings) -> AIProvider:
@@ -36,6 +37,7 @@ def build_identity_adapter(settings: Settings, session: Session) -> IdentityProv
         auth_mode=settings.auth_mode,
         app_env=settings.app_env,
         users=SqlUserRepository(session),
+        settings=settings,
     )
 
 

@@ -12,9 +12,13 @@ from budgetlens.domain.enums import (
     Role,
     UserStatus,
 )
-from budgetlens.domain.errors import ConflictError, ValidationError
+from budgetlens.domain.errors import ConflictError, ValidationError, field_issue
 from budgetlens.domain.fiscal import FiscalPeriod, validate_fiscal_year_start_month
 from budgetlens.domain.money import Currency
+
+CONVERSATION_RETENTION_MIN_DAYS = 7
+CONVERSATION_RETENTION_MAX_DAYS = 365
+CONVERSATION_RETENTION_DEFAULT_DAYS = 90
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -66,6 +70,25 @@ def normalize_email(value: str) -> str:
     return cleaned
 
 
+def validate_conversation_retention_days(value: int) -> int:
+    if value < CONVERSATION_RETENTION_MIN_DAYS or value > CONVERSATION_RETENTION_MAX_DAYS:
+        raise ValidationError(
+            "INVALID_RETENTION",
+            "La retención de conversación está fuera de los límites del producto.",
+            field_errors=[
+                field_issue(
+                    "conversation_retention_days",
+                    "INVALID_RETENTION",
+                    (
+                        f"Usa un valor entre {CONVERSATION_RETENTION_MIN_DAYS} y "
+                        f"{CONVERSATION_RETENTION_MAX_DAYS} días."
+                    ),
+                )
+            ],
+        )
+    return value
+
+
 def require_same_organization(expected: UUID, actual: UUID) -> None:
     if expected != actual:
         raise ValidationError(
@@ -85,6 +108,10 @@ class Organization:
     created_at: datetime
     updated_at: datetime
     version: int
+    conversation_retention_days: int = CONVERSATION_RETENTION_DEFAULT_DAYS
+
+    def __post_init__(self) -> None:
+        validate_conversation_retention_days(self.conversation_retention_days)
 
     def period_for(self, value: date) -> FiscalPeriod:
         return FiscalPeriod.from_date(value, self.fiscal_year_start_month)
@@ -97,6 +124,7 @@ class Organization:
         name: str | None = None,
         fiscal_year_start_month: int | None = None,
         status: OrganizationStatus | None = None,
+        conversation_retention_days: int | None = None,
     ) -> Organization:
         if expected_version != self.version:
             from budgetlens.domain.errors import ConcurrencyError
@@ -111,11 +139,17 @@ class Organization:
             else self.fiscal_year_start_month
         )
         next_status = status if status is not None else self.status
+        next_retention = (
+            validate_conversation_retention_days(conversation_retention_days)
+            if conversation_retention_days is not None
+            else self.conversation_retention_days
+        )
         return replace(
             self,
             name=next_name,
             fiscal_year_start_month=next_month,
             status=next_status,
+            conversation_retention_days=next_retention,
             updated_at=now,
             version=self.version + 1,
         )

@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import { sessionAuth } from "@/lib/session-auth";
 
 export function MembersPage() {
   const { userId, organizationId, users, capabilities, generation } = useSession();
@@ -30,7 +31,7 @@ export function MembersPage() {
       return;
     }
     try {
-      const result = await listMemberships(apiBaseUrl(), { token: userId, organizationId });
+      const result = await listMemberships(apiBaseUrl(), sessionAuth(userId, organizationId));
       setMembers(result.data.items);
       setError(null);
     } catch (err) {
@@ -78,14 +79,10 @@ export function MembersPage() {
           if (!userId || !organizationId || !userToAdd) {
             return;
           }
-          void createMembership(
-            apiBaseUrl(),
-            { token: userId, organizationId },
-            {
-              user_id: userToAdd,
-              role,
-            },
-          )
+          void createMembership(apiBaseUrl(), sessionAuth(userId, organizationId), {
+            user_id: userToAdd,
+            role,
+          })
             .then(() => refresh())
             .catch((err: Error) => setError(err.message));
         }}

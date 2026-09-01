@@ -6,7 +6,11 @@ from typing import Any, Protocol, cast
 from budgetlens.config import Settings
 from budgetlens.domain.conversation import ConversationMessage
 from budgetlens.domain.errors import ai_unavailable
-from budgetlens.ports.ai import AIProvider, ProviderResult, ToolRequest
+from budgetlens.domain.tools import default_tool_registry
+from budgetlens.ports.ai import AIProvider, ProviderResult, ToolRequest, ToolResult
+
+TOOL_REGISTRY = default_tool_registry()
+TOOL_SPECS: tuple[dict[str, Any], ...] = TOOL_REGISTRY.bedrock_specs()
 
 
 class _ConverseClient(Protocol):
@@ -28,64 +32,6 @@ MUTATION_MARKERS = (
 )
 OUT_OF_DOMAIN = ("clima", "receta", "roi", "sql", "system prompt", "instrucciones internas")
 
-TOOL_SPECS: tuple[dict[str, Any], ...] = (
-    {
-        "toolSpec": {
-            "name": "get_variance_summary",
-            "description": "Return authorized budget, actual, and variance totals.",
-            "inputSchema": {"json": {"type": "object", "properties": {}}},
-        }
-    },
-    {
-        "toolSpec": {
-            "name": "get_variance_breakdown",
-            "description": "Return an aggregated variance breakdown.",
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "group_by": {
-                            "type": "string",
-                            "enum": ["account", "department", "cost_center", "period"],
-                        }
-                    },
-                }
-            },
-        }
-    },
-    {
-        "toolSpec": {
-            "name": "get_top_unfavorable_variances",
-            "description": "Return the largest unfavorable variances.",
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "group_by": {
-                            "type": "string",
-                            "enum": ["account", "department", "cost_center", "period"],
-                        }
-                    },
-                }
-            },
-        }
-    },
-    {
-        "toolSpec": {
-            "name": "compare_periods",
-            "description": "Compare two authorized period ranges.",
-            "inputSchema": {"json": {"type": "object", "properties": {}}},
-        }
-    },
-    {
-        "toolSpec": {
-            "name": "calculate_scenario_preview",
-            "description": "Preview scenario rules without saving.",
-            "inputSchema": {"json": {"type": "object", "properties": {}}},
-        }
-    },
-)
-
 
 class DeterministicAIProvider:
     def complete(
@@ -94,15 +40,21 @@ class DeterministicAIProvider:
         messages: list[ConversationMessage],
         question: str,
         settings: Settings,
+        system_prompt: str = "",
+        tool_results: tuple[ToolResult, ...] = (),
+        timeout_seconds: int | None = None,
     ) -> ProviderResult:
-        del messages
+        del messages, system_prompt, timeout_seconds
         text = question.lower()
-        if "loop infinito" in text or "solicita tools indefinidamente" in text:
+        looping = "loop infinito" in text or "solicita tools indefinidamente" in text
+        if tool_results and not looping:
+            return _result_from_tool_results(tool_results)
+        if looping:
             return ProviderResult(
                 text=None,
                 tool_requests=tuple(
-                    ToolRequest("get_variance_summary", {})
-                    for _ in range(settings.ai_max_tool_calls + 3)
+                    ToolRequest("get_variance_summary", {}, request_id=f"call_{index}")
+                    for index in range(settings.ai_max_tool_calls + 3)
                 ),
                 input_units=8,
                 output_units=8,
@@ -137,10 +89,7 @@ class DeterministicAIProvider:
                 output_units=8,
                 model_id="stub",
             )
-        if any(
-            marker in text
-            for marker in ("clima", "receta", "system prompt", "instrucciones internas")
-        ):
+        if any(marker in text for marker in OUT_OF_DOMAIN):
             return ProviderResult(
                 text="Esa solicitud está fuera del dominio de análisis presupuestario.",
                 tool_requests=(),
@@ -148,19 +97,70 @@ class DeterministicAIProvider:
                 output_units=8,
                 model_id="stub",
             )
-        if "entre enero y febrero" in text or "enero y febrero" in text:
+        if "está bien el negocio" in text or "esta bien el negocio" in text:
+            return ProviderResult(
+                text=(
+                    "Necesito una métrica y un alcance. "
+                    "No concluyo la salud del negocio sin cifras."
+                ),
+                tool_requests=(),
+                input_units=3,
+                output_units=8,
+                model_id="stub",
+            )
+        if "marketing" in text:
+            return ProviderResult(
+                text="No hay una dimensión de marketing en el alcance. No invento cifras.",
+                tool_requests=(),
+                input_units=3,
+                output_units=8,
+                model_id="stub",
+            )
+        if "analiza 2025" in text:
+            return ProviderResult(
+                text="No hay datos de 2025 en el alcance autorizado. No invento cifras.",
+                tool_requests=(),
+                input_units=3,
+                output_units=8,
+                model_id="stub",
+            )
+        if "100.000 filas" in text or "100,000 filas" in text or "100000 filas" in text:
             return ProviderResult(
                 text=None,
-                tool_requests=(ToolRequest("compare_periods", {"group": "period"}),),
+                tool_requests=(
+                    ToolRequest(
+                        "get_variance_breakdown",
+                        {"group_by": "account", "limit": 20},
+                        request_id="call_limit",
+                    ),
+                ),
                 input_units=6,
                 output_units=4,
                 model_id="stub",
             )
-        if "mayor desviación" in text or "desfavorable" in text and "febrero" in text:
+        if "entre enero y febrero" in text or "enero y febrero" in text:
             return ProviderResult(
                 text=None,
                 tool_requests=(
-                    ToolRequest("get_top_unfavorable_variances", {"group_by": "account"}),
+                    ToolRequest(
+                        "compare_periods",
+                        {"compare_from": "2026-02-01", "compare_to": "2026-02-01"},
+                        request_id="call_compare",
+                    ),
+                ),
+                input_units=6,
+                output_units=4,
+                model_id="stub",
+            )
+        if "mayor desviación" in text or ("desfavorable" in text and "febrero" in text):
+            return ProviderResult(
+                text=None,
+                tool_requests=(
+                    ToolRequest(
+                        "get_top_unfavorable_variances",
+                        {"group_by": "account", "limit": 10},
+                        request_id="call_top",
+                    ),
                 ),
                 input_units=6,
                 output_units=4,
@@ -170,14 +170,20 @@ class DeterministicAIProvider:
             group = "department" if "departamento" in text else "account"
             return ProviderResult(
                 text=None,
-                tool_requests=(ToolRequest("get_variance_breakdown", {"group_by": group}),),
+                tool_requests=(
+                    ToolRequest(
+                        "get_variance_breakdown",
+                        {"group_by": group, "limit": 20},
+                        request_id="call_breakdown",
+                    ),
+                ),
                 input_units=6,
                 output_units=4,
                 model_id="stub",
             )
         return ProviderResult(
             text=None,
-            tool_requests=(ToolRequest("get_variance_summary", {}),),
+            tool_requests=(ToolRequest("get_variance_summary", {}, request_id="call_summary"),),
             input_units=5,
             output_units=3,
             model_id="stub",
@@ -212,22 +218,92 @@ class BedrockAIProvider:
         messages: list[ConversationMessage],
         question: str,
         settings: Settings,
+        system_prompt: str = "",
+        tool_results: tuple[ToolResult, ...] = (),
+        timeout_seconds: int | None = None,
     ) -> ProviderResult:
         del settings
-        payload_messages = _to_bedrock_messages(messages, question)
+        payload_messages = _to_bedrock_messages(messages, question, tool_results)
+        timeout = timeout_seconds if timeout_seconds is not None else self._timeout_seconds
         try:
             raw = self._require_client().converse(
                 modelId=self._model_id,
                 messages=payload_messages,
+                system=[{"text": system_prompt}] if system_prompt else [],
                 toolConfig={"tools": list(TOOL_SPECS)},
+                inferenceConfig={"maxTokens": 1024},
+                additionalModelRequestFields=_structured_output_hint(),
+                requestTimeout=timeout,
             )
+        except TypeError:
+            try:
+                raw = self._require_client().converse(
+                    modelId=self._model_id,
+                    messages=payload_messages,
+                    system=[{"text": system_prompt}] if system_prompt else [],
+                    toolConfig={"tools": list(TOOL_SPECS)},
+                )
+            except Exception as exc:
+                raise ai_unavailable() from exc
         except Exception as exc:
             raise ai_unavailable() from exc
         return _from_bedrock_response(raw, model_id=self._model_id)
 
 
+def _structured_output_hint() -> dict[str, Any]:
+    return {}
+
+
+def _result_from_tool_results(tool_results: tuple[ToolResult, ...]) -> ProviderResult:
+    first = tool_results[0].payload if tool_results else {}
+    cited = [item.evidence_id for item in tool_results if item.evidence_id]
+    text = _answer_from_payload(first, cited)
+    return ProviderResult(
+        text=text,
+        tool_requests=(),
+        input_units=4,
+        output_units=10,
+        model_id="stub",
+        structured={"answer": text, "cited_evidence": cited, "limitations": []},
+    )
+
+
+def _answer_from_payload(payload: dict[str, Any], cited: list[str]) -> str:
+    citation = f" Evidencia: {', '.join(cited)}." if cited else ""
+    if "metrics" in payload and isinstance(payload["metrics"], dict):
+        metrics = cast(dict[str, Any], payload["metrics"])
+        return (
+            f"Según el resumen, presupuesto {metrics.get('budget_amount')}, "
+            f"real {metrics.get('actual_amount')}, variación {metrics.get('variance_amount')} "
+            f"({metrics.get('favorability')}, {metrics.get('variance_state')}).{citation}"
+        )
+    items = payload.get("items")
+    if isinstance(items, list) and items:
+        typed_items = cast(list[object], items)
+        raw_top = typed_items[0]
+        if isinstance(raw_top, dict):
+            top = cast(dict[str, Any], raw_top)
+            return (
+                f"El principal contribuyente es {top.get('group_name') or top.get('group_code')} "
+                f"con variación {top.get('variance_amount')} ({top.get('favorability')}).{citation}"
+            )
+    if "baseline" in payload and "comparison" in payload:
+        raw_baseline = payload["baseline"]
+        raw_comparison = payload["comparison"]
+        if isinstance(raw_baseline, dict) and isinstance(raw_comparison, dict):
+            baseline = cast(dict[str, Any], raw_baseline)
+            comparison = cast(dict[str, Any], raw_comparison)
+            return (
+                f"En el primer periodo la variación fue {baseline.get('variance_amount')}; "
+                f"en el segundo fue {comparison.get('variance_amount')}.{citation}"
+            )
+    return f"Consulté las herramientas autorizadas y no hay una conclusión adicional.{citation}"
+
+
 def _to_bedrock_messages(
-    messages: list[ConversationMessage], question: str
+    messages: list[ConversationMessage],
+    question: str,
+    tool_results: tuple[ToolResult, ...],
 ) -> list[dict[str, Any]]:
     payload: list[dict[str, Any]] = []
     for item in messages:
@@ -239,6 +315,21 @@ def _to_bedrock_messages(
         )
     if not payload or payload[-1]["role"] != "user":
         payload.append({"role": "user", "content": [{"text": question}]})
+    if tool_results:
+        payload.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "toolResult": {
+                            "toolUseId": item.request_id or item.evidence_id,
+                            "content": [{"json": item.payload}],
+                        }
+                    }
+                    for item in tool_results
+                ],
+            }
+        )
     return payload
 
 
@@ -268,23 +359,52 @@ def _from_bedrock_response(response: dict[str, Any], *, model_id: str) -> Provid
             name = str(tool_use.get("name") or "")
             raw_args = _as_object_map(tool_use.get("input")) or {}
             arguments = {str(key): item for key, item in raw_args.items()}
+            request_id = str(tool_use.get("toolUseId") or name)
             if name:
-                tools.append(ToolRequest(name=name, arguments=arguments))
+                tools.append(ToolRequest(name=name, arguments=arguments, request_id=request_id))
     usage = _as_object_map(response.get("usage"))
     input_units = int(usage.get("inputTokens") or 0) if usage else 0
     output_units = int(usage.get("outputTokens") or 0) if usage else 0
+    joined = "\n".join(texts) if texts else None
+    structured = None
+    if joined:
+        from budgetlens.domain.evidence import parse_structured_answer
+
+        structured = parse_structured_answer(joined)
     return ProviderResult(
-        text="\n".join(texts) if texts else None,
+        text=joined,
         tool_requests=tuple(tools),
         input_units=input_units,
         output_units=output_units,
         model_id=model_id or "bedrock",
+        structured=structured,
     )
 
 
 def _load_bedrock_client(region: str, timeout_seconds: int) -> _ConverseClient:
-    del timeout_seconds
-    return cast(_ConverseClient, _boto3_client("bedrock-runtime", region_name=region))
+    return cast(
+        _ConverseClient,
+        _boto3_client(
+            "bedrock-runtime",
+            region_name=region,
+            config=_botocore_config(timeout_seconds),
+        ),
+    )
+
+
+def _botocore_config(timeout_seconds: int) -> object | None:
+    try:
+        module = importlib.import_module("botocore.config")
+    except ImportError:
+        return None
+    factory = getattr(module, "Config", None)
+    if not callable(factory):
+        return None
+    return factory(
+        read_timeout=timeout_seconds,
+        connect_timeout=min(3, timeout_seconds),
+        retries={"max_attempts": 1},
+    )
 
 
 def _boto3_client(service: str, **kwargs: object) -> object:
@@ -295,7 +415,8 @@ def _boto3_client(service: str, **kwargs: object) -> object:
     factory = getattr(module, "client", None)
     if not callable(factory):
         raise ai_unavailable()
-    return factory(service, **kwargs)
+    cleaned = {key: value for key, value in kwargs.items() if value is not None}
+    return factory(service, **cleaned)
 
 
 def build_ai_provider_from_settings(settings: Settings, *, client: Any | None = None) -> AIProvider:
