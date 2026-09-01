@@ -20,7 +20,6 @@ from budgetlens.adapters.persistence.repositories import (
     SqlBudgetVersionRepository,
     SqlOrganizationRepository,
 )
-from budgetlens.adapters.storage import ObjectStorage
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit, decode_cursor, encode_cursor
@@ -41,6 +40,7 @@ from budgetlens.domain.identities import Clock, IdFactory
 from budgetlens.domain.money import MoneyAmount
 from budgetlens.domain.permissions import require_permission
 from budgetlens.domain.variance import compute_variance, favorability_for_account_types
+from budgetlens.ports.storage import ObjectStorage
 
 
 @dataclass(frozen=True, slots=True)

@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog retain-files test-perf traceability clean-generated reset-local-data
+.PHONY: doctor bootstrap dev stop logs migrate seed test test-integration test-e2e lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -70,6 +70,9 @@ scan:
 
 watchdog:
 	cd "$(API)" && uv run python -m budgetlens watchdog
+
+import-job:
+	cd "$(API)" && uv run python -m budgetlens import-job $(OPERATION) $(JOB_ID)
 
 retain-files:
 	cd "$(API)" && uv run python -m budgetlens retain-files

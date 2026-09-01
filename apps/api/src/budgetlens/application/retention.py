@@ -8,9 +8,9 @@ from budgetlens.adapters.persistence.finance_repositories import (
     SqlImportJobRepository,
     list_jobs_with_expired_originals,
 )
-from budgetlens.adapters.storage import ObjectStorage
 from budgetlens.config import Settings
 from budgetlens.domain.identities import Clock
+from budgetlens.ports.storage import ObjectStorage
 
 
 def purge_expired_originals(

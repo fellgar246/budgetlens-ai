@@ -7,10 +7,11 @@ from uuid import UUID, uuid5
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from budgetlens.application.audit import record_access_denied
-from budgetlens.domain.errors import DomainError, PermissionDeniedError
+from budgetlens.domain.errors import DomainError, PermissionDeniedError, database_unavailable
 from budgetlens.presentation.middleware import TRACE_HEADER
 
 logger = logging.getLogger("budgetlens.errors")
@@ -128,6 +129,21 @@ async def http_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def database_unavailable_handler(request: Request, _exc: Exception) -> JSONResponse:
+    trace_id = _trace_id(request)
+    error = database_unavailable()
+    return JSONResponse(
+        status_code=error.status_code,
+        content=error_body(
+            code=error.code,
+            message=error.message,
+            trace_id=trace_id,
+            retryable=True,
+        ),
+        headers={TRACE_HEADER: trace_id},
+    )
+
+
 async def unhandled_handler(request: Request, _exc: Exception) -> JSONResponse:
     trace_id = _trace_id(request)
     logger.error(
@@ -151,6 +167,8 @@ async def unhandled_handler(request: Request, _exc: Exception) -> JSONResponse:
 
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, domain_handler)
+    app.add_exception_handler(OperationalError, database_unavailable_handler)
+    app.add_exception_handler(InterfaceError, database_unavailable_handler)
     app.add_exception_handler(RequestValidationError, validation_handler)
     app.add_exception_handler(StarletteHTTPException, http_handler)
     app.add_exception_handler(Exception, unhandled_handler)

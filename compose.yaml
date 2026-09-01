@@ -36,6 +36,7 @@ services:
       LOCAL_STORAGE_PATH: /var/lib/budgetlens/storage
       AUTH_MODE: dev
       AI_PROVIDER: stub
+      IMPORT_EXECUTOR: ${IMPORT_EXECUTOR:-inline}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       DB_READY_TIMEOUT_SECONDS: ${DB_READY_TIMEOUT_SECONDS:-2}

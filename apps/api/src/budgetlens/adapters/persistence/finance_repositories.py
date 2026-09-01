@@ -109,6 +109,11 @@ class SqlImportJobRepository:
         )
 
 
+def get_import_job(session: Session, job_id: UUID) -> ImportJob | None:
+    row = session.get(ImportJobRow, job_id)
+    return import_job_from_row(row) if row else None
+
+
 def list_stale_processing(session: Session, *, cutoff: datetime) -> list[ImportJob]:
     rows = session.scalars(
         select(ImportJobRow).where(

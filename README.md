@@ -5,7 +5,7 @@ BudgetLens turns tabular budget and actuals files into explainable variance anal
 This repository is a monorepo:
 
 - `apps/web` — Next.js static web app
-- `apps/api` — FastAPI service
+- `apps/api` — FastAPI service with domain, application, ports, adapters, and HTTP routes
 - `packages/api-client` — typed HTTP client and OpenAPI snapshot
 - `infrastructure/terraform` — version pin only in this walking skeleton
 - `compose.yaml` — local web, API, and PostgreSQL
@@ -80,6 +80,7 @@ pnpm --filter web dev
 | `make coverage-unit` | Cobertura unitaria informativa, sin umbral de fallo. |
 | `make scan` | Dependency, secret, and optional image scans. Critical findings fail the command. |
 | `make watchdog` | Mark stale processing import jobs as timed out. |
+| `python -m budgetlens import-job validate\|apply <job-id>` | Run the same import modules as a worker process. |
 | `make retain-files` | Delete original import files older than the retention window. |
 | `make test-perf` | Large-file preview timing. |
 | `make traceability` | Check that every FR/NFR/AC, plan, gate, and high-impact risk is catalogued. |

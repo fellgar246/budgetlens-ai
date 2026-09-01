@@ -1,3 +1,3 @@
 # BudgetLens API
 
-FastAPI service for health, organizations, dimensions, budget versions, and later financial use cases. Run it through the repository Makefile or Compose. See the root README for onboarding.
+FastAPI service. Use cases live in `application`, ports in `ports`, and adapters (PostgreSQL, local/S3 storage, stub/Bedrock AI, dev/OIDC identity, import executor) in `adapters`. Run it through the repository Makefile or Compose. See the root README for onboarding.

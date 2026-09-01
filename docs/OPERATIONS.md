@@ -15,7 +15,10 @@ This document covers availability, recovery, rollback, and hardening commands fo
 ## Health
 
 - Liveness: `GET /api/v1/health/live` stays 200 while the process responds.
-- Readiness: `GET /api/v1/health/ready` is 200 when the database is available and 503 when it is not.
+- Readiness: `GET /api/v1/health/ready` is 200 when the database is available and 503 when it is not. Object storage and the AI provider do not affect readiness.
+- If the database fails during a request, the API returns 503 `DATABASE_UNAVAILABLE` without internal details.
+- If object storage fails, uploads and exports return 503 `STORAGE_UNAVAILABLE`; financial reads continue.
+- If the AI provider fails, analytics continues and the copilot returns 503 `AI_UNAVAILABLE`.
 - Technical metrics (operator): `GET /api/v1/ops/metrics`. These do not include amounts or prompts.
 
 Failure classification:

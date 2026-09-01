@@ -10,6 +10,7 @@ AppEnv = Literal["local", "test", "dev", "prod"]
 AuthMode = Literal["dev", "oidc"]
 ObjectStorageBackend = Literal["local", "s3"]
 AiProvider = Literal["stub", "bedrock"]
+ImportExecutorMode = Literal["inline", "process"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
@@ -29,12 +30,22 @@ class Settings(BaseSettings):
     database_url: str
     object_storage_backend: ObjectStorageBackend = "local"
     local_storage_path: str = "./var/storage"
+    s3_bucket: str = ""
+    s3_region: str = "us-east-1"
+    s3_prefix: str = ""
+    s3_endpoint_url: str = ""
     auth_mode: AuthMode = "dev"
+    oidc_issuer: str = ""
+    oidc_audience: str = ""
+    oidc_jwks_url: str = ""
     ai_provider: AiProvider = "stub"
     bedrock_region: str = "us-east-1"
     bedrock_model_id: str = ""
     ai_max_tool_calls: int = Field(default=4, ge=1)
+    ai_max_context_turns: int = Field(default=12, ge=1)
+    ai_max_result_rows: int = Field(default=50, ge=1)
     ai_timeout_seconds: int = Field(default=20, ge=1)
+    import_executor: ImportExecutorMode = "inline"
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
     cors_origins: str = "http://localhost:3000"
     db_ready_timeout_seconds: float = Field(default=2.0, gt=0)

@@ -9,7 +9,6 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from budgetlens.adapters.parsing import WorkbookTable, parse_workbook
 from budgetlens.adapters.persistence.finance_repositories import (
     SqlFinancialEntryRepository,
     SqlImportErrorRepository,
@@ -23,7 +22,6 @@ from budgetlens.adapters.persistence.repositories import (
     SqlDepartmentRepository,
     SqlOrganizationRepository,
 )
-from budgetlens.adapters.storage import ObjectStorage
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.idempotency_keys import (
@@ -64,6 +62,7 @@ from budgetlens.domain.importing import (
     ImportJob,
     NormalizedImportRow,
     ParsedCellRow,
+    WorkbookTable,
     propose_mapping,
     validate_mapping,
 )
@@ -72,6 +71,9 @@ from budgetlens.domain.organization import Organization, normalize_name
 from budgetlens.domain.permissions import can_create_missing_dimensions, require_permission
 from budgetlens.domain.text_safety import redact_cell
 from budgetlens.observability import metrics_registry
+from budgetlens.ports.imports import ImportExecutor
+from budgetlens.ports.parsing import WorkbookParser
+from budgetlens.ports.storage import ObjectStorage
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,12 +95,16 @@ class ImportService:
         ids: IdFactory,
         storage: ObjectStorage,
         settings: Settings,
+        executor: ImportExecutor,
+        parser: WorkbookParser,
     ) -> None:
         self._session = session
         self._clock = clock
         self._ids = ids
         self._storage = storage
         self._settings = settings
+        self._executor = executor
+        self._parser = parser
         self._orgs = SqlOrganizationRepository(session)
         self._audits = SqlAuditRepository(session)
 
@@ -218,7 +224,7 @@ class ImportService:
             raise ValidationError(
                 "UNSUPPORTED_FILE", "La huella del archivo no coincide con la declarada."
             )
-        parse_workbook(job.original_filename, content, media_type=media_type)
+        self._parser.parse(job.original_filename, content, media_type=media_type)
         key = self._storage.generate_key(
             organization_id=context.organization_id,
             namespace=f"imports/{job.id}",
@@ -253,6 +259,31 @@ class ImportService:
         previous = job
         job = self._persist_processing(job, trace_id=context.trace_id)
         organization = self._require_org(context.organization_id)
+
+        def work() -> ImportJob:
+            return self._validate_body(
+                context,
+                job=job,
+                previous=previous,
+                organization=organization,
+                mapping=mapping,
+                create_missing_dimensions=create_missing_dimensions,
+                amount_locale=amount_locale,
+            )
+
+        return self._executor.run("validate", work)
+
+    def _validate_body(
+        self,
+        context: TenantContext,
+        *,
+        job: ImportJob,
+        previous: ImportJob,
+        organization: Organization,
+        mapping: dict[str, str],
+        create_missing_dimensions: bool,
+        amount_locale: str,
+    ) -> ImportJob:
         try:
             columns = validate_mapping(mapping)
             payload = {"columns": columns, "amount_locale": amount_locale}
@@ -454,6 +485,9 @@ class ImportService:
             return existing
         job.assert_committable()
         job = self._persist_processing(job, trace_id=context.trace_id)
+        return self._executor.run("apply", lambda: self._commit_body(context, job=job))
+
+    def _commit_body(self, context: TenantContext, *, job: ImportJob) -> ImportJob:
         if job.idempotency_fingerprint:
             other = self._jobs(context.organization_id).get_by_fingerprint(
                 job.idempotency_fingerprint
@@ -470,7 +504,7 @@ class ImportService:
         organization = self._require_org(context.organization_id)
         columns = dict(job.mapping_json["columns"])
         amount_locale = str(job.mapping_json.get("amount_locale", "en"))
-        table = parse_workbook(job.original_filename, content, media_type=job.media_type)
+        table = self._parser.parse(job.original_filename, content, media_type=job.media_type)
         version_fy = self._fiscal_year_for_job(context, job)
         normalized, issues = self._collect_rows(
             table.rows,
@@ -541,7 +575,7 @@ class ImportService:
         if not job.object_key:
             raise ConflictError("IMPORT_STATE", "Primero debes cargar el archivo.")
         content = self._storage.get(job.object_key)
-        return parse_workbook(job.original_filename, content, media_type=job.media_type)
+        return self._parser.parse(job.original_filename, content, media_type=job.media_type)
 
     def _collect_rows(
         self,

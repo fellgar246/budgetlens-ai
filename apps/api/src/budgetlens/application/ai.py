@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Protocol, cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -45,6 +45,7 @@ from budgetlens.domain.organization import normalize_name
 from budgetlens.domain.permissions import require_permission
 from budgetlens.domain.scenario import ScenarioRule
 from budgetlens.observability import metrics_registry
+from budgetlens.ports.ai import AIProvider, ToolRequest
 
 REGISTERED_TOOLS = frozenset(
     {
@@ -55,20 +56,6 @@ REGISTERED_TOOLS = frozenset(
         "calculate_scenario_preview",
     }
 )
-MUTATION_MARKERS = (
-    "cambia",
-    "cambiar",
-    "actualiza",
-    "borra",
-    "elimina",
-    "publica",
-    "importa",
-    "guarda el presupuesto",
-    "ejecuta sql",
-    "run_query",
-    "execute_sql",
-)
-OUT_OF_DOMAIN = ("clima", "receta", "roi", "sql", "system prompt", "instrucciones internas")
 MONTHS = {
     "enero": 1,
     "febrero": 2,
@@ -83,128 +70,6 @@ MONTHS = {
     "noviembre": 11,
     "diciembre": 12,
 }
-
-
-@dataclass(frozen=True, slots=True)
-class ToolRequest:
-    name: str
-    arguments: dict[str, Any]
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderResult:
-    text: str | None
-    tool_requests: tuple[ToolRequest, ...]
-    input_units: int
-    output_units: int
-    model_id: str
-
-
-class AIProvider(Protocol):
-    def complete(
-        self,
-        *,
-        messages: list[ConversationMessage],
-        question: str,
-        settings: Settings,
-    ) -> ProviderResult: ...
-
-
-class DeterministicAIProvider:
-    def complete(
-        self,
-        *,
-        messages: list[ConversationMessage],
-        question: str,
-        settings: Settings,
-    ) -> ProviderResult:
-        del messages
-        text = question.lower()
-        if "loop infinito" in text or "solicita tools indefinidamente" in text:
-            return ProviderResult(
-                text=None,
-                tool_requests=tuple(
-                    ToolRequest("get_variance_summary", {})
-                    for _ in range(settings.ai_max_tool_calls + 3)
-                ),
-                input_units=8,
-                output_units=8,
-                model_id="stub",
-            )
-        if any(marker in text for marker in MUTATION_MARKERS):
-            return ProviderResult(
-                text=(
-                    "No puedo modificar presupuesto, importar ni ejecutar acciones. "
-                    "Solo consulto cifras ya calculadas."
-                ),
-                tool_requests=(),
-                input_units=4,
-                output_units=12,
-                model_id="stub",
-            )
-        if "beta" in text and (
-            "organización" in text or "organizacion" in text or "muéstrame" in text
-        ):
-            return ProviderResult(
-                text="Solo puedo consultar la organización activa. No tengo acceso a otra empresa.",
-                tool_requests=(),
-                input_units=4,
-                output_units=10,
-                model_id="stub",
-            )
-        if "roi" in text:
-            return ProviderResult(
-                text="No puedo calcular un ROI sin inversión y retorno definidos en el alcance.",
-                tool_requests=(),
-                input_units=3,
-                output_units=8,
-                model_id="stub",
-            )
-        if any(
-            marker in text
-            for marker in ("clima", "receta", "system prompt", "instrucciones internas")
-        ):
-            return ProviderResult(
-                text="Esa solicitud está fuera del dominio de análisis presupuestario.",
-                tool_requests=(),
-                input_units=3,
-                output_units=8,
-                model_id="stub",
-            )
-        if "entre enero y febrero" in text or "enero y febrero" in text:
-            return ProviderResult(
-                text=None,
-                tool_requests=(ToolRequest("compare_periods", {"group": "period"}),),
-                input_units=6,
-                output_units=4,
-                model_id="stub",
-            )
-        if "mayor desviación" in text or "desfavorable" in text and "febrero" in text:
-            return ProviderResult(
-                text=None,
-                tool_requests=(
-                    ToolRequest("get_top_unfavorable_variances", {"group_by": "account"}),
-                ),
-                input_units=6,
-                output_units=4,
-                model_id="stub",
-            )
-        if "departamento" in text or "explicó" in text or "explico" in text or "exceso" in text:
-            group = "department" if "departamento" in text else "account"
-            return ProviderResult(
-                text=None,
-                tool_requests=(ToolRequest("get_variance_breakdown", {"group_by": group}),),
-                input_units=6,
-                output_units=4,
-                model_id="stub",
-            )
-        return ProviderResult(
-            text=None,
-            tool_requests=(ToolRequest("get_variance_summary", {}),),
-            input_units=5,
-            output_units=3,
-            model_id="stub",
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,7 +231,7 @@ class ConversationService:
         )
         repo.add_message(user_message)
         started = time.perf_counter()
-        history = repo.list_messages(conversation.id, limit=12)
+        history = repo.list_messages(conversation.id, limit=self._settings.ai_max_context_turns)
         provider = self._provider.complete(
             messages=history, question=question, settings=self._settings
         )
@@ -595,7 +460,7 @@ class ConversationService:
                     "budgetlens.domain.enums", fromlist=["SortDirection"]
                 ).SortDirection.DESC,
                 cursor=None,
-                limit=20,
+                limit=min(20, self._settings.ai_max_result_rows),
             )
             payload = {
                 "scope": _scope(query),

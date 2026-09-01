@@ -8,13 +8,18 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.db import get_session_factory
+from budgetlens.adapters.factory import (
+    build_ai_provider,
+    build_identity_adapter,
+    build_import_runner,
+    build_object_storage,
+    build_workbook_parser,
+)
 from budgetlens.adapters.persistence.repositories import (
     SqlMembershipRepository,
     SqlOrganizationRepository,
-    SqlUserRepository,
 )
-from budgetlens.adapters.storage import LocalObjectStorage, ObjectStorage
-from budgetlens.application.ai import ConversationService, DeterministicAIProvider
+from budgetlens.application.ai import ConversationService
 from budgetlens.application.analytics import AnalyticsService
 from budgetlens.application.budget_versions import BudgetVersionService
 from budgetlens.application.context import TenantContext
@@ -28,6 +33,10 @@ from budgetlens.domain.errors import NotFoundError, PermissionDeniedError, Unaut
 from budgetlens.domain.identities import Clock, IdFactory, SystemClock, Uuid4Factory
 from budgetlens.domain.organization import User
 from budgetlens.observability import metrics_registry
+from budgetlens.ports.identity import IdentityProvider
+from budgetlens.ports.imports import ImportExecutor
+from budgetlens.ports.parsing import WorkbookParser
+from budgetlens.ports.storage import ObjectStorage
 
 
 def get_db_session() -> Generator[Session, None, None]:
@@ -60,25 +69,20 @@ def _extract_bearer(authorization: str | None) -> str:
     return token.strip()
 
 
-def get_current_user(
-    request: Request,
+def get_identity_provider(
     session: Annotated[Session, Depends(get_db_session)],
     settings: Annotated[Settings, Depends(get_settings)],
+) -> IdentityProvider:
+    return build_identity_adapter(settings, session)
+
+
+def get_current_user(
+    request: Request,
+    identity: Annotated[IdentityProvider, Depends(get_identity_provider)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
-    if settings.auth_mode != "dev" or settings.app_env not in {"local", "test"}:
-        raise UnauthenticatedError("La autenticación no está disponible en este entorno.")
     token = _extract_bearer(authorization)
-    if token.startswith("dev/"):
-        token = token.removeprefix("dev/")
-    try:
-        user_id = UUID(token)
-    except ValueError as exc:
-        raise UnauthenticatedError() from exc
-    user = SqlUserRepository(session).get(user_id)
-    if user is None:
-        raise UnauthenticatedError()
-    user.assert_active()
+    user = identity.authenticate(token)
     request.state.user_id = str(user.id)
     return user
 
@@ -150,7 +154,15 @@ def get_budget_version_service(
 
 
 def get_object_storage(settings: Annotated[Settings, Depends(get_settings)]) -> ObjectStorage:
-    return LocalObjectStorage(settings.local_storage_path)
+    return build_object_storage(settings)
+
+
+def get_import_executor(settings: Annotated[Settings, Depends(get_settings)]) -> ImportExecutor:
+    return build_import_runner(settings)
+
+
+def get_workbook_parser() -> WorkbookParser:
+    return build_workbook_parser()
 
 
 def get_import_service(
@@ -159,8 +171,10 @@ def get_import_service(
     ids: Annotated[IdFactory, Depends(get_ids)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ImportExecutor, Depends(get_import_executor)],
+    parser: Annotated[WorkbookParser, Depends(get_workbook_parser)],
 ) -> ImportService:
-    return ImportService(session, clock, ids, storage, settings)
+    return ImportService(session, clock, ids, storage, settings, executor, parser)
 
 
 def get_analytics_service(
@@ -195,7 +209,7 @@ def get_conversation_service(
         settings,
         analytics,
         scenarios,
-        DeterministicAIProvider(),
+        build_ai_provider(settings),
     )
 
 

@@ -88,3 +88,29 @@ class RateLimitError(DomainError):
         self, message: str = "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo."
     ) -> None:
         super().__init__(code="RATE_LIMITED", message=message, status_code=429, retryable=True)
+
+
+class DependencyUnavailableError(DomainError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(code=code, message=message, status_code=503, retryable=True)
+
+
+def storage_unavailable() -> DependencyUnavailableError:
+    return DependencyUnavailableError(
+        "STORAGE_UNAVAILABLE",
+        "No se pudo guardar o leer el archivo. Inténtalo de nuevo.",
+    )
+
+
+def ai_unavailable() -> DependencyUnavailableError:
+    return DependencyUnavailableError(
+        "AI_UNAVAILABLE",
+        "El copiloto no está disponible. Inténtalo de nuevo.",
+    )
+
+
+def database_unavailable() -> DependencyUnavailableError:
+    return DependencyUnavailableError(
+        "DATABASE_UNAVAILABLE",
+        "El servicio no está disponible. Inténtalo de nuevo.",
+    )

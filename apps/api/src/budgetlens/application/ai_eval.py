@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from budgetlens.application.ai import DeterministicAIProvider
 from budgetlens.config import get_settings
 from budgetlens.domain.identities import SystemClock, Uuid4Factory
+from budgetlens.ports.ai import AIProvider
 
 CASES = (
     ("AI-E01", "¿Cuál fue la variación de Maintenance en enero?", "get_variance_summary"),
@@ -19,9 +19,8 @@ CASES = (
 )
 
 
-def run_stub_eval() -> dict[str, object]:
+def run_stub_eval(provider: AIProvider) -> dict[str, object]:
     settings = get_settings()
-    provider = DeterministicAIProvider()
     clock = SystemClock()
     ids = Uuid4Factory()
     results: list[dict[str, object]] = []

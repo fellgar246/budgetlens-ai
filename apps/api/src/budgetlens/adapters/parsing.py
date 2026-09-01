@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
-from dataclasses import dataclass
 from typing import BinaryIO
 
 from openpyxl import load_workbook
@@ -11,7 +10,7 @@ from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from budgetlens.domain.errors import PayloadTooLargeError, ValidationError, field_issue
-from budgetlens.domain.importing import ParsedCellRow
+from budgetlens.domain.importing import ParsedCellRow, WorkbookTable
 
 CSV_MEDIA_TYPES = frozenset(
     {
@@ -40,12 +39,11 @@ DANGEROUS_ZIP_NAMES = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class WorkbookTable:
-    headers: list[str]
-    rows: list[ParsedCellRow]
-    sheet_name: str
-    delimiter: str | None
+class OpenpyxlWorkbookParser:
+    def parse(
+        self, filename: str, content: bytes, *, media_type: str | None = None
+    ) -> WorkbookTable:
+        return parse_workbook(filename, content, media_type=media_type)
 
 
 def detect_kind(filename: str, content: bytes) -> str:

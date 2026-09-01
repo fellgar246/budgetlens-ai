@@ -151,6 +151,14 @@ class ParsedCellRow:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkbookTable:
+    headers: list[str]
+    rows: list[ParsedCellRow]
+    sheet_name: str
+    delimiter: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedImportRow:
     row_number: int
     period_start: date
