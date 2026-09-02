@@ -1,5 +1,9 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_elb_service_account" "current" {
+  count = var.enable_access_logs ? 1 : 0
+}
+
 resource "random_id" "suffix" {
   byte_length = 4
 }
@@ -41,16 +45,15 @@ resource "aws_s3_bucket_versioning" "logs" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  # checkov:skip=CKV_AWS_145: ALB and S3 server access logs require SSE-S3, not a customer KMS key.
   count = var.enable_access_logs ? 1 : 0
 
   bucket = aws_s3_bucket.logs[0].id
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = var.kms_key_arn
+      sse_algorithm = "AES256"
     }
-    bucket_key_enabled = true
   }
 }
 
@@ -112,6 +115,33 @@ data "aws_iam_policy_document" "logs" {
       identifiers = ["logging.s3.amazonaws.com"]
     }
     resources = ["${aws_s3_bucket.logs[0].arn}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  statement {
+    sid     = "ALBAccessLogsAccount"
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
+    principals {
+      type        = "AWS"
+      identifiers = [data.aws_elb_service_account.current[0].arn]
+    }
+    resources = ["${aws_s3_bucket.logs[0].arn}/alb/AWSLogs/${data.aws_caller_identity.current.account_id}/*"]
+  }
+
+  statement {
+    sid     = "ALBAccessLogsService"
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
+    principals {
+      type        = "Service"
+      identifiers = ["logdelivery.elasticloadbalancing.amazonaws.com"]
+    }
+    resources = ["${aws_s3_bucket.logs[0].arn}/alb/AWSLogs/${data.aws_caller_identity.current.account_id}/*"]
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"

@@ -160,15 +160,13 @@ data "aws_iam_policy_document" "deploy" {
       "ecs:*",
       "elasticloadbalancing:*",
       "events:*",
-      "iam:CreateServiceLinkedRole",
-      "iam:PassRole",
-      "kms:CreateGrant",
-      "kms:Decrypt",
-      "kms:DescribeKey",
-      "kms:Encrypt",
-      "kms:GenerateDataKey*",
       "logs:*",
       "rds:*",
+      "route53:ChangeResourceRecordSets",
+      "route53:GetChange",
+      "route53:GetHostedZone",
+      "route53:ListHostedZones",
+      "route53:ListResourceRecordSets",
       "s3:*",
       "secretsmanager:*",
       "sns:*",
@@ -180,16 +178,114 @@ data "aws_iam_policy_document" "deploy" {
   }
 
   statement {
-    sid    = "DenyIamEscalation"
+    sid    = "ManageEncryptionKeys"
+    effect = "Allow"
+    actions = [
+      "kms:CancelKeyDeletion",
+      "kms:CreateAlias",
+      "kms:CreateGrant",
+      "kms:CreateKey",
+      "kms:Decrypt",
+      "kms:DeleteAlias",
+      "kms:DescribeKey",
+      "kms:EnableKeyRotation",
+      "kms:Encrypt",
+      "kms:GenerateDataKey*",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListAliases",
+      "kms:ListKeys",
+      "kms:ListResourceTags",
+      "kms:PutKeyPolicy",
+      "kms:ScheduleKeyDeletion",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:UpdateAlias",
+    ]
+    # CreateKey and ListKeys do not support resource-level permissions.
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CreateServiceLinkedRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateServiceLinkedRole",
+    ]
+    # CreateServiceLinkedRole is an account-level API; path/service is constrained below.
+    resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "iam:AWSServiceName"
+      values = [
+        "autoscaling.amazonaws.com",
+        "ecs.amazonaws.com",
+        "ecs.application-autoscaling.amazonaws.com",
+        "elasticloadbalancing.amazonaws.com",
+        "rds.amazonaws.com",
+      ]
+    }
+  }
+
+  statement {
+    sid    = "ManagePrefixedRoles"
+    effect = "Allow"
+    actions = [
+      "iam:AttachRolePolicy",
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:DeleteRolePolicy",
+      "iam:GetRole",
+      "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfilesForRole",
+      "iam:ListRolePolicies",
+      "iam:PassRole",
+      "iam:PutRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:UpdateRole",
+      "iam:UpdateRoleDescription",
+    ]
+    resources = [
+      "arn:aws:iam::*:role/${var.name_prefix}-*",
+    ]
+  }
+
+  statement {
+    sid    = "ReadManagedPolicies"
+    effect = "Allow"
+    actions = [
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+    ]
+    resources = [
+      "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+    ]
+  }
+
+  statement {
+    sid    = "DenyIamUserEscalation"
     effect = "Deny"
     actions = [
       "iam:CreateUser",
       "iam:CreateAccessKey",
       "iam:AttachUserPolicy",
       "iam:PutUserPolicy",
-      "iam:UpdateAssumeRolePolicy",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid    = "DenyAssumeRolePolicyOutsidePrefix"
+    effect = "Deny"
+    actions = [
+      "iam:UpdateAssumeRolePolicy",
+    ]
+    not_resources = [
+      "arn:aws:iam::*:role/${var.name_prefix}-*",
+    ]
   }
 }
 

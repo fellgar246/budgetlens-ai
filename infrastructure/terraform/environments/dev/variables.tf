@@ -68,6 +68,11 @@ variable "vpc_cidr" {
   type        = string
   description = "VPC CIDR. Keep environments unique if they share an account."
   nullable    = false
+
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr must be a valid IPv4 CIDR."
+  }
 }
 
 variable "availability_zone_count" {
@@ -127,6 +132,11 @@ variable "api_image" {
   type        = string
   description = "API image URI with an immutable tag or digest. Never latest."
   nullable    = false
+
+  validation {
+    condition     = !can(regex(":(latest|LATEST)$", var.api_image)) && trimspace(var.api_image) != ""
+    error_message = "api_image must not use the latest tag. Prefer a digest."
+  }
 }
 
 variable "enable_autoscaling" {

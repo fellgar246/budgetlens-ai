@@ -38,7 +38,7 @@ module "storage" {
   enable_web_versioning        = var.enable_web_versioning
   enable_data_versioning       = var.enable_data_versioning
   enable_access_logs           = var.enable_access_logs
-  cors_allowed_origins         = []
+  cors_allowed_origins         = local.configured_app_urls
   original_file_retention_days = var.original_file_retention_days
   error_report_retention_days  = var.error_report_retention_days
   export_retention_days        = var.export_retention_days
@@ -125,8 +125,6 @@ module "edge" {
   domain_name                     = var.domain_name
   hosted_zone_id                  = var.hosted_zone_id
   create_dns_records              = var.create_dns_records
-  enable_access_logs              = var.enable_access_logs
-  logs_bucket_domain_name         = module.storage.logs_bucket_domain_name
   waf_web_acl_arn                 = module.security.waf_web_acl_arn
   price_class                     = var.price_class
 }

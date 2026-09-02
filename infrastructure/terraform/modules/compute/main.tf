@@ -225,6 +225,18 @@ data "aws_iam_policy_document" "task" {
     resources = [var.data_bucket_arn]
   }
 
+  statement {
+    sid    = "DataBucketEncryption"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+    ]
+    resources = [var.kms_key_arn]
+  }
+
   dynamic "statement" {
     for_each = local.bedrock_enabled ? [1] : []
     content {

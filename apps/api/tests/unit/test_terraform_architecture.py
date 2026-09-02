@@ -52,6 +52,16 @@ def _read(relative: str) -> str:
     return (TF_ROOT / relative).read_text(encoding="utf-8")
 
 
+NATIVE_TEST_MODULES = (
+    "network",
+    "compute",
+    "database",
+    "identity",
+    "storage",
+    "github_oidc",
+)
+
+
 def test_module_and_environment_layout_exists() -> None:
     for name in MODULE_NAMES:
         module = TF_ROOT / "modules" / name
@@ -59,6 +69,9 @@ def test_module_and_environment_layout_exists() -> None:
         assert (module / "variables.tf").is_file(), name
         assert (module / "outputs.tf").is_file(), name
         assert (module / "README.md").is_file(), name
+    for name in NATIVE_TEST_MODULES:
+        tests = list((TF_ROOT / "modules" / name).glob("tests/*.tftest.hcl"))
+        assert tests, name
     for environment in ENVIRONMENTS:
         root = TF_ROOT / "environments" / environment
         assert (root / "main.tf").is_file(), environment
@@ -105,6 +118,8 @@ def test_task_definitions_reject_latest_and_run_controlled_migrations() -> None:
     assert "assign_public_ip = false" in compute
     assert "/api/v1/health/ready" in compute
     assert "secretsmanager" in compute.lower() or "app_secret_arn" in compute
+    assert "DataBucketEncryption" in compute
+    assert "kms:GenerateDataKey" in compute
 
 
 def test_network_keeps_rds_private_and_tasks_off_the_internet() -> None:
@@ -129,6 +144,8 @@ def test_storage_is_private_and_state_bucket_is_separate() -> None:
     assert "budgetlens-tfstate-" in bootstrap
     assert "aws_s3_bucket" in bootstrap
     assert "force_destroy = false" in bootstrap
+    assert 'sse_algorithm = "AES256"' in storage
+    assert "ALBAccessLogsAccount" in storage
 
 
 def test_identity_is_public_pkce_client_without_users() -> None:
@@ -181,3 +198,8 @@ def test_terraform_tree_has_no_access_keys_or_passwords() -> None:
         text = path.read_text(encoding="utf-8")
         assert "AKIA" not in text
         assert "password" not in text.lower() or "Do not put passwords" in text
+    oidc = _read("modules/github_oidc/main.tf")
+    assert "ManagePrefixedRoles" in oidc
+    assert "iam:CreateRole" in oidc
+    scan = (REPO_ROOT / "scripts" / "scan.sh").read_text(encoding="utf-8")
+    assert "terraform test" in scan

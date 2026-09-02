@@ -53,19 +53,6 @@ variable "create_dns_records" {
   nullable    = false
 }
 
-variable "enable_access_logs" {
-  type        = bool
-  description = "Write CloudFront access logs. Leave off until cost is approved."
-  nullable    = false
-}
-
-variable "logs_bucket_domain_name" {
-  type        = string
-  description = "S3 bucket domain name for CloudFront logs. Required when logging is enabled."
-  nullable    = false
-  default     = ""
-}
-
 variable "waf_web_acl_arn" {
   type        = string
   description = "Optional CloudFront WAF web ACL ARN."

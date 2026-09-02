@@ -6,7 +6,7 @@ Creates the GitHub Actions OIDC provider and three roles:
 - `deploy-dev` — apply permissions, trusted from main and the `dev` environment
 - `deploy-prod` — apply permissions, trusted only from the `prod` environment
 
-No long-lived access keys are created. Production apply still requires a human-approved GitHub Environment.
+IAM role management is limited to `arn:aws:iam::*:role/<name_prefix>-*`. Production apply still requires a human-approved GitHub Environment. No long-lived access keys are created.
 
 ## Example
 

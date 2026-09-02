@@ -4,7 +4,7 @@ Creates a private PostgreSQL instance in isolated subnets, an explicit parameter
 
 The master password is never a Terraform input or output. ECS injects `DATABASE_URL` and `STORAGE_KEY_PEPPER` from the secret ARN.
 
-Development is single-AZ with a small instance class. Production enables Multi-AZ and deletion protection.
+Development is single-AZ with a small instance class. Production enables Multi-AZ and RDS deletion protection. Terraform `prevent_destroy` stays false so the documented teardown runbook can disable protection and destroy after review.
 
 ## Example
 

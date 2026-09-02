@@ -118,6 +118,8 @@ resource "aws_db_instance" "this" {
   monitoring_role_arn                   = aws_iam_role.monitoring.arn
   apply_immediately                     = false
 
+  # prevent_destroy cannot take a variable. Production uses deletion_protection
+  # so the documented teardown runbook can disable protection and destroy after review.
   lifecycle {
     prevent_destroy = false
   }

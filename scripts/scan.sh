@@ -47,6 +47,8 @@ TF_FILE=$(find "$TF_DIR" -name "*.tf" -print -quit 2>/dev/null || true)
 if [ -n "$TF_FILE" ]; then
   echo "Checking Terraform formatting..."
   if command -v terraform >/dev/null 2>&1; then
+    export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-$TMPDIR/budgetlens-tf-plugin-cache}"
+    mkdir -p "$TF_PLUGIN_CACHE_DIR"
     if terraform -chdir="$TF_DIR" fmt -check -recursive; then
       echo "PASS  terraform fmt"
     else
@@ -63,6 +65,27 @@ if [ -n "$TF_FILE" ]; then
         fi
       else
         echo "NOTE  terraform init -backend=false failed in $tf_root (providers unavailable)"
+      fi
+    done
+
+    echo "Testing Terraform modules..."
+    if [ -d "$TF_DIR/environments/dev/.terraform/providers" ]; then
+      cp -R "$TF_DIR/environments/dev/.terraform/providers/." "$TF_PLUGIN_CACHE_DIR/" 2>/dev/null || true
+    fi
+    for tf_mod in "$TF_DIR"/modules/*; do
+      [ -d "$tf_mod" ] || continue
+      if [ -z "$(find "$tf_mod" -name '*.tftest.hcl' -print -quit 2>/dev/null)" ]; then
+        continue
+      fi
+      tmp_mod="$TMPDIR/budgetlens-tftest-$(basename "$tf_mod")"
+      rm -rf "$tmp_mod"
+      cp -R "$tf_mod" "$tmp_mod"
+      rm -rf "$tmp_mod/.terraform"
+      if terraform -chdir="$tmp_mod" init -backend=false -input=false -no-color >/dev/null \
+        && terraform -chdir="$tmp_mod" test -no-color; then
+        echo "PASS  terraform test $(basename "$tf_mod")"
+      else
+        fail "terraform test failed in $(basename "$tf_mod")"
       fi
     done
   else

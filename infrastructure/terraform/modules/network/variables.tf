@@ -37,8 +37,8 @@ variable "nat_gateway_count" {
   nullable    = false
 
   validation {
-    condition     = var.nat_gateway_count >= 1 && var.nat_gateway_count <= 3
-    error_message = "nat_gateway_count must be between 1 and 3."
+    condition     = var.nat_gateway_count >= 1 && var.nat_gateway_count <= 3 && var.nat_gateway_count <= var.availability_zone_count
+    error_message = "nat_gateway_count must be between 1 and 3 and cannot exceed availability_zone_count."
   }
 }
 

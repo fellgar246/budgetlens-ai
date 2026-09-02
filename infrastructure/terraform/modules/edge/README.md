@@ -8,7 +8,7 @@ Creates a single CloudFront distribution:
 - Compression and a security-headers policy
 - Optional ACM certificate and Route 53 records
 
-Development can start on the CloudFront domain. Logging stays off until cost is approved.
+Development can start on the CloudFront domain. CloudFront legacy access logs are omitted because they require bucket ACLs that conflict with Block Public Access. S3 and ALB access logs stay in the storage module when cost is approved.
 
 ## Example
 
@@ -28,6 +28,5 @@ module "edge" {
   alb_dns_name                     = module.compute.alb_dns_name
   domain_name                      = ""
   create_dns_records               = false
-  enable_access_logs               = false
 }
 ```

@@ -27,7 +27,7 @@ If a previous root still sets `dynamodb_table`:
 
 Do not commit `.tfstate`, `*.tfplan`, `backend.hcl`, or credentials. On AWS, secrets come from Secrets Manager at runtime, not from versioned variables. CI assumes AWS through GitHub OIDC, not permanent access keys.
 
-`make scan` runs `terraform fmt -check -recursive`, `terraform validate` on each root, TFLint, and Checkov when the binaries are installed.
+`make scan` runs `terraform fmt -check -recursive`, `terraform validate` on each root, native `terraform test` on modules that declare tests, TFLint, and Checkov when the binaries are installed.
 
 ## Environments
 
@@ -45,6 +45,7 @@ Static validation does not need AWS credentials:
 terraform -chdir=infrastructure/terraform fmt -check -recursive
 terraform -chdir=infrastructure/terraform/environments/dev init -backend=false
 terraform -chdir=infrastructure/terraform/environments/dev validate
+terraform -chdir=infrastructure/terraform/modules/network test
 ```
 
 A real plan or apply needs a recorded account ID, a published image digest, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md).

@@ -1,8 +1,8 @@
 # storage
 
-Creates the private web bucket, the application data bucket, and an optional access-log bucket. All buckets block public access, require TLS, and use KMS encryption.
+Creates the private web bucket, the application data bucket, and an optional access-log bucket. Application buckets block public access, require TLS, and use KMS encryption. The access-log bucket uses SSE-S3 because ALB delivery does not support a customer KMS key.
 
-The data bucket expires `uploads/`, `errors/`, and `exports/` prefixes to match application retention. CloudFront Origin Access Control is attached by the edge module.
+The data bucket expires `uploads/`, `errors/`, and `exports/` prefixes to match application retention. This module does not write the web bucket policy; the edge module attaches Origin Access Control as a dependency contract. Buckets set `force_destroy = false` so destroy does not empty objects by itself.
 
 This module never creates the Terraform state bucket.
 

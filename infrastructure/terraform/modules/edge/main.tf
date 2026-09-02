@@ -201,14 +201,12 @@ resource "aws_cloudfront_distribution" "this" {
     response_page_path    = "/index.html"
     error_caching_min_ttl = 10
   }
+}
 
-  dynamic "logging_config" {
-    for_each = var.enable_access_logs ? [1] : []
-    content {
-      bucket          = var.logs_bucket_domain_name
-      include_cookies = false
-      prefix          = "cloudfront/"
-    }
+check "dns_inputs" {
+  assert {
+    condition     = !var.create_dns_records || (var.domain_name != "" && var.hosted_zone_id != "")
+    error_message = "create_dns_records requires domain_name and hosted_zone_id."
   }
 }
 

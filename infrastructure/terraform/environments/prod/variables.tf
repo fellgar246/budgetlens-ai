@@ -68,6 +68,11 @@ variable "vpc_cidr" {
   type        = string
   description = "VPC CIDR. Keep environments unique if they share an account."
   nullable    = false
+
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr must be a valid IPv4 CIDR."
+  }
 }
 
 variable "availability_zone_count" {
@@ -79,9 +84,9 @@ variable "availability_zone_count" {
 
 variable "nat_gateway_count" {
   type        = number
-  description = "NAT Gateways. Development uses 1 to reduce cost."
+  description = "NAT Gateways. Production uses one per Availability Zone unless VPC endpoints replace them."
   nullable    = false
-  default     = 1
+  default     = 2
 }
 
 variable "enable_vpc_flow_logs" {
@@ -119,7 +124,7 @@ variable "api_memory" {
 
 variable "api_desired_count" {
   type        = number
-  description = "Desired API tasks. Development uses 1."
+  description = "Desired API tasks. Production uses 2 or more."
   nullable    = false
 }
 
@@ -127,6 +132,11 @@ variable "api_image" {
   type        = string
   description = "API image URI with an immutable tag or digest. Never latest."
   nullable    = false
+
+  validation {
+    condition     = !can(regex(":(latest|LATEST)$", var.api_image)) && trimspace(var.api_image) != ""
+    error_message = "api_image must not use the latest tag. Prefer a digest."
+  }
 }
 
 variable "enable_autoscaling" {
