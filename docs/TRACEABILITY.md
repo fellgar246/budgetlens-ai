@@ -13,7 +13,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 | FR-ANA-001–009 | Business rules/API/UX | 03, 04 | AC-005–010 |
 | FR-AI-001–009 | AI architecture/dataset | 05, 06 | AC-017–022 |
 | FR-AUD-001–003 | Observability/audit | 01, 02, 05, 07 | AC-011, AC-016, AC-023–025 |
-| FR-OPS-001–004 | Observability/infrastructure | 00, 07–10 | AC-023–026 |
+| FR-OPS-001–004 | Observability/infrastructure | 00, 07–11 | AC-023–026 |
 | FR-UI-001–005 | UX/UI + UI guidelines | 04–06 | Journeys, keyboard use, AC-013 |
 
 ### Functional status
@@ -80,7 +80,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 | NFR-PERF-001–005 | 02, 03, 04, 05, 07 | Import/API benchmark scripts, Lighthouse pending, AI telemetry, pagination tests |
 | NFR-REL-001–005 | 02, 07, 09, 10 | Atomic import tests, health, rollback/restore/teardown runbooks |
 | NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, Terraform encryption/OIDC, AWS apply pending |
-| NFR-PRI-001–005 | 02, 05–10 | Log tests, retention, synthetic seed, presigned export flow |
+| NFR-PRI-001–005 | 02, 05–11 | Log tests, retention, synthetic seed, presigned export flow, portfolio sample-data |
 | NFR-UX-001–004 | 04, 07 | Automated display tests, keyboard/focus styles, format components |
 | NFR-MNT-001–006 | 00–09 | Coverage gates, types, migrations, OpenAPI, [decision log](DECISIONS.md) |
 | NFR-OBS-001–004 | 00, 05, 07, 08, 10 | Trace/log/metrics/alarm tests, Terraform alarms, AWS smoke still pending |
@@ -104,13 +104,13 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | Plan 08 | Terraform | Implemented | NFR-SEC-001, NFR-SEC-002, NFR-REL-001, NFR-MNT-006, NFR-OBS-003 | AC-025 |
 | Plan 09 | CI/CD | Implemented | NFR-SEC-002, NFR-SEC-005, NFR-REL-005, NFR-MNT-004, FR-OPS-004 | AC-001, AC-025 |
 | Plan 10 | AWS deployment | Implemented | NFR-REL-001, NFR-REL-002, NFR-SEC-001, FR-OPS-004, NFR-OBS-003 | AC-026 |
-| Plan 11 | Portfolio release | Pending | FR-OPS-004, NFR-PRI-001 | AC-001 |
+| Plan 11 | Portfolio release | Implemented | FR-OPS-004, NFR-PRI-001 | AC-001 |
 
 ## Acceptance evidence
 
 | ID | Kind | Evidence |
 |---|---|---|
-| AC-001 | Suite + runbook | Local stack files, bootstrap script, migrated readiness, status-screen E2E |
+| AC-001 | Suite + runbook | Local stack files, bootstrap script, demo/release guides, migrated readiness, status-screen E2E |
 | AC-002 | Suite | Valid import applies once and dashboard totals match |
 | AC-003 | Suite | Invalid row blocks commit and leaves no entries |
 | AC-004 | Suite | Idempotent commit retry keeps the same row count |
@@ -176,7 +176,7 @@ The automated suite is organized around monetary accuracy, atomic imports, tenan
 Commands (local close, 2026-09-01):
 
 - `make lint` — format, lint, and types
-- `make test` — 292 API unit tests and 22 web unit tests
+- `make test` — API unit tests (including portfolio documentation) and 22 web unit tests
 - `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
 - `make test-contract` — OpenAPI snapshot
 - `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
@@ -186,6 +186,6 @@ Commands (local close, 2026-09-01):
 
 Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, the canonical AI eval dataset (Alpha FY2026 `Budget Final` plus exclusive Beta amounts), extra seed rows for a negative actual and UNASSIGNED, and the import workbooks under `sample-data/`.
 
-Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and a live AWS backup/restore. The [deployment runbook](DEPLOYMENT.md) and OIDC plan/deploy workflows exist; enabling them in GitHub and AWS is gate M-05. Live apply, smoke, and `budgetlens-dev-restore` remain gated by M-01–M-09 and R-15. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them.
+Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and a live AWS backup/restore. The [deployment runbook](DEPLOYMENT.md) and OIDC plan/deploy workflows exist; enabling them in GitHub and AWS is gate M-05. Live apply, smoke, and `budgetlens-dev-restore` remain gated by M-01–M-09 and R-15. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them. The local [portfolio demo](DEMO.md), [architecture](ARCHITECTURE.md), [AI eval aggregate](AI_EVALUATION.md), [cost sizes](COST.md), and [release checklist](RELEASE.md) are in-repo; `make portfolio-check` refuses tag `v1.0.0` until production gates are recorded.
 
 Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).

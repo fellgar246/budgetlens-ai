@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate record-gate check-gates review-apply teardown-dev preflight-deploy plan-environment apply-environment verify-infra smoke-release seed-demo observe-release restore-test rollback-release
+.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate record-gate check-gates review-apply teardown-dev preflight-deploy plan-environment apply-environment verify-infra smoke-release seed-demo observe-release restore-test rollback-release portfolio-check
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -232,3 +232,7 @@ rollback-release:
 		DISTRIBUTION_ID="$(DISTRIBUTION_ID)" RUN_SMOKE="$(RUN_SMOKE)" \
 		API_HEALTH_URL="$(API_HEALTH_URL)" APPLICATION_URL="$(APPLICATION_URL)" \
 		$(ROOT)/scripts/rollback-release.sh
+
+portfolio-check:
+	python3 "$(ROOT)/scripts/portfolio_release.py" --print-checklist
+	python3 "$(ROOT)/scripts/portfolio_release.py" --check

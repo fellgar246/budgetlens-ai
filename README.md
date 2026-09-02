@@ -1,6 +1,28 @@
 # BudgetLens
 
-BudgetLens turns tabular budget and actuals files into explainable variance analysis. Financial totals are calculated by tested application code. The assistant can only query those results; it never writes financial data.
+BudgetLens turns tabular budget and actuals files into explainable variance analysis. Spreadsheet formulas and chat answers invent totals; this product imports the file, validates it, and calculates variance in tested application code. The assistant can only query those results; it never writes financial data.
+
+This repository is a **local portfolio demo** at application version `0.1.0`. AWS modules and OIDC workflows are in the tree. They are not applied from a clone. Tag `v1.0.0` stays blocked until recorded production gates exist.
+
+What a reviewer can do without private knowledge:
+
+- Import a synthetic workbook and see validation fail closed on formulas and bad rows
+- Drill into a variance (zero-budget percent is `N/A`, not a fabricated ratio)
+- Ask the copilot for Maintenance in January and open matching evidence
+- Switch from Alpha to Beta and confirm the previous tenant disappears
+- Read how the same API image would run on ECS behind CloudFront
+
+Honest limits: one functional currency per organization, monthly periods, stub copilot unless a human enables Bedrock, synthetic data only, no public production URL, no invented monthly AWS price.
+
+| Guide | Purpose |
+|---|---|
+| [docs/DEMO.md](docs/DEMO.md) | 6–8 minute local walkthrough |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Runtime and Terraform diagrams |
+| [docs/AI_EVALUATION.md](docs/AI_EVALUATION.md) | Stub eval aggregate (20/20); no live claim |
+| [docs/COST.md](docs/COST.md) | Dated sizes; no invented bill |
+| [docs/RELEASE.md](docs/RELEASE.md) | Checklist; `v1.0.0` remains gated |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | ADRs and tradeoffs |
+| [sample-data/README.md](sample-data/README.md) | Synthetic files and expected facts |
 
 This repository is a monorepo:
 
@@ -107,6 +129,7 @@ pnpm --filter web dev
 | `make seed-demo ENVIRONMENT=dev …` | Explicit AWS demo seed. Refuses production. |
 | `make observe-release RECORDED_BY=…` | Record post-deploy observation evidence. |
 | `make restore-test MODE=local` | Isolated restore checklist. AWS requires `SNAPSHOT_ID` and `CONFIRM=1`. |
+| `make portfolio-check` | Secret-free portfolio docs, links, and release-tag guard. Does not create a tag. |
 
 ## Configuration
 
@@ -156,6 +179,6 @@ Recommended editor settings live in `.vscode/`: format on save, the `uv` interpr
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
 
-The ordered AWS deploy runbook is `docs/DEPLOYMENT.md`. Operational runbooks for rollback, restore, cost estimates, teardown, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. CI/CD, OIDC, and release evidence are in `docs/CICD.md`. Manual gates that the code must not assume are in `docs/GATES.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
+The ordered AWS deploy runbook is `docs/DEPLOYMENT.md`. Operational runbooks for rollback, restore, cost estimates, teardown, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. CI/CD, OIDC, and release evidence are in `docs/CICD.md`. Manual gates that the code must not assume are in `docs/GATES.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`. Portfolio demo, architecture, sanitized AI eval, dated cost sizes, and the release checklist are `docs/DEMO.md`, `docs/ARCHITECTURE.md`, `docs/AI_EVALUATION.md`, `docs/COST.md`, and `docs/RELEASE.md`.
 
 `packages/api-client/openapi.json` is generated (`make openapi`). A snapshot change needs an explicit review; do not edit that file by hand.

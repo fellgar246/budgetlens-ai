@@ -50,3 +50,7 @@ Precedence: safe defaults, then the untracked local `.env`, then process environ
 - No secrets or real data. Do not ask for the forbidden inputs in [GATES.md](GATES.md).
 - The diff has been reviewed.
 - Exact commands and results are reported in the PR.
+
+## Portfolio release
+
+The public demo story is [DEMO.md](DEMO.md). Before claiming a release, run `make portfolio-check`. Application version stays `0.1.0` until recorded production gates exist; do not create `v1.0.0` to skip [RELEASE.md](RELEASE.md).
