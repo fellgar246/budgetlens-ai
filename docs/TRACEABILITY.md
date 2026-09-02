@@ -79,11 +79,11 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 |---|---|---|
 | NFR-PERF-001–005 | 02, 03, 04, 05, 07 | Import/API benchmark scripts, Lighthouse pending, AI telemetry, pagination tests |
 | NFR-REL-001–005 | 02, 07, 09, 10 | Atomic import tests, health, rollback/restore runbook |
-| NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, AWS review pending |
+| NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, Terraform encryption/OIDC, AWS apply pending |
 | NFR-PRI-001–005 | 02, 05–10 | Log tests, retention, synthetic seed, presigned export flow |
 | NFR-UX-001–004 | 04, 07 | Automated display tests, keyboard/focus styles, format components |
 | NFR-MNT-001–006 | 00–09 | Coverage gates, types, migrations, OpenAPI, [decision log](DECISIONS.md) |
-| NFR-OBS-001–004 | 00, 05, 07, 08, 10 | Trace/log/metrics/alarm tests and AWS smoke still pending |
+| NFR-OBS-001–004 | 00, 05, 07, 08, 10 | Trace/log/metrics/alarm tests, Terraform alarms, AWS smoke still pending |
 
 Individual IDs: NFR-PERF-001, NFR-PERF-002, NFR-PERF-003, NFR-PERF-004, NFR-PERF-005, NFR-REL-001, NFR-REL-002, NFR-REL-003, NFR-REL-004, NFR-REL-005, NFR-SEC-001, NFR-SEC-002, NFR-SEC-003, NFR-SEC-004, NFR-SEC-005, NFR-SEC-006, NFR-SEC-007, NFR-PRI-001, NFR-PRI-002, NFR-PRI-003, NFR-PRI-004, NFR-PRI-005, NFR-UX-001, NFR-UX-002, NFR-UX-003, NFR-UX-004, NFR-MNT-001, NFR-MNT-002, NFR-MNT-003, NFR-MNT-004, NFR-MNT-005, NFR-MNT-006, NFR-OBS-001, NFR-OBS-002, NFR-OBS-003, NFR-OBS-004.
 
@@ -101,7 +101,7 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | Plan 05 | AI copilot | Implemented | FR-AI-001–009, FR-AUD-002, NFR-PERF-004, NFR-SEC-004, NFR-PRI-002, NFR-PRI-004, NFR-OBS-002 | AC-017–022 |
 | Plan 06 | Auth and tenancy | Implemented | FR-ORG-002–004, NFR-SEC-003, NFR-SEC-004, NFR-PRI-001 | AC-011–016 |
 | Plan 07 | Hardening | Implemented | FR-AUD-001, FR-AUD-003, FR-OPS-001–004, NFR-PERF-001/003/005, NFR-REL-003–005, NFR-SEC-005/006, NFR-PRI-003, NFR-PRI-005, NFR-MNT-005, NFR-OBS-001–004 | AC-016, AC-023–025 |
-| Plan 08 | Terraform | Pending | NFR-SEC-001, NFR-SEC-002, NFR-REL-001, NFR-MNT-006, NFR-OBS-003 | AC-025 |
+| Plan 08 | Terraform | Implemented | NFR-SEC-001, NFR-SEC-002, NFR-REL-001, NFR-MNT-006, NFR-OBS-003 | AC-025 |
 | Plan 09 | CI/CD | Pending | NFR-SEC-002, NFR-SEC-005, NFR-REL-005, NFR-MNT-004, FR-OPS-004 | AC-001, AC-025 |
 | Plan 10 | AWS deployment | Blocked | NFR-REL-001, NFR-REL-002, NFR-SEC-001, FR-OPS-004, NFR-OBS-003 | AC-026 |
 | Plan 11 | Portfolio release | Pending | FR-OPS-004, NFR-PRI-001 | AC-001 |

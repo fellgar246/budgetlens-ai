@@ -7,7 +7,7 @@ This repository is a monorepo:
 - `apps/web` — Next.js static web app
 - `apps/api` — FastAPI service with domain, application, ports, adapters, and HTTP routes
 - `packages/api-client` — typed HTTP client and OpenAPI snapshot
-- `infrastructure/terraform` — `bootstrap/`, `modules/`, and `environments/` for AWS; version pins only until those roots are filled
+- `infrastructure/terraform` — `bootstrap/`, `modules/`, and `environments/dev` plus `environments/prod` for AWS. Local development does not apply these roots.
 - `compose.yaml` — local Next.js dev server, API (optional reload), PostgreSQL, and an optional worker profile
 
 ## Pinned toolchain

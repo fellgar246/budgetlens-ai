@@ -28,6 +28,16 @@ updates:
       interval: weekly
 
   - package-ecosystem: terraform
-    directory: /infrastructure/terraform
+    directory: /infrastructure/terraform/bootstrap
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: terraform
+    directory: /infrastructure/terraform/environments/dev
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: terraform
+    directory: /infrastructure/terraform/environments/prod
     schedule:
       interval: weekly

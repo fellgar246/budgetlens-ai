@@ -39,6 +39,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+backend.hcl
 
 # Specification package (kept local, not versioned with the app)
 spec-docs/

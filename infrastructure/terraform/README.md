@@ -4,7 +4,7 @@ This tree holds the AWS environments. The local product does not require Terrafo
 
 ```text
 terraform/
-├── bootstrap/       # state bucket and GitHub OIDC bootstrap
+├── bootstrap/       # state bucket, optional GitHub OIDC, optional account budget
 ├── modules/         # reusable infrastructure modules
 └── environments/    # per-environment roots (dev, prod)
 ```
@@ -25,6 +25,26 @@ If a previous root still sets `dynamodb_table`:
 2. Add `use_lockfile = true` beside the existing DynamoDB argument and apply once.
 3. Remove `dynamodb_table` and the lock table in a later change.
 
-Do not commit `.tfstate`, `*.tfplan`, or credentials. On AWS, secrets come from Secrets Manager at runtime, not from versioned variables. CI assumes AWS through GitHub OIDC, not permanent access keys.
+Do not commit `.tfstate`, `*.tfplan`, `backend.hcl`, or credentials. On AWS, secrets come from Secrets Manager at runtime, not from versioned variables. CI assumes AWS through GitHub OIDC, not permanent access keys.
 
-`make scan` runs `terraform fmt -check`, TFLint, and Checkov when `.tf` files exist and the binaries are installed.
+`make scan` runs `terraform fmt -check -recursive`, `terraform validate` on each root, TFLint, and Checkov when the binaries are installed.
+
+## Environments
+
+Do not use Terraform workspaces to mix environments. Each root has its own state key and variables:
+
+| Root | State key | Intent |
+|---|---|---|
+| `bootstrap/` | `budgetlens/bootstrap/terraform.tfstate` | State bucket and CI roles |
+| `environments/dev/` | `budgetlens/dev/terraform.tfstate` | Low-cost demonstration |
+| `environments/prod/` | `budgetlens/prod/terraform.tfstate` | Safer defaults; apply is never auto-approved |
+
+Static validation does not need AWS credentials:
+
+```text
+terraform -chdir=infrastructure/terraform fmt -check -recursive
+terraform -chdir=infrastructure/terraform/environments/dev init -backend=false
+terraform -chdir=infrastructure/terraform/environments/dev validate
+```
+
+A real plan or apply needs a recorded account ID, a published image digest, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md).

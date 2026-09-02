@@ -906,14 +906,23 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "TLS in transit and managed encryption for AWS storage",
         "status": "partial",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "infrastructure/terraform/modules/storage/main.tf",
+            "infrastructure/terraform/modules/database/main.tf",
+            "apps/api/tests/unit/test_terraform_architecture.py",
+        ],
     },
     {
         "id": "NFR-SEC-002",
         "summary": "AWS credentials through roles/OIDC, not permanent CI access keys",
         "status": "partial",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "infrastructure/terraform/modules/github_oidc/main.tf",
+            "apps/api/tests/unit/test_architecture_decisions.py",
+        ],
     },
     {
         "id": "NFR-SEC-003",
@@ -1109,7 +1118,11 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Alarms distinguish application, dependency, and infrastructure failure",
         "status": "implemented",
         "plans": ["00", "05", "07", "08", "10"],
-        "evidence": ["apps/api/tests/unit/test_rate_limit_and_headers.py", "docs/OPERATIONS.md"],
+        "evidence": [
+            "apps/api/tests/unit/test_rate_limit_and_headers.py",
+            "docs/OPERATIONS.md",
+            "infrastructure/terraform/modules/observability/main.tf",
+        ],
     },
     {
         "id": "NFR-OBS-004",
@@ -1517,7 +1530,7 @@ PLANS: list[PlanRecord] = [
     {
         "id": "08",
         "name": "Terraform",
-        "status": "pending",
+        "status": "implemented",
         "requirements": [
             "NFR-SEC-001",
             "NFR-SEC-002",
@@ -1751,7 +1764,11 @@ RISKS: list[RiskRecord] = [
         "trigger": "Forecast or actual exceeds the threshold",
         "category": "cost_external",
         "mitigation_status": "unverified",
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "infrastructure/terraform/bootstrap/main.tf",
+            "infrastructure/terraform/environments/dev/terraform.tfvars",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {

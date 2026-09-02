@@ -10,8 +10,13 @@ if [ ! -w "$STORAGE_PATH" ]; then
 fi
 
 case "${1:-api}" in
+  migrate)
+    exec alembic upgrade head
+    ;;
   api)
-    alembic upgrade head
+    if [ "${RUN_MIGRATIONS_ON_START:-1}" = "1" ]; then
+      alembic upgrade head
+    fi
     if [ "${API_RELOAD:-0}" = "1" ]; then
       exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 \
         --timeout-graceful-shutdown 30 --reload --reload-dir /app/src

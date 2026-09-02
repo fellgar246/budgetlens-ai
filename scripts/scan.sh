@@ -47,11 +47,24 @@ TF_FILE=$(find "$TF_DIR" -name "*.tf" -print -quit 2>/dev/null || true)
 if [ -n "$TF_FILE" ]; then
   echo "Checking Terraform formatting..."
   if command -v terraform >/dev/null 2>&1; then
-    if terraform -chdir="$TF_DIR" fmt -check; then
+    if terraform -chdir="$TF_DIR" fmt -check -recursive; then
       echo "PASS  terraform fmt"
     else
       fail "terraform fmt -check failed"
     fi
+
+    echo "Validating Terraform roots..."
+    for tf_root in bootstrap environments/dev environments/prod; do
+      if terraform -chdir="$TF_DIR/$tf_root" init -backend=false -input=false -no-color >/dev/null; then
+        if terraform -chdir="$TF_DIR/$tf_root" validate -no-color; then
+          echo "PASS  terraform validate $tf_root"
+        else
+          fail "terraform validate failed in $tf_root"
+        fi
+      else
+        echo "NOTE  terraform init -backend=false failed in $tf_root (providers unavailable)"
+      fi
+    done
   else
     echo "NOTE  terraform binary is not installed"
   fi
@@ -63,7 +76,7 @@ if [ -n "$TF_FILE" ]; then
     if [ -n "$found_tflint" ] && [ "$found_tflint" != "$pinned_tflint" ]; then
       echo "NOTE  tflint $found_tflint found; repository pin is $pinned_tflint"
     fi
-    if tflint --chdir="$TF_DIR"; then
+    if tflint --init --chdir="$TF_DIR" && tflint --recursive --chdir="$TF_DIR"; then
       echo "PASS  tflint"
     else
       fail "tflint failed"

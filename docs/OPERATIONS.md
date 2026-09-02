@@ -42,7 +42,7 @@ The local cleanup command purges:
 - detailed import error rows after 30 days (`ERROR_REPORT_RETENTION_DAYS`);
 - export objects after 24 hours (`EXPORT_RETENTION_HOURS`).
 
-After a purge, job metadata and hashes stay in the database. Object lifecycle on AWS is configured in Terraform when those roots are filled. Conversation retention is configured per organization (7–365 days, default 90) and expired conversations are soft-deleted by the same command.
+After a purge, job metadata and hashes stay in the database. Object lifecycle on AWS is configured in the Terraform storage module (`uploads/`, `errors/`, `exports/`). Conversation retention is configured per organization (7–365 days, default 90) and expired conversations are soft-deleted by the same command.
 
 Business entities use logical archive or disable flags. Original files and exports expire by lifecycle. Local demo data is purged only with an explicit administrative command outside the 1.0 UI:
 
@@ -64,7 +64,7 @@ JSON logs use a fixed field set: timestamp, level, service, environment, event, 
 
 ### Initial alarms
 
-Thresholds stay as Terraform variables and are calibrated after load tests. Until AWS roots exist, treat these as the local runbook:
+Thresholds stay as Terraform variables in the observability module and are calibrated after load tests:
 
 | Alarm | Class | Diagnose | Rollback / mitigate |
 |---|---|---|---|
@@ -91,7 +91,13 @@ Deletion is logical. Audit keeps metadata (identifiers, outcome) and not the con
 
 ## Terraform state
 
-Remote state uses a versioned, encrypted S3 bucket and Terraform's native `use_lockfile`. Do not add a new DynamoDB lock table. The repository pins Terraform 1.13.5 (1.10 or newer is required for native S3 locking). If an older root still has `dynamodb_table`, upgrade first, apply with both locks, then remove the DynamoDB argument.
+Remote state uses a versioned, encrypted S3 bucket created by `infrastructure/terraform/bootstrap` and Terraform's native `use_lockfile`. Do not add a new DynamoDB lock table. The repository pins Terraform 1.13.5 (1.10 or newer is required for native S3 locking). If an older root still has `dynamodb_table`, upgrade first, apply with both locks, then remove the DynamoDB argument.
+
+Environment roots live in `infrastructure/terraform/environments/dev` and `environments/prod`. They do not share workspaces. Static checks (`fmt`, `validate`, TFLint, Checkov) do not need AWS credentials. A real plan still requires a recorded account, region, budget, and image digest.
+
+Required tags on every managed resource: `Project=BudgetLens`, `Environment`, `ManagedBy=Terraform`, `Owner`, `CostCenter`, and `DataClassification`.
+
+Remaining human steps before apply: secure the AWS account, choose a region with Bedrock access if the copilot will be live, confirm the budget email subscription, configure GitHub Environments for OIDC, and review the plan. Production apply is never `-auto-approve`.
 
 ## Images and rollback
 

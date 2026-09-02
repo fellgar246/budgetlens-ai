@@ -4,3 +4,6 @@ directory:
   - .
 framework:
   - terraform
+skip-path:
+  - .terraform
+  - "*/.terraform"

@@ -75,6 +75,7 @@ def test_worker_is_an_optional_compose_profile() -> None:
 def test_api_entrypoint_reloads_only_when_requested_and_does_not_auto_seed() -> None:
     api_case = ENTRYPOINT.split("api)", 1)[1].split("worker)", 1)[0]
     assert "alembic upgrade head" in api_case
+    assert "RUN_MIGRATIONS_ON_START" in api_case
     assert "API_RELOAD" in api_case
     assert "--reload" in api_case
     assert "seed" not in api_case
