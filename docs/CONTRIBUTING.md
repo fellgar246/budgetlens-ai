@@ -10,6 +10,8 @@ Do not add a dependency unless it provides a capability the standard library can
 
 Automated update PRs are welcome. Major-version PRs are reviewed by a human and are never auto-merged.
 
+Account IDs, regions, model IDs, and apply authorization are human gates (`docs/GATES.md`). Do not paste secret keys, database passwords, or tokens into a plan or pull request.
+
 ## Git
 
 - Default branch: `main` (protected).
@@ -45,6 +47,6 @@ Precedence: safe defaults, then the untracked local `.env`, then process environ
 - Positive, edge, and negative tests cover the change. A bug fix adds a regression test.
 - Errors stay safe; add telemetry when the change is observable.
 - Documentation and `.env.example` are updated in English.
-- No secrets or real data.
+- No secrets or real data. Do not ask for the forbidden inputs in [GATES.md](GATES.md).
 - The diff has been reviewed.
 - Exact commands and results are reported in the PR.

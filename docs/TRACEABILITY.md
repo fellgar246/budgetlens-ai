@@ -141,6 +141,8 @@ AC-001 through AC-025 are required for release 1.0. AC-026 is required before ca
 
 ## External gates
 
+These are the only decisions the code must not assume. Checklists, allowed deliverables, and forbidden plan inputs are in [GATES.md](GATES.md). Record completions with `scripts/record_gate.py`; never paste secrets.
+
 | Gate | Plans | Owner | Moment | Local simulation | Blocks |
 |---|---|---|---|---|---|
 | M-00 | Plan 01 | Domain owner | Before or during plan 01 | Yes, defaults | No if defaults are accepted |
@@ -174,7 +176,7 @@ The automated suite is organized around monetary accuracy, atomic imports, tenan
 Commands (local close, 2026-09-01):
 
 - `make lint` — format, lint, and types
-- `make test` — 271 API unit tests and 22 web unit tests
+- `make test` — 283 API unit tests and 22 web unit tests
 - `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
 - `make test-contract` — OpenAPI snapshot
 - `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
@@ -184,6 +186,6 @@ Commands (local close, 2026-09-01):
 
 Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, the canonical AI eval dataset (Alpha FY2026 `Budget Final` plus exclusive Beta amounts), extra seed rows for a negative actual and UNASSIGNED, and the import workbooks under `sample-data/`.
 
-Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and AWS backup/restore. Workflows for OIDC plan/deploy exist; enabling them in GitHub and AWS is gate M-05.
+Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and AWS backup/restore. Workflows for OIDC plan/deploy exist; enabling them in GitHub and AWS is gate M-05. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them.
 
 Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).

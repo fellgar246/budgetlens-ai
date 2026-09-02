@@ -155,7 +155,7 @@ If an older root still uses DynamoDB locking, upgrade Terraform to the pinned ve
 - **Status:** proposed
 - **Date:** 2026-08-30
 - **Context:** Copilot messages may contain financial questions. Storing full plaintext in production is a privacy decision that a human must make. Encryption at rest versus limited or redacted content is still open.
-- **Decision:** Pending. Local and test environments may persist full synthetic conversation text. `dev` and `prod` persist a redacted placeholder until this ADR is accepted. Real customer data remains blocked by M-08.
+- **Decision:** Pending. Local and test environments may persist full synthetic conversation text. `dev` and `prod` persist a redacted placeholder until this ADR is accepted. Real customer data remains blocked by M-08 in [GATES.md](GATES.md).
 - **Positive consequences:** Local demos keep a usable history. Production cannot silently store full chat text.
 - **Negative consequences:** Production conversation history is not recoverable as prose until a human accepts a persistence policy.
 - **Alternatives:** Accept full encrypted storage or redacted storage now. Deferred: needs a product and privacy decision.

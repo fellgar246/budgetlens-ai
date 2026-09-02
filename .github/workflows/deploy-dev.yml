@@ -123,6 +123,9 @@ jobs:
             IMAGE="${IMAGE}" scripts/run-migration-task.sh
           echo "first_apply=false" >> "$GITHUB_ENV"
 
+      - name: Print M-09 apply checklist
+        run: python scripts/record_gate.py --print-checklist M-09
+
       - name: Apply approved Terraform with the image digest
         env:
           TF_IN_AUTOMATION: "1"

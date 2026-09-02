@@ -139,6 +139,9 @@ jobs:
           CLUSTER="${cluster}" TASK_DEFINITION="${family}" SUBNETS="${subnets}" SECURITY_GROUPS="${sg}" \
             IMAGE="${IMAGE}" scripts/run-migration-task.sh
 
+      - name: Print M-09 apply checklist
+        run: python scripts/record_gate.py --print-checklist M-09
+
       - name: Apply approved Terraform with the promoted digest
         env:
           TF_IN_AUTOMATION: "1"

@@ -78,6 +78,9 @@ class GateRecord(TypedDict):
     owner: str
     moment: str
     local_simulation: str
+    blocks: str
+    deliverables: list[str]
+    human_actions: list[str]
     blocks_release: list[ReleaseScope]
 
 
@@ -757,9 +760,11 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "evidence": [
             "docs/OPERATIONS.md",
             "docs/CICD.md",
+            "docs/GATES.md",
             "scripts/rollback-release.sh",
             "scripts/teardown-environment.sh",
             "scripts/record_cost_estimate.py",
+            "scripts/record_gate.py",
         ],
     },
     {
@@ -905,7 +910,12 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Deployments keep at least one identifiable previous image for rollback",
         "status": "implemented",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["Makefile", "docs/OPERATIONS.md", "scripts/rollback-release.sh", ".github/workflows/deploy-dev.yml"],
+        "evidence": [
+            "Makefile",
+            "docs/OPERATIONS.md",
+            "scripts/rollback-release.sh",
+            ".github/workflows/deploy-dev.yml",
+        ],
     },
     {
         "id": "NFR-SEC-001",
@@ -1588,6 +1598,18 @@ GATES: list[GateRecord] = [
         "owner": "Domain owner",
         "moment": "Before or during plan 01",
         "local_simulation": "Yes, defaults",
+        "blocks": "No if defaults are accepted",
+        "deliverables": [
+            "fiscal year convention",
+            "demo currency",
+            "favorability rules",
+            "actuals mode",
+            "product language",
+        ],
+        "human_actions": [
+            "Confirm fiscal-year convention, demo currency, favorability, "
+            "actuals mode, and product language, or accept the spec defaults.",
+        ],
         "blocks_release": [],
     },
     {
@@ -1597,6 +1619,12 @@ GATES: list[GateRecord] = [
         "owner": "Security owner",
         "moment": "Before a real terraform plan",
         "local_simulation": "No",
+        "blocks": "AWS",
+        "deliverables": ["aws_account_id", "credential_method", "profile_or_role"],
+        "human_actions": [
+            "Create or select the account, enable root MFA, and record "
+            "the account ID and temporary credential method.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1606,6 +1634,12 @@ GATES: list[GateRecord] = [
         "owner": "Operator",
         "moment": "Before remote bootstrap",
         "local_simulation": "Fake config",
+        "blocks": "AWS",
+        "deliverables": ["primary_region"],
+        "human_actions": [
+            "Choose the primary region after Bedrock, residency, latency, "
+            "price, and ACM/CloudFront review.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1615,6 +1649,17 @@ GATES: list[GateRecord] = [
         "owner": "Operator",
         "moment": "Before apply",
         "local_simulation": "Terraform code",
+        "blocks": "AWS",
+        "deliverables": [
+            "budget_limit",
+            "alert_email",
+            "email_subscription_confirmed",
+            "cost_estimate_recorded",
+        ],
+        "human_actions": [
+            "Choose limits, name the alert email, confirm the AWS subscription, "
+            "and review a dated official estimate.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1624,6 +1669,12 @@ GATES: list[GateRecord] = [
         "owner": "AI owner",
         "moment": "Live eval and AWS AI",
         "local_simulation": "Stub/contract mock",
+        "blocks": "AWS AI",
+        "deliverables": ["model_id"],
+        "human_actions": [
+            "Select a compatible model, request access if required, "
+            "record the exact model ID, and approve live eval.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1633,6 +1684,12 @@ GATES: list[GateRecord] = [
         "owner": "Engineering",
         "moment": "Real pipeline enablement",
         "local_simulation": "Workflow lint",
+        "blocks": "Real pipeline",
+        "deliverables": ["github_owner_repo", "environments_configured", "oidc_allowed"],
+        "human_actions": [
+            "Create the remote repository, protect main, "
+            "create GitHub Environments, and allow OIDC.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1642,6 +1699,12 @@ GATES: list[GateRecord] = [
         "owner": "Operator",
         "moment": "Before a final production URL",
         "local_simulation": "Managed domain",
+        "blocks": "Production URL",
+        "deliverables": ["domain_name", "dns_provider", "callback_urls"],
+        "human_actions": [
+            "Select the domain and DNS provider, authorize ACM/Cognito records, "
+            "and define callback URLs.",
+        ],
         "blocks_release": ["prod"],
     },
     {
@@ -1651,6 +1714,17 @@ GATES: list[GateRecord] = [
         "owner": "Security owner",
         "moment": "Before third-party users",
         "local_simulation": "Test issuer/JWKS",
+        "blocks": "Third-party users",
+        "deliverables": [
+            "registration_mode",
+            "mfa_policy",
+            "account_recovery",
+            "first_admin_process",
+        ],
+        "human_actions": [
+            "Decide registration, MFA, recovery, and the first admin "
+            "before opening Cognito to third parties.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1660,6 +1734,18 @@ GATES: list[GateRecord] = [
         "owner": "Product/Security",
         "moment": "Before real data",
         "local_simulation": "Local synthetic policy",
+        "blocks": "Real data",
+        "deliverables": [
+            "data_classification",
+            "retention_policy",
+            "conversation_persistence",
+            "operator_access",
+            "deletion_export_process",
+        ],
+        "human_actions": [
+            "Accept classification, retention, conversation persistence, "
+            "operator access, and deletion (ADR-012).",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1669,6 +1755,21 @@ GATES: list[GateRecord] = [
         "owner": "Operator",
         "moment": "Immediately before apply",
         "local_simulation": "No",
+        "blocks": "AWS apply",
+        "deliverables": [
+            "aws_account",
+            "aws_role",
+            "aws_region",
+            "plan_reviewed",
+            "destroys_reviewed",
+            "cost_estimate_reviewed",
+            "image_digest",
+            "migration_reviewed",
+            "dns_callbacks_reviewed",
+        ],
+        "human_actions": [
+            "Review identity, plan, estimate, digest, migration, and DNS, then authorize apply.",
+        ],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -1678,6 +1779,19 @@ GATES: list[GateRecord] = [
         "owner": "Owner",
         "moment": "Future production cutover",
         "local_simulation": "No",
+        "blocks": "Production",
+        "deliverables": [
+            "prod_account_or_environment",
+            "threat_privacy_review",
+            "restore_test",
+            "live_ai_eval",
+            "incident_ownership",
+            "plan_and_window_approved",
+        ],
+        "human_actions": [
+            "Complete prod account, reviews, restore test, live AI eval, "
+            "ownership, and an approved window.",
+        ],
         "blocks_release": ["prod"],
     },
 ]
@@ -2026,6 +2140,7 @@ DOC_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "docs" / "DECISIONS.md",
     REPO_ROOT / "docs" / "OPERATIONS.md",
     REPO_ROOT / "docs" / "CICD.md",
+    REPO_ROOT / "docs" / "GATES.md",
 )
 
 

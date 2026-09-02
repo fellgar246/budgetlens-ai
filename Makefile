@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate teardown-dev
+.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate record-gate check-gates review-apply teardown-dev
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -132,6 +132,36 @@ record-cost-estimate:
 		--monthly-estimate "$(MONTHLY_ESTIMATE)" \
 		--currency "$(if $(CURRENCY),$(CURRENCY),USD)" \
 		--notes "$(NOTES)"
+
+record-gate:
+	python3 "$(ROOT)/scripts/record_gate.py" --record \
+		--gate "$(GATE)" \
+		--environment "$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		--recorded-by "$(RECORDED_BY)" \
+		--status "$(if $(STATUS),$(STATUS),complete)" \
+		--notes "$(NOTES)" \
+		$(foreach item,$(DELIVERABLES),--deliverable "$(item)")
+
+check-gates:
+	python3 "$(ROOT)/scripts/record_gate.py" --check \
+		--scope "$(if $(SCOPE),$(SCOPE),apply)" \
+		--environment "$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		$(if $(FROM_ENV),--from-env,) \
+		--ai-provider "$(if $(AI_PROVIDER),$(AI_PROVIDER),stub)"
+
+review-apply:
+	python3 "$(ROOT)/scripts/record_gate.py" --review-apply \
+		--environment "$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		--recorded-by "$(RECORDED_BY)" \
+		--account "$(ACCOUNT)" \
+		--role "$(ROLE)" \
+		--region "$(REGION)" \
+		--image-digest "$(IMAGE_DIGEST)" \
+		--confirm "$(CONFIRM)" \
+		--notes "$(NOTES)" \
+		$(if $(FIRST_APPLY),--first-apply,) \
+		$(if $(REQUIRE_PRIOR),--require-prior,) \
+		$(if $(FROM_ENV),--from-env,)
 
 teardown-dev:
 	ENVIRONMENT=dev CONFIRM="$(CONFIRM)" APPLY_DESTROY="$(APPLY_DESTROY)" \

@@ -149,7 +149,7 @@ Environment roots live in `infrastructure/terraform/environments/dev` and `envir
 
 Required tags on every managed resource: `Project=BudgetLens`, `Environment`, `ManagedBy=Terraform`, `Owner`, `CostCenter`, and `DataClassification`.
 
-Remaining human steps before apply: secure the AWS account, choose a region with Bedrock access if the copilot will be live, record the dated cost estimate, confirm the budget and alarm email subscriptions, configure GitHub Environments for OIDC, and review the plan. Production apply is never `-auto-approve`.
+Remaining human steps before apply are the manual gates in [GATES.md](GATES.md): secure the AWS account (M-01), choose a region (M-02), record the dated cost estimate and confirm budget email (M-03), keep Bedrock stub until model access (M-04), configure GitHub Environments for OIDC (M-05), and complete the apply review (M-09). Production apply is never `-auto-approve`. Record gates with `scripts/record_gate.py`; never paste secret keys, database passwords, or Cognito tokens.
 
 ## CI/CD
 

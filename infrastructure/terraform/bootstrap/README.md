@@ -2,7 +2,9 @@
 
 Creates the remote Terraform state bucket and, when a GitHub repository is provided, the OIDC provider and CI roles. This bucket is never an application data or web bucket.
 
-When `max_monthly_budget` and `alarm_email` are set, bootstrap also creates the account AWS Budget. Chosen actual and forecast percent alerts notify that email. Confirm the subscription manually. A budget is an alert, not a hard cap.
+When `max_monthly_budget` and `alarm_email` are set, bootstrap also creates the account AWS Budget. Chosen actual and forecast percent alerts notify that email. Confirm the subscription manually (M-03). A budget is an alert, not a hard cap.
+
+Record the account (M-01) and primary region (M-02) before this first apply. Leave `aws_account_id` empty in the committed example until a human records the account. Never paste secret keys.
 
 Cost Anomaly Detection and Cost Explorer allocation tags stay off until Cost Explorer is enabled and `enable_cost_anomaly_detection` / `enable_cost_allocation_tags` are approved.
 

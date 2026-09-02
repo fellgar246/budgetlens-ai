@@ -88,6 +88,7 @@ def test_terraform_plan_keeps_plan_file_off_the_log() -> None:
     assert "PLAN_ROLE_ARN" in text
     assert "terraform-remote.sh" in text
     assert "terraform_plan_guard.py" in text
+    assert "record_gate.py" in text
     assert "is not printed" in text
     assert "retention-days: 3" in text
     assert "-auto-approve" not in text

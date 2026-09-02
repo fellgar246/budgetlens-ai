@@ -97,6 +97,11 @@ pnpm --filter web dev
 | `make test-perf` | Large-file preview timing. |
 | `make traceability` | Check that every FR/NFR/AC, plan, gate, and high-impact risk is catalogued. |
 | `make reset-local-data CONFIRM=1` | Destroy the local database volume and object storage. |
+| `make record-cost-estimate ENVIRONMENT=dev SOURCE='https://calculator.aws/#…' MONTHLY_ESTIMATE='…'` | Record a dated official AWS estimate. Does not invent a price. |
+| `make record-gate GATE=M-01 ENVIRONMENT=dev RECORDED_BY='…' DELIVERABLES='…'` | Record a human manual gate. Never include secrets. |
+| `make check-gates SCOPE=apply ENVIRONMENT=dev` | Fail if required human gates are missing. |
+| `make review-apply ENVIRONMENT=dev … CONFIRM=1` | Record M-09 after the apply checklist. Does not run Terraform. |
+| `make teardown-dev CONFIRM=1` | Review a development destroy plan. Apply only with `APPLY_DESTROY=1`. |
 
 ## Configuration
 
@@ -146,6 +151,6 @@ Recommended editor settings live in `.vscode/`: format on save, the `uv` interpr
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
 
-Operational runbooks for rollback, restore, cost estimates, teardown, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. CI/CD, OIDC, and release evidence are in `docs/CICD.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
+Operational runbooks for rollback, restore, cost estimates, teardown, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. CI/CD, OIDC, and release evidence are in `docs/CICD.md`. Manual gates that the code must not assume are in `docs/GATES.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
 
 `packages/api-client/openapi.json` is generated (`make openapi`). A snapshot change needs an explicit review; do not edit that file by hand.

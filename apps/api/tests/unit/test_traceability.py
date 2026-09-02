@@ -100,6 +100,9 @@ def test_every_gate_has_owner_and_moment() -> None:
         assert gate["moment"].strip(), gate["id"]
         assert gate["plans"], gate["id"]
         assert gate["local_simulation"].strip(), gate["id"]
+        assert gate["blocks"].strip(), gate["id"]
+        assert gate["deliverables"], gate["id"]
+        assert gate["human_actions"], gate["id"]
 
 
 def test_high_impact_risks_have_mitigation_and_signal() -> None:

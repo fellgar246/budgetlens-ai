@@ -127,5 +127,6 @@ def test_terraform_plan_prints_visible_sizes_not_a_price() -> None:
 def test_makefile_exposes_cost_estimate_and_dev_teardown() -> None:
     text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert "record-cost-estimate" in text
+    assert "record-gate" in text
     assert "teardown-dev" in text
     assert "teardown-environment.sh" in text

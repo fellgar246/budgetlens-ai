@@ -34,10 +34,12 @@ Configure these repository or environment variables. They are not secrets.
 | `PROD_APPLICATION_URL` | Production frontend build and smoke |
 | `AUTO_DEPLOY_DEV` | Optional; `false` disables automatic dev deploy |
 
-GitHub Environments:
+GitHub Environments (gate M-05; create them in the repository UI):
 
 - `dev` — used by deploy-dev OIDC (`environment:dev`)
 - `prod` — required reviewers; production apply never uses `-auto-approve` without a plan file from the same job
+
+Creating the remote repository, branch protection, and environment reviewers is a human action. Workflows only assume AWS through OIDC after those settings exist.
 
 Frontend public values (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_APP_ENV`) are reviewed before the static build. Secrets stay in Secrets Manager at runtime.
 
@@ -64,4 +66,4 @@ On `main`:
 
 Application rollback restores the previous task definition and/or previous web artifact. It does not downgrade the database. Terraform rollback is a new plan from reverted code, not a state edit.
 
-See [OPERATIONS.md](OPERATIONS.md#images-and-rollback). Cost estimates, daily checks, and teardown are in [OPERATIONS.md](OPERATIONS.md).
+See [OPERATIONS.md](OPERATIONS.md#images-and-rollback). Cost estimates, daily checks, and teardown are in [OPERATIONS.md](OPERATIONS.md). Manual gates, including GitHub Environments (M-05) and apply review (M-09), are in [GATES.md](GATES.md). Do not ask for access keys, root passwords, or tokens in a plan.

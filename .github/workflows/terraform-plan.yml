@@ -84,6 +84,10 @@ jobs:
             echo "Visible cost sizes (not a price). A budget is an alert, not a hard cap."
             echo
             python scripts/record_cost_estimate.py --print-sizes --environment "${TF_ENVIRONMENT}"
+            echo
+            echo "Human apply checklist (M-09). Do not paste secrets."
+            echo
+            python scripts/record_gate.py --print-checklist M-09
           } >> plan-summary.md
 
       - name: Upload plan file as a restricted artifact

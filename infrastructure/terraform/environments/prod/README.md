@@ -15,4 +15,4 @@ Never run `terraform apply -auto-approve` against this root. Seed tasks are not 
 5. Run the one-off migration task before shifting traffic to a schema-dependent image.
 6. Confirm SNS, budget, and cost-anomaly email subscriptions manually.
 
-Production release still requires backup restore evidence, live AI evaluation when Bedrock is enabled, and the remaining human gates.
+Production release still requires backup restore evidence, live AI evaluation when Bedrock is enabled, and the remaining human gates in [GATES.md](../../../../docs/GATES.md), including M-10.

@@ -48,7 +48,7 @@ terraform -chdir=infrastructure/terraform/environments/dev validate
 terraform -chdir=infrastructure/terraform/modules/network test
 ```
 
-A real plan or apply needs a recorded account ID, a published image digest, a dated official cost estimate, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md). Terraform exposes sizes and counts on `cost_visible_sizes`; it does not invent a monthly price. A budget is an alert, not a hard cap.
+A real plan or apply needs a recorded account ID, a published image digest, a dated official cost estimate, and the human gates in [GATES.md](../../docs/GATES.md). Terraform exposes sizes and counts on `cost_visible_sizes`; it does not invent a monthly price. A budget is an alert, not a hard cap.
 
 ```text
 python scripts/record_cost_estimate.py --print-sizes --environment dev
