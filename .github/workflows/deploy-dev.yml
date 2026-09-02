@@ -123,8 +123,10 @@ jobs:
             IMAGE="${IMAGE}" scripts/run-migration-task.sh
           echo "first_apply=false" >> "$GITHUB_ENV"
 
-      - name: Print M-09 apply checklist
-        run: python scripts/record_gate.py --print-checklist M-09
+      - name: Print deploy preflight and M-09 apply checklist
+        run: |
+          python scripts/deploy_preflight.py --print-checklist
+          python scripts/record_gate.py --print-checklist M-09
 
       - name: Apply approved Terraform with the image digest
         env:
@@ -140,6 +142,7 @@ jobs:
           terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
           python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
           terraform -chdir="${TF_ROOT}" apply -input=false -no-color tfplan
+          terraform -chdir="${TF_ROOT}" output -json | python scripts/verify_infrastructure.py --environment dev --account "${{ vars.AWS_ACCOUNT_ID }}" --from-json -
 
       - name: Run migration after first apply
         if: env.first_apply == 'true'
@@ -194,6 +197,9 @@ jobs:
             APPLICATION_URL="${{ vars.DEV_APPLICATION_URL || '' }}" \
             EXPECTED_COMMIT="${{ steps.image.outputs.sha }}" \
             scripts/smoke-release.sh
+
+      - name: Print post-deploy observation checklist
+        run: python scripts/observe_release.py --print-checklist --environment dev
 
       - name: Write release evidence
         if: always()

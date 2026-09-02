@@ -761,8 +761,11 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
             "docs/OPERATIONS.md",
             "docs/CICD.md",
             "docs/GATES.md",
+            "docs/DEPLOYMENT.md",
             "scripts/rollback-release.sh",
             "scripts/teardown-environment.sh",
+            "scripts/restore-test.sh",
+            "scripts/deploy_preflight.py",
             "scripts/record_cost_estimate.py",
             "scripts/record_gate.py",
         ],
@@ -879,14 +882,23 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "99.5% monthly availability for prod; no SLA for dev",
         "status": "partial",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md", "apps/api/tests/unit/test_cost_and_operations.py"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "docs/DEPLOYMENT.md",
+            "apps/api/tests/unit/test_cost_and_operations.py",
+        ],
     },
     {
         "id": "NFR-REL-002",
         "summary": "RPO 24 hours and RTO 4 hours for release 1.0",
         "status": "partial",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md", "scripts/snapshot-db.sh"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "docs/DEPLOYMENT.md",
+            "scripts/snapshot-db.sh",
+            "scripts/restore-test.sh",
+        ],
     },
     {
         "id": "NFR-REL-003",
@@ -1384,7 +1396,9 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "kind": "both",
         "evidence": [
             "docs/OPERATIONS.md#restore",
+            "docs/DEPLOYMENT.md#restore-test",
             "scripts/acceptance-restore.sh",
+            "scripts/restore-test.sh",
             "apps/api/tests/integration/acceptance/test_operations.py::test_isolated_restore_preserves_counts_and_tenant_invariants",
         ],
     },
@@ -1571,7 +1585,7 @@ PLANS: list[PlanRecord] = [
     {
         "id": "10",
         "name": "AWS deployment",
-        "status": "blocked",
+        "status": "implemented",
         "requirements": [
             "NFR-REL-001",
             "NFR-REL-002",
@@ -2023,7 +2037,7 @@ RISKS: list[RiskRecord] = [
         "trigger": "Restore test fails",
         "category": "reliability",
         "mitigation_status": "unverified",
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": ["docs/OPERATIONS.md", "docs/DEPLOYMENT.md", "scripts/restore-test.sh"],
         "blocks_release": ["aws", "prod"],
     },
     {
@@ -2065,7 +2079,7 @@ RISKS: list[RiskRecord] = [
         "trigger": "Incident that the runbook cannot resolve",
         "category": "operations",
         "mitigation_status": "partial",
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": ["docs/OPERATIONS.md", "docs/DEPLOYMENT.md"],
         "blocks_release": [],
     },
 ]
@@ -2141,6 +2155,7 @@ DOC_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "docs" / "OPERATIONS.md",
     REPO_ROOT / "docs" / "CICD.md",
     REPO_ROOT / "docs" / "GATES.md",
+    REPO_ROOT / "docs" / "DEPLOYMENT.md",
 )
 
 

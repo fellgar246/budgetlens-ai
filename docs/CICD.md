@@ -66,4 +66,4 @@ On `main`:
 
 Application rollback restores the previous task definition and/or previous web artifact. It does not downgrade the database. Terraform rollback is a new plan from reverted code, not a state edit.
 
-See [OPERATIONS.md](OPERATIONS.md#images-and-rollback). Cost estimates, daily checks, and teardown are in [OPERATIONS.md](OPERATIONS.md). Manual gates, including GitHub Environments (M-05) and apply review (M-09), are in [GATES.md](GATES.md). Do not ask for access keys, root passwords, or tokens in a plan.
+See [OPERATIONS.md](OPERATIONS.md#images-and-rollback). The ordered AWS runbook (preflight through teardown) is [DEPLOYMENT.md](DEPLOYMENT.md). Cost estimates, daily checks, and teardown are in [OPERATIONS.md](OPERATIONS.md). Manual gates, including GitHub Environments (M-05) and apply review (M-09), are in [GATES.md](GATES.md). Do not ask for access keys, root passwords, or tokens in a plan.

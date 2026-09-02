@@ -6,6 +6,7 @@ set -eu
 # Required: one of PREVIOUS_TASK_DEFINITION or PREVIOUS_WEB_SOURCE
 # Optional: CLUSTER, SERVICE, REGION, WEB_BUCKET, DISTRIBUTION_ID
 
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REGION="${AWS_REGION:-${REGION:-us-east-1}}"
 PREVIOUS_TASK_DEFINITION="${PREVIOUS_TASK_DEFINITION:-}"
 PREVIOUS_WEB_SOURCE="${PREVIOUS_WEB_SOURCE:-}"
@@ -37,6 +38,8 @@ if [ -n "${PREVIOUS_TASK_DEFINITION}" ]; then
     --force-new-deployment \
     --output text >/dev/null
   echo "API service ${SERVICE} is rolling back to ${PREVIOUS_TASK_DEFINITION}."
+  aws ecs wait services-stable --region "${REGION}" --cluster "${CLUSTER}" --services "${SERVICE}"
+  echo "API service ${SERVICE} is stable on the previous task definition."
 fi
 
 if [ -n "${PREVIOUS_WEB_SOURCE}" ]; then
@@ -49,7 +52,16 @@ if [ -n "${PREVIOUS_WEB_SOURCE}" ]; then
   DISTRIBUTION_ID="${DISTRIBUTION_ID}"
   AWS_REGION="${REGION}"
   export SOURCE WEB_BUCKET DISTRIBUTION_ID AWS_REGION
-  ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
   "${ROOT}/deploy-web.sh"
   echo "Restored previous web artifact without a schema downgrade."
 fi
+
+if [ "${RUN_SMOKE:-0}" = "1" ]; then
+  if [ -z "${API_HEALTH_URL:-}" ]; then
+    echo "API_HEALTH_URL is required to smoke after rollback." >&2
+    exit 1
+  fi
+  "${ROOT}/smoke-release.sh"
+fi
+
+echo "Rollback does not downgrade the database. Schema-incompatible images must not be selected."

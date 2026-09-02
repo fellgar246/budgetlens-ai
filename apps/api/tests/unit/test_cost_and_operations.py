@@ -130,3 +130,7 @@ def test_makefile_exposes_cost_estimate_and_dev_teardown() -> None:
     assert "record-gate" in text
     assert "teardown-dev" in text
     assert "teardown-environment.sh" in text
+    assert "preflight-deploy" in text
+    assert "restore-test" in text
+    operations = OPERATIONS.read_text(encoding="utf-8")
+    assert "DEPLOYMENT.md" in operations

@@ -88,6 +88,8 @@ jobs:
             echo "Human apply checklist (M-09). Do not paste secrets."
             echo
             python scripts/record_gate.py --print-checklist M-09
+            echo
+            echo "An unexpected destroy is rejected and is not applied to experiment."
           } >> plan-summary.md
 
       - name: Upload plan file as a restricted artifact

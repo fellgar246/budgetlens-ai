@@ -140,6 +140,8 @@ def test_seed_is_explicit_and_idempotent() -> None:
     assert "_upsert_user" in seed
     assert "_upsert_org" in seed
     assert "versions.get(version_id)" in seed
+    assert "assert_seed_allowed" in seed
+    assert "DEMO_SEEDED" in seed
     assert "python -m budgetlens seed" not in ENTRYPOINT.split("api)", 1)[1].split("worker)", 1)[0]
 
 

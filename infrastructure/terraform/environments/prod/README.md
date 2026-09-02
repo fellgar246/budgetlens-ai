@@ -4,7 +4,7 @@ Safer defaults: NAT per AZ, two API tasks, Multi-AZ RDS, deletion protection, 30
 
 Do not use Terraform workspaces. The state key is `budgetlens/prod/terraform.tfstate`.
 
-Never run `terraform apply -auto-approve` against this root. Seed tasks are not created. Production apply goes through the protected `prod` GitHub Environment; see [CICD.md](../../../../docs/CICD.md).
+Never run `terraform apply -auto-approve` against this root. Seed tasks are not created. Production apply goes through the protected `prod` GitHub Environment; see [CICD.md](../../../../docs/CICD.md) and [DEPLOYMENT.md](../../../../docs/DEPLOYMENT.md).
 
 ## Apply sequence
 

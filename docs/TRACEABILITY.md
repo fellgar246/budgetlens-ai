@@ -103,7 +103,7 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | Plan 07 | Hardening | Implemented | FR-AUD-001, FR-AUD-003, FR-OPS-001–004, NFR-PERF-001/003/005, NFR-REL-003–005, NFR-SEC-005/006, NFR-PRI-003, NFR-PRI-005, NFR-MNT-005, NFR-OBS-001–004 | AC-016, AC-023–025 |
 | Plan 08 | Terraform | Implemented | NFR-SEC-001, NFR-SEC-002, NFR-REL-001, NFR-MNT-006, NFR-OBS-003 | AC-025 |
 | Plan 09 | CI/CD | Implemented | NFR-SEC-002, NFR-SEC-005, NFR-REL-005, NFR-MNT-004, FR-OPS-004 | AC-001, AC-025 |
-| Plan 10 | AWS deployment | Blocked | NFR-REL-001, NFR-REL-002, NFR-SEC-001, FR-OPS-004, NFR-OBS-003 | AC-026 |
+| Plan 10 | AWS deployment | Implemented | NFR-REL-001, NFR-REL-002, NFR-SEC-001, FR-OPS-004, NFR-OBS-003 | AC-026 |
 | Plan 11 | Portfolio release | Pending | FR-OPS-004, NFR-PRI-001 | AC-001 |
 
 ## Acceptance evidence
@@ -135,7 +135,7 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | AC-023 | Suite | Readiness is 200 with DB, 503 quickly without; liveness stays 200 |
 | AC-024 | Suite | Empty and N-1 databases reach head |
 | AC-025 | Suite + runbook | Previous-image tag and [rollback](OPERATIONS.md#images-and-rollback) |
-| AC-026 | Suite + runbook | Isolated restore counts and [restore](OPERATIONS.md#restore) |
+| AC-026 | Suite + runbook | Isolated restore counts and [restore test](DEPLOYMENT.md#11-restore-test) |
 
 AC-001 through AC-025 are required for release 1.0. AC-026 is required before calling the product production-ready.
 
@@ -176,7 +176,7 @@ The automated suite is organized around monetary accuracy, atomic imports, tenan
 Commands (local close, 2026-09-01):
 
 - `make lint` — format, lint, and types
-- `make test` — 283 API unit tests and 22 web unit tests
+- `make test` — 292 API unit tests and 22 web unit tests
 - `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
 - `make test-contract` — OpenAPI snapshot
 - `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
@@ -186,6 +186,6 @@ Commands (local close, 2026-09-01):
 
 Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, the canonical AI eval dataset (Alpha FY2026 `Budget Final` plus exclusive Beta amounts), extra seed rows for a negative actual and UNASSIGNED, and the import workbooks under `sample-data/`.
 
-Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and AWS backup/restore. Workflows for OIDC plan/deploy exist; enabling them in GitHub and AWS is gate M-05. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them.
+Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and a live AWS backup/restore. The [deployment runbook](DEPLOYMENT.md) and OIDC plan/deploy workflows exist; enabling them in GitHub and AWS is gate M-05. Live apply, smoke, and `budgetlens-dev-restore` remain gated by M-01–M-09 and R-15. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them.
 
 Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).

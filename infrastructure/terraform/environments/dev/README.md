@@ -14,7 +14,7 @@ Do not use Terraform workspaces to mix this root with production. The state key 
 6. Review `terraform plan`. Reject unexpected destroys.
 7. Complete the apply review (M-09) with `make review-apply CONFIRM=1`, or through the `Deploy dev` workflow in [CICD.md](../../../../docs/CICD.md). Confirm the alarm email manually. See [GATES.md](../../../../docs/GATES.md).
 
-Destroy unused development with [teardown](../../../../docs/OPERATIONS.md#teardown). If the environment stays as a portfolio demo, measure the real monthly cost for one week before changing sizes.
+Follow [DEPLOYMENT.md](../../../../docs/DEPLOYMENT.md) for preflight, apply, smoke, optional demo seed, and rollback. Destroy unused development with [teardown](../../../../docs/OPERATIONS.md#teardown). If the environment stays as a portfolio demo, measure the real monthly cost for one week before changing sizes.
 
 After the first apply, add the CloudFront URL to `additional_app_urls` so Cognito callbacks and CORS match the distribution.
 

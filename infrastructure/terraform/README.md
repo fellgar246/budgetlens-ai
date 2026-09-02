@@ -55,4 +55,4 @@ python scripts/record_cost_estimate.py --print-sizes --environment dev
 make record-cost-estimate ENVIRONMENT=dev SOURCE='https://calculator.aws/#...' MONTHLY_ESTIMATE='<human figure>'
 ```
 
-GitHub Actions run `terraform-plan`, `deploy-dev`, and `deploy-prod` through OIDC as described in [CICD.md](../../docs/CICD.md). Plan files stay off the job log; unexpected destroys fail the guard. Environment teardown is `scripts/teardown-environment.sh` and never deletes the state bucket.
+GitHub Actions run `terraform-plan`, `deploy-dev`, and `deploy-prod` through OIDC as described in [CICD.md](../../docs/CICD.md). Plan files stay off the job log; unexpected destroys fail the guard and are never applied to experiment. The ordered apply runbook is [DEPLOYMENT.md](../../docs/DEPLOYMENT.md). Environment teardown is `scripts/teardown-environment.sh` and never deletes the state bucket.

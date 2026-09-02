@@ -203,4 +203,4 @@ Allowed inputs are account IDs, region names, role or profile names, model IDs, 
 
 M-04 is required only when `ai_provider=bedrock`. M-06 may be waived for development. M-07 and M-08 stay waived while self-registration is off and only synthetic data is used; enabling third-party users or real data requires a human record.
 
-See [TRACEABILITY.md](TRACEABILITY.md) for owners and release blockers, [OPERATIONS.md](OPERATIONS.md) for cost and apply runbooks, and [CICD.md](CICD.md) for OIDC.
+See [TRACEABILITY.md](TRACEABILITY.md) for owners and release blockers, [DEPLOYMENT.md](DEPLOYMENT.md) for the AWS apply order, [OPERATIONS.md](OPERATIONS.md) for cost and incident runbooks, and [CICD.md](CICD.md) for OIDC.

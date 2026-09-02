@@ -16,9 +16,18 @@ if [ ! -d "${SOURCE}" ]; then
   exit 1
 fi
 
+# Hashed assets keep a long cache. HTML and manifests stay revalidated.
 aws s3 sync "${SOURCE}" "s3://${WEB_BUCKET}/" \
   --region "${REGION}" \
   --delete \
+  --exclude "*" \
+  --include "_next/static/*" \
+  --cache-control "public,max-age=31536000,immutable" \
+  --only-show-errors
+aws s3 sync "${SOURCE}" "s3://${WEB_BUCKET}/" \
+  --region "${REGION}" \
+  --exclude "_next/static/*" \
+  --cache-control "public,max-age=0,must-revalidate" \
   --only-show-errors
 
 if [ -n "${RELEASE_SHA}" ]; then
@@ -27,10 +36,10 @@ if [ -n "${RELEASE_SHA}" ]; then
     --only-show-errors
 fi
 
-# Hashed /_next/static assets stay cached. Invalidate documents and the app shell.
+# Invalidate HTML and manifests only. Versioned hashed assets do not need a blanket invalidation.
 aws cloudfront create-invalidation \
   --distribution-id "${DISTRIBUTION_ID}" \
-  --paths "/" "/index.html" "/404.html" "/*.html" \
+  --paths "/" "/index.html" "/404.html" "/*.html" "/manifest.json" "/site.webmanifest" \
   --output text >/dev/null
 
-echo "Published ${SOURCE} to s3://${WEB_BUCKET} and invalidated HTML routes on ${DISTRIBUTION_ID}."
+echo "Published ${SOURCE} to s3://${WEB_BUCKET} with cache headers and invalidated HTML/manifest routes on ${DISTRIBUTION_ID}."

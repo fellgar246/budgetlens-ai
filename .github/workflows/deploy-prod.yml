@@ -139,8 +139,10 @@ jobs:
           CLUSTER="${cluster}" TASK_DEFINITION="${family}" SUBNETS="${subnets}" SECURITY_GROUPS="${sg}" \
             IMAGE="${IMAGE}" scripts/run-migration-task.sh
 
-      - name: Print M-09 apply checklist
-        run: python scripts/record_gate.py --print-checklist M-09
+      - name: Print deploy preflight and M-09 apply checklist
+        run: |
+          python scripts/deploy_preflight.py --print-checklist
+          python scripts/record_gate.py --print-checklist M-09
 
       - name: Apply approved Terraform with the promoted digest
         env:
@@ -157,6 +159,7 @@ jobs:
           terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
           python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
           terraform -chdir="${TF_ROOT}" apply -input=false -no-color tfplan
+          terraform -chdir="${TF_ROOT}" output -json | python scripts/verify_infrastructure.py --environment prod --account "${{ vars.AWS_ACCOUNT_ID }}" --from-json -
 
       - name: Wait for ECS service
         run: |
@@ -188,6 +191,9 @@ jobs:
             APPLICATION_URL="${{ vars.PROD_APPLICATION_URL || '' }}" \
             EXPECTED_COMMIT="${{ steps.image.outputs.sha }}" \
             scripts/smoke-release.sh
+
+      - name: Print post-deploy observation checklist
+        run: python scripts/observe_release.py --print-checklist --environment prod
 
       - name: Write release evidence
         if: always()

@@ -10,7 +10,7 @@ Do not add a dependency unless it provides a capability the standard library can
 
 Automated update PRs are welcome. Major-version PRs are reviewed by a human and are never auto-merged.
 
-Account IDs, regions, model IDs, and apply authorization are human gates (`docs/GATES.md`). Do not paste secret keys, database passwords, or tokens into a plan or pull request.
+Account IDs, regions, model IDs, and apply authorization are human gates (`docs/GATES.md`). The AWS deploy order is `docs/DEPLOYMENT.md`. Do not paste secret keys, database passwords, or tokens into a plan or pull request.
 
 ## Git
 

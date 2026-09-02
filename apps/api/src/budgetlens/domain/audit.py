@@ -16,6 +16,7 @@ ACTOR_SYSTEM: AuditActorType = "system"
 
 SYSTEM_AUTH = "auth"
 SYSTEM_WATCHDOG = "watchdog"
+SYSTEM_SEED = "seed"
 
 AUTH_LOGIN_SUCCEEDED = "auth.login_succeeded"
 AUTH_LOGIN_FAILED = "auth.login_failed"
@@ -49,6 +50,7 @@ AI_RESPONSE_FAILED = "ai.response_failed"
 AI_GROUNDING_FAILED = "ai.grounding_failed"
 CONVERSATION_DELETED = "conversation.deleted"
 SECURITY_ACCESS_DENIED = "security.access_denied"
+DEMO_SEEDED = "demo.seeded"
 
 _BLOCKED_METADATA = {
     "password",

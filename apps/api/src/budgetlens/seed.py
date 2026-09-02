@@ -13,6 +13,7 @@ from budgetlens.adapters.persistence.finance_repositories import (
 )
 from budgetlens.adapters.persistence.repositories import (
     SqlAccountRepository,
+    SqlAuditRepository,
     SqlBudgetVersionRepository,
     SqlCostCenterRepository,
     SqlDepartmentRepository,
@@ -24,6 +25,8 @@ from budgetlens.application.ai_eval_dataset import (
     EVAL_BUDGET_VERSION_NAME,
     seed_ledger_rows,
 )
+from budgetlens.application.audit import record_audit
+from budgetlens.config import get_settings
 from budgetlens.dev_identities import (
     ALPHA_ADMIN_ID,
     ALPHA_ANALYST_ID,
@@ -35,6 +38,7 @@ from budgetlens.dev_identities import (
     BOTH_USER_ID,
     OPERATOR_ID,
 )
+from budgetlens.domain.audit import ACTOR_SYSTEM, DEMO_SEEDED, SYSTEM_SEED
 from budgetlens.domain.dimensions import (
     Account,
     CostCenter,
@@ -50,6 +54,7 @@ from budgetlens.domain.enums import (
     Role,
     UserStatus,
 )
+from budgetlens.domain.identities import SystemClock, Uuid4Factory
 from budgetlens.domain.money import Currency
 from budgetlens.domain.organization import (
     Membership,
@@ -61,24 +66,52 @@ from budgetlens.domain.organization import (
 )
 
 SEED_NS = UUID("00000000-0000-4000-8000-0000000000aa")
+ALLOWED_SEED_ENVIRONMENTS = frozenset({"local", "test", "dev"})
+DEMO_ORGANIZATION_SLUGS = frozenset({"alpha", "beta"})
+DEMO_USER_EMAILS = frozenset(
+    {
+        "alex.admin@alpha.local",
+        "ana.analyst@alpha.local",
+        "vic.viewer@alpha.local",
+        "bea.admin@beta.local",
+        "ben.analyst@beta.local",
+        "pat.both@budgetlens.local",
+        "oli.operator@platform.local",
+    }
+)
 
 
 def _stable_id(name: str) -> UUID:
     return uuid5(SEED_NS, name)
 
 
+def assert_seed_allowed(app_env: str) -> None:
+    if app_env == "prod":
+        raise ValueError("Seed is refused in production")
+    if app_env not in ALLOWED_SEED_ENVIRONMENTS:
+        raise ValueError("Seed requires APP_ENV=local, test, or dev")
+
+
+def demo_dataset_label(app_env: str) -> str:
+    return "synthetic-demo" if app_env == "dev" else "synthetic-local"
+
+
 def run_seed(*, include_financials: bool = False) -> None:
+    settings = get_settings()
+    assert_seed_allowed(settings.app_env)
     now = datetime.now(UTC)
+    dataset = demo_dataset_label(settings.app_env)
     with session_scope() as session:
         session.execute(
             text(
                 """
                 INSERT INTO schema_meta (key, value)
-                VALUES ('demo_dataset', 'synthetic-local')
+                VALUES ('demo_dataset', :dataset)
                 ON CONFLICT (key) DO UPDATE
                 SET value = EXCLUDED.value, updated_at = now()
                 """
-            )
+            ),
+            {"dataset": dataset},
         )
         users = SqlUserRepository(session)
         orgs = SqlOrganizationRepository(session)
@@ -193,6 +226,8 @@ def run_seed(*, include_financials: bool = False) -> None:
         )
         _upsert_org(orgs, alpha)
         _upsert_org(orgs, beta)
+        if frozenset({alpha.slug, beta.slug}) != DEMO_ORGANIZATION_SLUGS:
+            raise ValueError("Seed may only create known demo organizations")
         session.flush()
 
         _seed_org(
@@ -229,6 +264,25 @@ def run_seed(*, include_financials: bool = False) -> None:
                 created_by=BETA_ADMIN_ID,
                 now=now,
             )
+        record_audit(
+            SqlAuditRepository(session),
+            clock=SystemClock(),
+            ids=Uuid4Factory(),
+            organization_id=None,
+            actor_id=None,
+            actor_type=ACTOR_SYSTEM,
+            actor_ref=SYSTEM_SEED,
+            action=DEMO_SEEDED,
+            resource_type="demo",
+            resource_id=_stable_id("demo-dataset"),
+            trace_id="seed-demo",
+            metadata={
+                "dataset": dataset,
+                "organizations": sorted(DEMO_ORGANIZATION_SLUGS),
+                "include_financials": include_financials,
+            },
+            outcome="success",
+        )
 
 
 def _upsert_user(users: SqlUserRepository, user: User) -> None:

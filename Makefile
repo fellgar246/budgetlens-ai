@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate record-gate check-gates review-apply teardown-dev
+.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate record-gate check-gates review-apply teardown-dev preflight-deploy plan-environment apply-environment verify-infra smoke-release seed-demo observe-release restore-test rollback-release
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -167,3 +167,68 @@ teardown-dev:
 	ENVIRONMENT=dev CONFIRM="$(CONFIRM)" APPLY_DESTROY="$(APPLY_DESTROY)" \
 		SNAPSHOT="$(SNAPSHOT)" DISABLE_DELETION_PROTECTION="$(DISABLE_DELETION_PROTECTION)" \
 		EMPTY_BUCKET="$(EMPTY_BUCKET)" $(ROOT)/scripts/teardown-environment.sh
+
+preflight-deploy:
+	python3 "$(ROOT)/scripts/deploy_preflight.py" --print-checklist
+	python3 "$(ROOT)/scripts/deploy_preflight.py" --check \
+		--environment "$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		--image-digest "$(IMAGE_DIGEST)" \
+		--ci-status "$(CI_STATUS)" \
+		--account "$(ACCOUNT)" \
+		--role "$(ROLE)" \
+		--region "$(REGION)" \
+		--ai-provider "$(if $(AI_PROVIDER),$(AI_PROVIDER),stub)" \
+		--bedrock-model-id "$(BEDROCK_MODEL_ID)" \
+		$(if $(MIGRATION_REVIEWED),--migration-reviewed,) \
+		$(if $(BUDGET_REVIEWED),--budget-reviewed,) \
+		$(if $(BACKUP_REVIEWED),--backup-reviewed,) \
+		$(if $(FIRST_APPLY),--first-apply,) \
+		$(if $(REQUIRE_GATES),--require-gates,) \
+		$(if $(FROM_ENV),--from-env,)
+
+plan-environment:
+	ENVIRONMENT="$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		TF_STATE_BUCKET="$(TF_STATE_BUCKET)" AWS_REGION="$(if $(AWS_REGION),$(AWS_REGION),$(REGION))" \
+		AWS_ACCOUNT_ID="$(if $(AWS_ACCOUNT_ID),$(AWS_ACCOUNT_ID),$(ACCOUNT))" \
+		API_IMAGE="$(IMAGE_DIGEST)" $(ROOT)/scripts/plan-environment.sh
+
+apply-environment:
+	ENVIRONMENT="$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" PLAN_FILE="$(PLAN_FILE)" \
+		CONFIRM="$(CONFIRM)" CONFIRM_PROD="$(CONFIRM_PROD)" $(ROOT)/scripts/apply-environment.sh
+
+verify-infra:
+	ENVIRONMENT="$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		ACCOUNT="$(ACCOUNT)" $(ROOT)/scripts/verify-infrastructure.sh
+
+smoke-release:
+	API_HEALTH_URL="$(API_HEALTH_URL)" APPLICATION_URL="$(APPLICATION_URL)" \
+		VERSION_URL="$(VERSION_URL)" EXPECTED_COMMIT="$(EXPECTED_COMMIT)" \
+		$(ROOT)/scripts/smoke-release.sh
+
+seed-demo:
+	ENVIRONMENT="$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" CLUSTER="$(CLUSTER)" \
+		TASK_DEFINITION="$(TASK_DEFINITION)" SUBNETS="$(SUBNETS)" \
+		SECURITY_GROUPS="$(SECURITY_GROUPS)" IMAGE="$(IMAGE_DIGEST)" \
+		$(ROOT)/scripts/run-seed-task.sh
+
+observe-release:
+	python3 "$(ROOT)/scripts/observe_release.py" --print-checklist
+	python3 "$(ROOT)/scripts/observe_release.py" --record \
+		--environment "$(if $(ENVIRONMENT),$(ENVIRONMENT),dev)" \
+		--recorded-by "$(RECORDED_BY)" \
+		--window "$(if $(WINDOW),$(WINDOW),agreed post-deploy window)" \
+		--output "$(ROOT)/var/observation-$(if $(ENVIRONMENT),$(ENVIRONMENT),dev).json" \
+		$(foreach item,$(NOTES),--note "$(item)")
+
+restore-test:
+	MODE="$(if $(MODE),$(MODE),aws)" SNAPSHOT_ID="$(SNAPSHOT_ID)" CONFIRM="$(CONFIRM)" \
+		DELETE_RESTORE="$(DELETE_RESTORE)" APPLICATION_URL="$(APPLICATION_URL)" \
+		$(ROOT)/scripts/restore-test.sh
+
+rollback-release:
+	PREVIOUS_TASK_DEFINITION="$(PREVIOUS_TASK_DEFINITION)" \
+		PREVIOUS_WEB_SOURCE="$(PREVIOUS_WEB_SOURCE)" CLUSTER="$(CLUSTER)" \
+		SERVICE="$(SERVICE)" WEB_BUCKET="$(WEB_BUCKET)" \
+		DISTRIBUTION_ID="$(DISTRIBUTION_ID)" RUN_SMOKE="$(RUN_SMOKE)" \
+		API_HEALTH_URL="$(API_HEALTH_URL)" APPLICATION_URL="$(APPLICATION_URL)" \
+		$(ROOT)/scripts/rollback-release.sh

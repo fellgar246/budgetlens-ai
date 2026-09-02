@@ -180,7 +180,7 @@ make migrate
 make seed
 ```
 
-On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance. Check row counts and tenant isolation on that copy before pointing traffic at it. An isolated restore (AC-026) is required before calling the product production-ready. Until that AWS check runs, R-15 stays unverified and blocks AWS and production release. Locally, `make test-acceptance` clones the test database with `CREATE DATABASE … TEMPLATE` and rechecks counts and tenant isolation.
+On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance named `budgetlens-dev-restore`. Check row counts and tenant isolation on that copy before pointing traffic at it. Do not change DNS or the application secret. An isolated restore (AC-026) is required before calling the product production-ready. Until that AWS check runs, R-15 stays unverified and blocks AWS and production release. Locally, `make test-acceptance` clones the test database with `CREATE DATABASE … TEMPLATE` and rechecks counts and tenant isolation. Commands: [restore test](DEPLOYMENT.md#11-restore-test).
 
 ## Backups
 
@@ -194,7 +194,7 @@ On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance. Che
 
 ### Deploy and rollback
 
-Use [CICD.md](CICD.md) for the pipeline and [images and rollback](#images-and-rollback) for the commands. Production apply is never `-auto-approve`. Application rollback does not downgrade the database.
+The ordered AWS runbook is [DEPLOYMENT.md](DEPLOYMENT.md): preflight, bootstrap, plan, apply, migration, application deploy, smoke, optional demo seed, observation, rollback, restore test, and teardown. Use [CICD.md](CICD.md) for the pipeline and [images and rollback](#images-and-rollback) for local image tags. Production apply is never `-auto-approve`. Application rollback does not downgrade the database.
 
 ### Database migration failure
 

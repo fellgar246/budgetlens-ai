@@ -25,7 +25,7 @@ cp backend.hcl.example backend.hcl
 terraform init -backend-config=backend.hcl
 ```
 
-Do not commit `backend.hcl`, `*.tfstate`, or plan files.
+Do not commit `backend.hcl`, `*.tfstate`, or plan files. The first-time command sequence is `scripts/bootstrap-state.sh` in [DEPLOYMENT.md](../../../docs/DEPLOYMENT.md#2-bootstrap-state-and-oidc).
 
 ## Outputs used by environment roots
 

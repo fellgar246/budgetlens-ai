@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 from types import ModuleType
 
@@ -101,6 +100,7 @@ def test_deploy_runs_migration_before_schema_dependent_traffic() -> None:
         assert "smoke-release.sh" in text
         assert "rollback-release.sh" in text
         assert "release_evidence.py" in text
+        assert "deploy_preflight.py" in text
         assert "environment: " in text
         migrate_at = text.index("run-migration-task.sh")
         apply_at = text.index("terraform -chdir=\"${TF_ROOT}\" apply")
@@ -185,7 +185,9 @@ def test_plan_guard_fails_unexpected_destroys_and_redacts_secrets() -> None:
     offenders = guard.unexpected_destroys(changes)
     assert any("aws_db_instance" in item for item in offenders)
     assert guard.unexpected_destroys(changes, ["module.database.aws_db_instance.this"]) == []
-    redacted = guard.redact({"DATABASE_URL": "postgresql://budgetlens:secret@localhost/db", "name": "ok"})
+    redacted = guard.redact(
+        {"DATABASE_URL": "postgresql://budgetlens:secret@localhost/db", "name": "ok"}
+    )
     assert redacted["DATABASE_URL"] == "(redacted)"
     assert redacted["name"] == "ok"
 
@@ -232,7 +234,9 @@ def test_release_evidence_requires_digest_identity() -> None:
 def test_changelog_parses_semver_and_commit_subjects() -> None:
     changelog = _load("changelog")
     assert changelog.semver_from_ref("refs/tags/v1.2.3") == "1.2.3"
-    subjects = changelog.parse_subjects("abc1234 Add deploy workflow\nfff9999 Merge branch 'main'\n")
+    subjects = changelog.parse_subjects(
+        "abc1234 Add deploy workflow\nfff9999 Merge branch 'main'\n"
+    )
     assert subjects == ["Add deploy workflow"]
     text = changelog.render_changelog("1.2.3", subjects)
     assert text.startswith("## 1.2.3")
@@ -247,6 +251,11 @@ def test_release_scripts_exist_and_refuse_latest() -> None:
         "rollback-release.sh",
         "promote-image.sh",
         "terraform-remote.sh",
+        "run-seed-task.sh",
+        "restore-test.sh",
+        "bootstrap-state.sh",
+        "plan-environment.sh",
+        "apply-environment.sh",
     ):
         path = SCRIPTS / name
         text = path.read_text(encoding="utf-8")
