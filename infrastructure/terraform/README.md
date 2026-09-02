@@ -4,7 +4,7 @@ This tree holds the AWS environments. The local product does not require Terrafo
 
 ```text
 terraform/
-├── bootstrap/       # state bucket, optional GitHub OIDC, optional account budget
+├── bootstrap/       # state bucket, optional GitHub OIDC, account budget and cost alerts
 ├── modules/         # reusable infrastructure modules
 └── environments/    # per-environment roots (dev, prod)
 ```
@@ -48,4 +48,11 @@ terraform -chdir=infrastructure/terraform/environments/dev validate
 terraform -chdir=infrastructure/terraform/modules/network test
 ```
 
-A real plan or apply needs a recorded account ID, a published image digest, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md). GitHub Actions run `terraform-plan`, `deploy-dev`, and `deploy-prod` through OIDC as described in [CICD.md](../../docs/CICD.md). Plan files stay off the job log; unexpected destroys fail the guard.
+A real plan or apply needs a recorded account ID, a published image digest, a dated official cost estimate, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md). Terraform exposes sizes and counts on `cost_visible_sizes`; it does not invent a monthly price. A budget is an alert, not a hard cap.
+
+```text
+python scripts/record_cost_estimate.py --print-sizes --environment dev
+make record-cost-estimate ENVIRONMENT=dev SOURCE='https://calculator.aws/#...' MONTHLY_ESTIMATE='<human figure>'
+```
+
+GitHub Actions run `terraform-plan`, `deploy-dev`, and `deploy-prod` through OIDC as described in [CICD.md](../../docs/CICD.md). Plan files stay off the job log; unexpected destroys fail the guard. Environment teardown is `scripts/teardown-environment.sh` and never deletes the state bucket.

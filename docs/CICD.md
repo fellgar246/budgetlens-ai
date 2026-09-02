@@ -64,4 +64,4 @@ On `main`:
 
 Application rollback restores the previous task definition and/or previous web artifact. It does not downgrade the database. Terraform rollback is a new plan from reverted code, not a state edit.
 
-See [OPERATIONS.md](OPERATIONS.md#images-and-rollback).
+See [OPERATIONS.md](OPERATIONS.md#images-and-rollback). Cost estimates, daily checks, and teardown are in [OPERATIONS.md](OPERATIONS.md).

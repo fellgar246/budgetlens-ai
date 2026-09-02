@@ -5,8 +5,11 @@ resource "random_id" "suffix" {
 }
 
 locals {
-  state_bucket = "budgetlens-tfstate-${data.aws_caller_identity.current.account_id}-${random_id.suffix.hex}"
-  create_oidc  = var.github_owner != "" && var.github_repository != ""
+  state_bucket         = "budgetlens-tfstate-${data.aws_caller_identity.current.account_id}-${random_id.suffix.hex}"
+  create_oidc          = var.github_owner != "" && var.github_repository != ""
+  create_budget        = var.max_monthly_budget > 0 && var.alarm_email != ""
+  create_cost_anomaly  = var.enable_cost_anomaly_detection && var.alarm_email != ""
+  cost_allocation_tags = var.enable_cost_allocation_tags ? toset(["Project", "Environment", "CostCenter", "Owner"]) : toset([])
 }
 
 data "aws_iam_policy_document" "state_kms" {
@@ -149,7 +152,7 @@ module "github_oidc" {
 }
 
 resource "aws_budgets_budget" "monthly" {
-  count = var.max_monthly_budget > 0 && var.alarm_email != "" ? 1 : 0
+  count = local.create_budget ? 1 : 0
 
   name         = "budgetlens-monthly"
   budget_type  = "COST"
@@ -157,19 +160,64 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = var.alarm_email == "" ? [] : [var.alarm_email]
+  dynamic "notification" {
+    for_each = var.budget_actual_percent_thresholds
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alarm_email]
+    }
   }
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = var.alarm_email == "" ? [] : [var.alarm_email]
+  dynamic "notification" {
+    for_each = var.budget_forecast_percent_thresholds
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "FORECASTED"
+      subscriber_email_addresses = [var.alarm_email]
+    }
   }
+}
+
+resource "aws_ce_anomaly_monitor" "services" {
+  count = local.create_cost_anomaly ? 1 : 0
+
+  name              = "budgetlens-service-monitor"
+  monitor_type      = "DIMENSIONAL"
+  monitor_dimension = "SERVICE"
+}
+
+resource "aws_ce_anomaly_subscription" "email" {
+  count = local.create_cost_anomaly ? 1 : 0
+
+  name      = "budgetlens-anomaly-alerts"
+  frequency = "DAILY"
+
+  monitor_arn_list = [
+    aws_ce_anomaly_monitor.services[0].arn,
+  ]
+
+  subscriber {
+    type    = "EMAIL"
+    address = var.alarm_email
+  }
+
+  threshold_expression {
+    dimension {
+      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+      values        = [tostring(var.cost_anomaly_impact_usd)]
+    }
+  }
+}
+
+resource "aws_ce_cost_allocation_tag" "required" {
+  for_each = local.cost_allocation_tags
+
+  tag_key = each.key
+  status  = "Active"
 }

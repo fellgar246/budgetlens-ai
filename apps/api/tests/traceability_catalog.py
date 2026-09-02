@@ -754,7 +754,13 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "primary_specs": ["Observability/infrastructure"],
         "plans": ["00", "07", "08", "09", "10"],
         "acceptance": ["AC-025", "AC-026"],
-        "evidence": ["docs/OPERATIONS.md", "docs/CICD.md", "scripts/rollback-release.sh"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "docs/CICD.md",
+            "scripts/rollback-release.sh",
+            "scripts/teardown-environment.sh",
+            "scripts/record_cost_estimate.py",
+        ],
     },
     {
         "id": "FR-UI-001",
@@ -868,14 +874,14 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "99.5% monthly availability for prod; no SLA for dev",
         "status": "partial",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": ["docs/OPERATIONS.md", "apps/api/tests/unit/test_cost_and_operations.py"],
     },
     {
         "id": "NFR-REL-002",
         "summary": "RPO 24 hours and RTO 4 hours for release 1.0",
         "status": "partial",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": ["docs/OPERATIONS.md", "scripts/snapshot-db.sh"],
     },
     {
         "id": "NFR-REL-003",
@@ -1773,6 +1779,8 @@ RISKS: list[RiskRecord] = [
             "docs/OPERATIONS.md",
             "infrastructure/terraform/bootstrap/main.tf",
             "infrastructure/terraform/environments/dev/terraform.tfvars",
+            "scripts/record_cost_estimate.py",
+            "scripts/teardown-environment.sh",
         ],
         "blocks_release": ["aws", "prod"],
     },
@@ -1786,7 +1794,11 @@ RISKS: list[RiskRecord] = [
         "trigger": "Baseline week exceeds the cost objective",
         "category": "cost_external",
         "mitigation_status": "unverified",
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": [
+            "docs/OPERATIONS.md",
+            "infrastructure/terraform/environments/dev/terraform.tfvars",
+            "scripts/teardown-environment.sh",
+        ],
         "blocks_release": [],
     },
     {

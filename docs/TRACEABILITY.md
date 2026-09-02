@@ -78,7 +78,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 | Requirements | Plans | Evidence |
 |---|---|---|
 | NFR-PERF-001–005 | 02, 03, 04, 05, 07 | Import/API benchmark scripts, Lighthouse pending, AI telemetry, pagination tests |
-| NFR-REL-001–005 | 02, 07, 09, 10 | Atomic import tests, health, rollback/restore runbook |
+| NFR-REL-001–005 | 02, 07, 09, 10 | Atomic import tests, health, rollback/restore/teardown runbooks |
 | NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, Terraform encryption/OIDC, AWS apply pending |
 | NFR-PRI-001–005 | 02, 05–10 | Log tests, retention, synthetic seed, presigned export flow |
 | NFR-UX-001–004 | 04, 07 | Automated display tests, keyboard/focus styles, format components |
@@ -174,7 +174,7 @@ The automated suite is organized around monetary accuracy, atomic imports, tenan
 Commands (local close, 2026-09-01):
 
 - `make lint` — format, lint, and types
-- `make test` — 211 API unit tests and 22 web unit tests
+- `make test` — 271 API unit tests and 22 web unit tests
 - `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
 - `make test-contract` — OpenAPI snapshot
 - `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)

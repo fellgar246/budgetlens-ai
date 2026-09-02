@@ -5,3 +5,4 @@ Application releases use SemVer (`vMAJOR.MINOR.PATCH`). Generate a fragment from
 ## Unreleased
 
 - CI/CD workflows for path-filtered CI, image publish, Terraform plan, and environment deploys.
+- Cost and operations guardrails: dated official estimates, account budget and anomaly controls, visible Terraform sizes, and teardown/runbooks.

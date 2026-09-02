@@ -1,6 +1,26 @@
+output "environment" {
+  description = "Environment name. Confirm this against AWS identity before apply or teardown."
+  value       = var.environment
+}
+
+output "aws_account_id" {
+  description = "Recorded AWS account ID. Confirm it matches the caller identity before apply or teardown."
+  value       = var.aws_account_id
+}
+
 output "monthly_budget_target_usd" {
   description = "Documented monthly cost target for this environment. A budget is an alert, not a hard cap."
   value       = var.max_monthly_budget
+}
+
+output "cost_visible_sizes" {
+  description = "Sizes and counts that drive cost. Review before apply. This output is not a price."
+  value       = local.cost_visible_sizes
+}
+
+output "deletion_protection" {
+  description = "Whether RDS and ALB deletion protection is enabled. Disable only through the teardown runbook."
+  value       = var.deletion_protection
 }
 
 output "application_url" {

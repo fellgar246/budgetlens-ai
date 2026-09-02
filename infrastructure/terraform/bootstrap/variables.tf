@@ -59,7 +59,7 @@ variable "existing_oidc_provider_arn" {
 
 variable "alarm_email" {
   type        = string
-  description = "Optional email for the account budget. The subscription must be confirmed manually."
+  description = "Optional email for the account budget and cost-anomaly subscription. Confirm the message manually. A budget is an alert, not a hard cap."
   nullable    = false
   default     = ""
 }
@@ -74,4 +74,54 @@ variable "max_monthly_budget" {
     condition     = var.max_monthly_budget >= 0
     error_message = "max_monthly_budget must be zero or positive."
   }
+}
+
+variable "budget_actual_percent_thresholds" {
+  type        = list(number)
+  description = "Actual-spend percentages that notify. Chosen alerts, not a spending cap."
+  nullable    = false
+  default     = [50, 80, 100]
+
+  validation {
+    condition     = alltrue([for value in var.budget_actual_percent_thresholds : value > 0 && value <= 200])
+    error_message = "budget_actual_percent_thresholds must be percentages between 1 and 200."
+  }
+}
+
+variable "budget_forecast_percent_thresholds" {
+  type        = list(number)
+  description = "Forecast-spend percentages that notify. Chosen alerts, not a spending cap."
+  nullable    = false
+  default     = [80, 100]
+
+  validation {
+    condition     = alltrue([for value in var.budget_forecast_percent_thresholds : value > 0 && value <= 200])
+    error_message = "budget_forecast_percent_thresholds must be percentages between 1 and 200."
+  }
+}
+
+variable "enable_cost_anomaly_detection" {
+  type        = bool
+  description = "Create Cost Anomaly Detection after Cost Explorer is enabled and the control is approved."
+  nullable    = false
+  default     = false
+}
+
+variable "cost_anomaly_impact_usd" {
+  type        = number
+  description = "Absolute USD impact that raises a cost-anomaly alert. Not a monthly cost figure."
+  nullable    = false
+  default     = 20
+
+  validation {
+    condition     = var.cost_anomaly_impact_usd >= 0
+    error_message = "cost_anomaly_impact_usd must be zero or positive."
+  }
+}
+
+variable "enable_cost_allocation_tags" {
+  type        = bool
+  description = "Activate Cost Explorer allocation tags after Cost Explorer is enabled."
+  nullable    = false
+  default     = false
 }

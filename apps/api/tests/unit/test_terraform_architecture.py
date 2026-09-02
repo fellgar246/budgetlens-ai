@@ -44,6 +44,9 @@ REQUIRED_OUTPUTS = (
     "private_subnet_ids",
     "ecs_security_group_id",
     "api_task_definition_arn",
+    "environment",
+    "aws_account_id",
+    "cost_visible_sizes",
 )
 
 
@@ -115,7 +118,7 @@ def test_task_definitions_reject_latest_and_run_controlled_migrations() -> None:
     assert ":(latest|LATEST)$" in variables
     assert "must not use the latest tag" in variables
     assert '["migrate"]' in compute
-    assert 'RUN_MIGRATIONS_ON_START' in compute
+    assert "RUN_MIGRATIONS_ON_START" in compute
     assert '"0"' in compute
     assert "deployment_circuit_breaker" in compute
     assert "GIT_SHA" in compute
@@ -134,7 +137,7 @@ def test_network_keeps_rds_private_and_tasks_off_the_internet() -> None:
     assert "aws_subnet" in network and "isolated" in network
     assert "publicly_accessible                   = false" in database
     assert "0.0.0.0/0" not in database or "443" in database
-    assert 'from_port                    = 5432' in compute
+    assert "from_port                    = 5432" in compute
     assert "cloudfront.origin-facing" in compute
     assert "assign_public_ip = false" in compute
 
@@ -183,6 +186,23 @@ def test_environment_outputs_cover_deploy_and_dns() -> None:
         assert f'output "{name}"' in text, name
     assert "sensitive   = true" in text
     assert "Never the secret value" in text or "never" in text.lower()
+    assert "cost_visible_sizes" in text
+    assert "not a price" in text.lower() or "not a hard cap" in text.lower()
+
+
+def test_bootstrap_budget_is_an_alert_and_anomaly_is_gated() -> None:
+    bootstrap = _read("bootstrap/main.tf")
+    variables = _read("bootstrap/variables.tf")
+    assert "aws_budgets_budget" in bootstrap
+    assert 'notification_type          = "ACTUAL"' in bootstrap
+    assert 'notification_type          = "FORECASTED"' in bootstrap
+    assert "aws_ce_anomaly_monitor" in bootstrap
+    assert "aws_ce_anomaly_subscription" in bootstrap
+    assert "aws_ce_cost_allocation_tag" in bootstrap
+    assert "enable_cost_anomaly_detection" in variables
+    assert "A budget is an alert, not a hard cap" in variables
+    lowered = variables.lower()
+    assert "confirm the message manually" in lowered or "confirmed manually" in lowered
 
 
 def test_terraform_tree_has_no_access_keys_or_passwords() -> None:

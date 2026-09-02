@@ -7,6 +7,7 @@ on:
       - ".github/workflows/terraform-plan.yml"
       - "scripts/terraform_plan_guard.py"
       - "scripts/terraform-remote.sh"
+      - "scripts/record_cost_estimate.py"
   workflow_dispatch:
     inputs:
       environment:
@@ -78,6 +79,12 @@ jobs:
             -out=tfplan
           terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
           python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
+          {
+            echo
+            echo "Visible cost sizes (not a price). A budget is an alert, not a hard cap."
+            echo
+            python scripts/record_cost_estimate.py --print-sizes --environment "${TF_ENVIRONMENT}"
+          } >> plan-summary.md
 
       - name: Upload plan file as a restricted artifact
         uses: actions/upload-artifact@v4

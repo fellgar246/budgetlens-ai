@@ -3,7 +3,7 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 API := $(ROOT)/apps/api
 PNPM := $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo "corepack pnpm")
 
-.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data
+.PHONY: doctor bootstrap dev stop logs migrate seed eval-ai test test-integration test-contract test-e2e test-acceptance lint format openapi ci build coverage coverage-unit scan watchdog import-job retain-files test-perf traceability clean-generated reset-local-data record-cost-estimate teardown-dev
 
 doctor:
 	$(ROOT)/scripts/doctor.sh
@@ -124,3 +124,16 @@ clean-generated:
 
 reset-local-data:
 	CONFIRM="$(CONFIRM)" $(ROOT)/scripts/reset-local-data.sh
+
+record-cost-estimate:
+	python3 "$(ROOT)/scripts/record_cost_estimate.py" \
+		--environment "$(ENVIRONMENT)" \
+		--source "$(SOURCE)" \
+		--monthly-estimate "$(MONTHLY_ESTIMATE)" \
+		--currency "$(if $(CURRENCY),$(CURRENCY),USD)" \
+		--notes "$(NOTES)"
+
+teardown-dev:
+	ENVIRONMENT=dev CONFIRM="$(CONFIRM)" APPLY_DESTROY="$(APPLY_DESTROY)" \
+		SNAPSHOT="$(SNAPSHOT)" DISABLE_DELETION_PROTECTION="$(DISABLE_DELETION_PROTECTION)" \
+		EMPTY_BUCKET="$(EMPTY_BUCKET)" $(ROOT)/scripts/teardown-environment.sh

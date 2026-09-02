@@ -1,6 +1,6 @@
-# Local operations
+# Operations
 
-This document covers availability, recovery, rollback, and hardening commands for the local product. It does not include financial figures.
+This document covers availability, recovery, rollback, cost controls, and hardening for local and AWS environments. It does not include a fixed monthly price. Record a dated estimate from official AWS prices before the first apply or after a size change.
 
 ## Targets
 
@@ -11,6 +11,58 @@ This document covers availability, recovery, rollback, and hardening commands fo
 | `local` | No SLA | PostgreSQL named volume + bind-mounted `var/storage` | Recreate containers |
 
 `prod` and `dev` copies on AWS use managed backups. Locally, `make reset-local-data CONFIRM=1` destroys data.
+
+The production SLO is 99.5% of non-AI requests succeeding, excluding announced maintenance. Calibrate alarm thresholds from a baseline. Do not page on a single error.
+
+## Daily checklist
+
+- Open alarms on the SNS topic and CloudWatch dashboard.
+- ECS tasks healthy (`HealthyHostCount` and `GET /api/v1/health/ready`).
+- RDS free storage, CPU, and connections.
+- Import jobs stuck in `processing` or marked `failed`.
+- Bedrock or copilot errors, throttling, and latency (`GET /api/v1/ops/metrics` `ai` block).
+- Accumulated spend and forecast in Billing and Cost Explorer. A budget is an alert, not a hard cap.
+- Certificates and custom domains.
+- Pending dependency or image vulnerabilities (`make scan`).
+
+## Cost and account guardrails
+
+Do not copy a dollar figure from this repository as the expected bill. Prices, region, usage, and models change. Before `apply`:
+
+1. Review `cost_visible_sizes` in the environment outputs or `python scripts/record_cost_estimate.py --print-sizes --environment <dev|prod>`.
+2. Enter those sizes into the official [AWS Pricing Calculator](https://calculator.aws/) or the AWS Price List. Do not invent a price.
+3. Record the dated result: `make record-cost-estimate ENVIRONMENT=dev SOURCE='https://calculator.aws/#...' MONTHLY_ESTIMATE='<human figure>'`.
+4. Confirm the budget and alarm email subscriptions manually. Terraform does not treat them as confirmed.
+
+Account controls live in `infrastructure/terraform/bootstrap`:
+
+- Monthly AWS Budget with chosen actual and forecast percent alerts. It does not stop spend.
+- Cost Anomaly Detection when Cost Explorer is enabled and `enable_cost_anomaly_detection` is approved.
+- Cost allocation tags (`Project`, `Environment`, `CostCenter`, `Owner`) when `enable_cost_allocation_tags` is approved.
+- Required resource tags for Cost Explorer grouping.
+
+Application AI usage is visible on `GET /api/v1/ops/metrics`. Estimated cost appears only when a price table is configured and is labeled as an estimate.
+
+Principal cost drivers and the control for each:
+
+| Driver | Unit | Control |
+|---|---|---|
+| NAT Gateway | hours and data | One in development; destroy unused environments; interface endpoints only with an ADR |
+| RDS | hours, class, storage, backup | Small instance and single-AZ in development; storage alarms |
+| ECS Fargate | vCPU, memory, time | Desired count 1 in development; autoscaling only in production after metrics |
+| ALB | hours and LCUs | One per environment; review traffic |
+| CloudFront | requests and data | Cache static assets; do not cache private API data |
+| S3 | storage, requests, egress | Lifecycle on `uploads/`, `errors/`, `exports/` |
+| CloudWatch | ingest and retention | Sanitized logs; short development retention |
+| Bedrock | tokens and model | Configurable model; keep `ai_provider=stub` until live eval; cache only safe responses if designed |
+| Cognito | users and operations | Watch MAU; self-registration stays off |
+
+## Development policy
+
+- Seed and demos use synthetic data only.
+- Desired API count is 1. RDS is single-AZ. Log retention is 14 days.
+- Destroy ephemeral environments when they are not needed. Follow [teardown](#teardown) and keep state or backups only on purpose.
+- If development stays up as a portfolio demo, measure the real monthly cost for one week and then decide optimizations.
 
 ## Health
 
@@ -64,7 +116,7 @@ JSON logs use a fixed field set: timestamp, level, service, environment, event, 
 
 ### Initial alarms
 
-Thresholds stay as Terraform variables in the observability module and are calibrated after load tests:
+Thresholds stay as Terraform variables in the observability module and are calibrated after load tests. Do not copy a threshold blindly from another environment.
 
 | Alarm | Class | Diagnose | Rollback / mitigate |
 |---|---|---|---|
@@ -93,11 +145,11 @@ Deletion is logical. Audit keeps metadata (identifiers, outcome) and not the con
 
 Remote state uses a versioned, encrypted S3 bucket created by `infrastructure/terraform/bootstrap` and Terraform's native `use_lockfile`. Do not add a new DynamoDB lock table. The repository pins Terraform 1.13.5 (1.10 or newer is required for native S3 locking). If an older root still has `dynamodb_table`, upgrade first, apply with both locks, then remove the DynamoDB argument.
 
-Environment roots live in `infrastructure/terraform/environments/dev` and `environments/prod`. They do not share workspaces. Static checks (`fmt`, `validate`, TFLint, Checkov) do not need AWS credentials. A real plan still requires a recorded account, region, budget, and image digest.
+Environment roots live in `infrastructure/terraform/environments/dev` and `environments/prod`. They do not share workspaces. Static checks (`fmt`, `validate`, TFLint, Checkov) do not need AWS credentials. A real plan still requires a recorded account, region, a dated cost estimate, and an image digest.
 
 Required tags on every managed resource: `Project=BudgetLens`, `Environment`, `ManagedBy=Terraform`, `Owner`, `CostCenter`, and `DataClassification`.
 
-Remaining human steps before apply: secure the AWS account, choose a region with Bedrock access if the copilot will be live, confirm the budget email subscription, configure GitHub Environments for OIDC, and review the plan. Production apply is never `-auto-approve`.
+Remaining human steps before apply: secure the AWS account, choose a region with Bedrock access if the copilot will be live, record the dated cost estimate, confirm the budget and alarm email subscriptions, configure GitHub Environments for OIDC, and review the plan. Production apply is never `-auto-approve`.
 
 ## CI/CD
 
@@ -129,6 +181,113 @@ make seed
 ```
 
 On AWS `dev` and `prod`, restore a managed snapshot to an isolated instance. Check row counts and tenant isolation on that copy before pointing traffic at it. An isolated restore (AC-026) is required before calling the product production-ready. Until that AWS check runs, R-15 stays unverified and blocks AWS and production release. Locally, `make test-acceptance` clones the test database with `CREATE DATABASE … TEMPLATE` and rechecks counts and tenant isolation.
+
+## Backups
+
+- RDS automated backups follow the environment RPO (`backup_retention_days` is 7 in development and 14 in production).
+- Take a snapshot before a high-risk change: `DB_IDENTIFIER=<id> scripts/snapshot-db.sh`. Production deploy already does this.
+- A backup that has not been restored onto an isolated resource does not count as a strategy. Use the [restore](#restore) steps.
+- S3 versioning and lifecycle stay aligned with retention for uploads, errors, and exports.
+- The Terraform state bucket is versioned, encrypted, and least-privilege. Do not empty it during environment teardown.
+
+## Runbooks
+
+### Deploy and rollback
+
+Use [CICD.md](CICD.md) for the pipeline and [images and rollback](#images-and-rollback) for the commands. Production apply is never `-auto-approve`. Application rollback does not downgrade the database.
+
+### Database migration failure
+
+1. Do not shift traffic to a schema-dependent image.
+2. Keep the previous task definition from the deploy job.
+3. Inspect the one-off migration task logs. Do not print secrets.
+4. Fix forward with a new expand-compatible migration, or keep the previous image if it matches the current schema.
+5. Do not run `alembic downgrade` against AWS.
+
+### Restore database
+
+Follow [restore](#restore). Restore onto an isolated instance first. Compare tenant counts before changing DNS or the application secret.
+
+### Bedrock unavailable or throttled
+
+1. Analytics stays available. The copilot returns 503 `AI_UNAVAILABLE`.
+2. Check `ai` metrics and logs for `rate_limited` or provider 5xx. Do not write prompts to the ticket.
+3. Retry with jitter. Switch `ai_provider` to `stub` only in local or test.
+4. Keep the model ID configurable. Do not cache private responses unless a later design allows it.
+
+### Import job stuck
+
+1. Confirm the job is still `processing` and older than the watchdog timeout.
+2. Run `make watchdog` locally or the operations task on AWS.
+3. The job must become `failed` with `JOB_TIMEOUT`. Re-run after the file or mapping is fixed.
+4. Do not delete job metadata to "unstick" a hash.
+
+### S3 access denied
+
+1. Check the task role, bucket policy, and KMS key policy. Readiness stays up because storage is not a readiness dependency.
+2. Uploads and exports return 503 `STORAGE_UNAVAILABLE`.
+3. Never make the data or web bucket public to clear the error.
+4. Confirm the object key prefix (`uploads/`, `errors/`, `exports/`) and the caller organization.
+
+### Secret rotation
+
+1. Do not print `DATABASE_URL`, `STORAGE_KEY_PEPPER`, or Terraform-sensitive outputs.
+2. Rotate the RDS master password in RDS, then update the Secrets Manager JSON for `DATABASE_URL` without echoing it.
+3. Force a new ECS deployment so tasks pick up the new secret version.
+4. Confirm `GET /api/v1/health/ready` and revoke the previous secret version after the service is stable.
+5. Terraform does not store the password as an input or output.
+
+### Cognito login incident
+
+1. Confirm the user pool, app client, hosted UI domain, and callback URLs from Terraform outputs. Those IDs are not secrets.
+2. Check CloudWatch and the API for `401`/`403` without writing tokens to the ticket.
+3. Disable a compromised user in the Cognito console. Terraform does not create users.
+4. Keep self-registration off. Do not add a client secret to the public SPA.
+
+### Unexpected cost spike
+
+1. Open AWS Budgets and Cost Explorer. Confirm the email alert. A budget does not stop spend.
+2. Group by `Project`, `Environment`, `CostCenter`, and service. NAT, RDS, and Bedrock are the usual drivers.
+3. Pause non-essential AI traffic (`ai_provider=stub` in a new plan) and stop unused tasks.
+4. If the environment is ephemeral, follow [teardown](#teardown).
+5. Record the sizes that changed and a new dated estimate before the next apply.
+
+### Teardown
+
+Use `scripts/teardown-environment.sh`. It never destroys the bootstrap state bucket.
+
+```text
+ENVIRONMENT=dev CONFIRM=1 SNAPSHOT=1 scripts/teardown-environment.sh
+# review the destroy plan
+ENVIRONMENT=dev CONFIRM=1 SNAPSHOT=1 DISABLE_DELETION_PROTECTION=1 \
+  EMPTY_BUCKET=<exact-data-or-web-bucket> APPLY_DESTROY=1 \
+  scripts/teardown-environment.sh
+```
+
+Required order:
+
+1. Confirm environment and account from Terraform outputs and `aws sts get-caller-identity`.
+2. Export any audit or demo data that must be kept.
+3. Take a snapshot if the data should be recoverable.
+4. Disable deletion protection only with `DISABLE_DELETION_PROTECTION=1`.
+5. Empty S3 only when `EMPTY_BUCKET` equals the exact data or web bucket name.
+6. Review `terraform plan -destroy`.
+7. Apply the saved destroy plan only with `APPLY_DESTROY=1`. Production also needs `CONFIRM_PROD=1`.
+8. Keep or delete remote state as a separate decision. Never delete the state bucket from this script.
+
+`make teardown-dev CONFIRM=1` is the development wrapper.
+
+## Scaling
+
+Before increasing CPU, memory, task count, or database class:
+
+1. Confirm the metric and the constraint.
+2. Measure the specific query, import, or tool.
+3. Optimize the index, code, or a safe cache.
+4. Right-size the existing task or instance.
+5. Record the change and a new dated cost estimate.
+
+Do not introduce Redis, a managed queue, or a database proxy without evidence and a new ADR. BL-1110 remains a Could item.
 
 ## Encryption and credentials
 
