@@ -1,0 +1,228 @@
+name: Deploy dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: API image digest URI (repository@sha256:...). Leave empty to use the latest Build artifact for this commit.
+        required: false
+        type: string
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy development
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY_DEV != 'false')
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      TF_ROOT: infrastructure/terraform/environments/dev
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Require GitHub variables
+        run: |
+          test -n "${{ vars.AWS_REGION }}"
+          test -n "${{ vars.AWS_ACCOUNT_ID }}"
+          test -n "${{ vars.TF_STATE_BUCKET }}"
+          test -n "${{ vars.DEPLOY_DEV_ROLE_ARN }}"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_DEV_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-deploy-dev-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Resolve image digest
+        id: image
+        run: |
+          digest="${{ github.event.inputs.image_digest }}"
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          if [ -z "${digest}" ]; then
+            mkdir -p /tmp/image-artifact
+            if gh run download "${{ github.event.workflow_run.id || '' }}" --name "image-${sha}" --dir /tmp/image-artifact 2>/dev/null; then
+              digest="$(cat /tmp/image-artifact/image-digest.txt)"
+            elif [ -n "${{ vars.DEV_ECR_REPOSITORY }}" ]; then
+              digest="${{ vars.DEV_ECR_REPOSITORY }}@sha256:$(aws ecr describe-images --repository-name "${{ vars.DEV_ECR_REPOSITORY }}" --image-ids "imageTag=${sha}" --query 'imageDetails[0].imageDigest' --output text | sed 's#sha256:##')"
+            fi
+          fi
+          case "${digest}" in
+            *@sha256:*) ;;
+            *)
+              echo "Deploy requires an image digest URI, not a latest tag." >&2
+              exit 1
+              ;;
+          esac
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Terraform init with remote backend
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/terraform-remote.sh
+
+      - name: Capture rollback target
+        id: previous
+        run: |
+          previous="$(terraform -chdir="${TF_ROOT}" output -raw api_task_definition_arn 2>/dev/null || true)"
+          echo "task_definition=${previous}" >> "$GITHUB_OUTPUT"
+
+      - name: Run expand-compatible migration once
+        env:
+          IMAGE: ${{ steps.image.outputs.digest }}
+        run: |
+          cluster="$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name 2>/dev/null || true)"
+          family="$(terraform -chdir="${TF_ROOT}" output -raw migration_task_definition_family 2>/dev/null || true)"
+          if [ -z "${cluster}" ] || [ -z "${family}" ]; then
+            echo "NOTE  first apply; migration runs after Terraform creates the task definition"
+            echo "first_apply=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          subnets="$(terraform -chdir="${TF_ROOT}" output -json private_subnet_ids | python -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
+          sg="$(terraform -chdir="${TF_ROOT}" output -raw ecs_security_group_id)"
+          CLUSTER="${cluster}" TASK_DEFINITION="${family}" SUBNETS="${subnets}" SECURITY_GROUPS="${sg}" \
+            IMAGE="${IMAGE}" scripts/run-migration-task.sh
+          echo "first_apply=false" >> "$GITHUB_ENV"
+
+      - name: Apply approved Terraform with the image digest
+        env:
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform -chdir="${TF_ROOT}" plan \
+            -input=false \
+            -no-color \
+            -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}" \
+            -var="api_image=${{ steps.image.outputs.digest }}" \
+            -var="git_sha=${{ steps.image.outputs.sha }}" \
+            -out=tfplan
+          terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
+          python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
+          terraform -chdir="${TF_ROOT}" apply -input=false -no-color tfplan
+
+      - name: Run migration after first apply
+        if: env.first_apply == 'true'
+        env:
+          IMAGE: ${{ steps.image.outputs.digest }}
+        run: |
+          cluster="$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)"
+          family="$(terraform -chdir="${TF_ROOT}" output -raw migration_task_definition_family)"
+          subnets="$(terraform -chdir="${TF_ROOT}" output -json private_subnet_ids | python -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
+          sg="$(terraform -chdir="${TF_ROOT}" output -raw ecs_security_group_id)"
+          CLUSTER="${cluster}" TASK_DEFINITION="${family}" SUBNETS="${subnets}" SECURITY_GROUPS="${sg}" \
+            IMAGE="${IMAGE}" scripts/run-migration-task.sh
+          aws ecs update-service \
+            --cluster "${cluster}" \
+            --service "$(terraform -chdir="${TF_ROOT}" output -raw ecs_service_name)" \
+            --force-new-deployment \
+            --output text >/dev/null
+
+      - name: Wait for ECS service
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)" \
+            --services "$(terraform -chdir="${TF_ROOT}" output -raw ecs_service_name)"
+
+      - name: Upload web assets and invalidate CloudFront
+        run: |
+          sha="${{ steps.image.outputs.sha }}"
+          mkdir -p /tmp/web-out
+          if gh run download "${{ github.event.workflow_run.id || '' }}" --name "web-${sha}" --dir /tmp/web-artifact 2>/dev/null; then
+            tar -C /tmp/web-out -xzf /tmp/web-artifact/web-${sha}.tar.gz
+          else
+            export NEXT_PUBLIC_API_BASE_URL="${{ vars.DEV_APPLICATION_URL || 'https://localhost' }}"
+            export NEXT_PUBLIC_APP_ENV=dev
+            python scripts/review_public_env.py \
+              "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+              "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}"
+            pnpm install --frozen-lockfile
+            pnpm --filter web build
+            cp -R apps/web/out/. /tmp/web-out/
+          fi
+          SOURCE=/tmp/web-out \
+            WEB_BUCKET="$(terraform -chdir="${TF_ROOT}" output -raw web_bucket_name)" \
+            DISTRIBUTION_ID="$(terraform -chdir="${TF_ROOT}" output -raw cloudfront_distribution_id)" \
+            RELEASE_SHA="${sha}" \
+            scripts/deploy-web.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Smoke tests
+        run: |
+          API_HEALTH_URL="$(terraform -chdir="${TF_ROOT}" output -raw api_health_url)" \
+            APPLICATION_URL="${{ vars.DEV_APPLICATION_URL || '' }}" \
+            EXPECTED_COMMIT="${{ steps.image.outputs.sha }}" \
+            scripts/smoke-release.sh
+
+      - name: Write release evidence
+        if: always()
+        run: |
+          revision="$(terraform -chdir="${TF_ROOT}" output -raw migration_task_definition_arn || echo unknown)"
+          python scripts/release_evidence.py \
+            --commit "${{ steps.image.outputs.sha }}" \
+            --environment dev \
+            --image-digest "${{ steps.image.outputs.digest }}" \
+            --terraform-plan approved \
+            --migration-revision "${revision}" \
+            --smoke-results "${{ job.status }}" \
+            --ai-evaluation "stub; live Bedrock is not required on every deploy" \
+            --known-risks "R-06 and R-15 remain unverified until AWS cost and restore gates" \
+            --rollback-target "${{ steps.previous.outputs.task_definition }}" \
+            --output "var/release-evidence-dev.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-evidence-dev-${{ steps.image.outputs.sha }}
+          path: |
+            var/release-evidence-dev.json
+            var/release-evidence-dev.md
+            plan-summary.md
+          if-no-files-found: ignore
+
+      - name: Compatible rollback
+        if: failure() && steps.previous.outputs.task_definition != ''
+        env:
+          PREVIOUS_TASK_DEFINITION: ${{ steps.previous.outputs.task_definition }}
+        run: |
+          CLUSTER="$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)" \
+            SERVICE="$(terraform -chdir="${TF_ROOT}" output -raw ecs_service_name)" \
+            scripts/rollback-release.sh

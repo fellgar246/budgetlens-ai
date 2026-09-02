@@ -139,6 +139,20 @@ variable "api_image" {
   }
 }
 
+variable "git_sha" {
+  type        = string
+  description = "Git commit SHA recorded on the ECS task definition."
+  nullable    = false
+  default     = "unknown"
+}
+
+variable "app_version" {
+  type        = string
+  description = "Application SemVer recorded on the ECS task definition."
+  nullable    = false
+  default     = "0.1.0"
+}
+
 variable "enable_autoscaling" {
   type        = bool
   description = "Enable ECS autoscaling."

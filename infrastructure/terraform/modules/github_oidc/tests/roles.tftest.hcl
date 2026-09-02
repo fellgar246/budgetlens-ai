@@ -30,4 +30,9 @@ run "separates_plan_and_environment_deploy_roles" {
     condition     = aws_iam_role.deploy_prod.name == "budgetlens-github-deploy-prod"
     error_message = "Production deploy role must be named <prefix>-github-deploy-prod."
   }
+
+  assert {
+    condition     = aws_iam_role.plan.max_session_duration == 3600
+    error_message = "OIDC sessions must be short (3600 seconds)."
+  }
 }

@@ -41,6 +41,9 @@ REQUIRED_OUTPUTS = (
     "dns_validation_records",
     "alarm_topic_arn",
     "dashboard_name",
+    "private_subnet_ids",
+    "ecs_security_group_id",
+    "api_task_definition_arn",
 )
 
 
@@ -115,6 +118,8 @@ def test_task_definitions_reject_latest_and_run_controlled_migrations() -> None:
     assert 'RUN_MIGRATIONS_ON_START' in compute
     assert '"0"' in compute
     assert "deployment_circuit_breaker" in compute
+    assert "GIT_SHA" in compute
+    assert "APP_VERSION" in compute
     assert "assign_public_ip = false" in compute
     assert "/api/v1/health/ready" in compute
     assert "secretsmanager" in compute.lower() or "app_secret_arn" in compute
@@ -201,5 +206,8 @@ def test_terraform_tree_has_no_access_keys_or_passwords() -> None:
     oidc = _read("modules/github_oidc/main.tf")
     assert "ManagePrefixedRoles" in oidc
     assert "iam:CreateRole" in oidc
+    assert "token.actions.githubusercontent.com:iss" in oidc
+    assert "max_session_duration = 3600" in oidc
+    assert "ref:refs/tags/v*" in oidc
     scan = (REPO_ROOT / "scripts" / "scan.sh").read_text(encoding="utf-8")
     assert "terraform test" in scan

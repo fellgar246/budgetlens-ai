@@ -113,3 +113,18 @@ output "dashboard_name" {
   description = "CloudWatch dashboard name."
   value       = module.observability.dashboard_name
 }
+
+output "private_subnet_ids" {
+  description = "Private subnet IDs used to run the one-off migration task."
+  value       = module.network.private_subnet_ids
+}
+
+output "ecs_security_group_id" {
+  description = "ECS task security group used by the one-off migration task."
+  value       = module.compute.ecs_security_group_id
+}
+
+output "api_task_definition_arn" {
+  description = "Current API task definition ARN, used as a rollback target."
+  value       = module.compute.api_task_definition_arn
+}

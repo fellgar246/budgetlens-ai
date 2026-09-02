@@ -88,6 +88,8 @@ module "compute" {
   app_secret_arn            = module.database.app_secret_arn
   rds_security_group_id     = module.database.security_group_id
   api_image                 = var.api_image
+  git_sha                   = var.git_sha
+  app_version               = var.app_version
   api_cpu                   = var.api_cpu
   api_memory                = var.api_memory
   api_desired_count         = var.api_desired_count

@@ -1,0 +1,9 @@
+# Review owners for infrastructure, migrations, and auth.
+# Replace @budgetlens/maintainers with the GitHub team when one exists.
+# Branch protection should require a review on these paths.
+
+/infrastructure/ @budgetlens/maintainers
+/apps/api/migrations/ @budgetlens/maintainers
+/apps/api/src/budgetlens/adapters/oidc.py @budgetlens/maintainers
+/apps/api/src/budgetlens/config.py @budgetlens/maintainers
+/.github/workflows/ @budgetlens/maintainers

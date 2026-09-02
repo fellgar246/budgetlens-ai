@@ -11,7 +11,7 @@ Do not use Terraform workspaces to mix this root with production. The state key 
 3. Replace `api_image` with a published digest. The placeholder digest is not deployable.
 4. `terraform init -backend=false` for static validation, or `-backend-config=backend.hcl` against the state bucket.
 5. Review `terraform plan`. Reject unexpected destroys.
-6. Apply only after the human review for this environment.
+6. Apply only after the human review for this environment, or through the `Deploy dev` workflow in [CICD.md](../../../../docs/CICD.md).
 
 After the first apply, add the CloudFront URL to `additional_app_urls` so Cognito callbacks and CORS match the distribution.
 

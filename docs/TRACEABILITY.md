@@ -102,7 +102,7 @@ Each plan declares the requirements and acceptance it owns. The machine-readable
 | Plan 06 | Auth and tenancy | Implemented | FR-ORG-002–004, NFR-SEC-003, NFR-SEC-004, NFR-PRI-001 | AC-011–016 |
 | Plan 07 | Hardening | Implemented | FR-AUD-001, FR-AUD-003, FR-OPS-001–004, NFR-PERF-001/003/005, NFR-REL-003–005, NFR-SEC-005/006, NFR-PRI-003, NFR-PRI-005, NFR-MNT-005, NFR-OBS-001–004 | AC-016, AC-023–025 |
 | Plan 08 | Terraform | Implemented | NFR-SEC-001, NFR-SEC-002, NFR-REL-001, NFR-MNT-006, NFR-OBS-003 | AC-025 |
-| Plan 09 | CI/CD | Pending | NFR-SEC-002, NFR-SEC-005, NFR-REL-005, NFR-MNT-004, FR-OPS-004 | AC-001, AC-025 |
+| Plan 09 | CI/CD | Implemented | NFR-SEC-002, NFR-SEC-005, NFR-REL-005, NFR-MNT-004, FR-OPS-004 | AC-001, AC-025 |
 | Plan 10 | AWS deployment | Blocked | NFR-REL-001, NFR-REL-002, NFR-SEC-001, FR-OPS-004, NFR-OBS-003 | AC-026 |
 | Plan 11 | Portfolio release | Pending | FR-OPS-004, NFR-PRI-001 | AC-001 |
 
@@ -184,6 +184,6 @@ Commands (local close, 2026-09-01):
 
 Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, the canonical AI eval dataset (Alpha FY2026 `Budget Final` plus exclusive Beta amounts), extra seed rows for a negative actual and UNASSIGNED, and the import workbooks under `sample-data/`.
 
-Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, AWS backup/restore, and deploy/OIDC. Plan 09 remains pending.
+Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and AWS backup/restore. Workflows for OIDC plan/deploy exist; enabling them in GitHub and AWS is gate M-05.
 
 Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).

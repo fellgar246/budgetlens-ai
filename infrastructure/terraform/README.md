@@ -48,4 +48,4 @@ terraform -chdir=infrastructure/terraform/environments/dev validate
 terraform -chdir=infrastructure/terraform/modules/network test
 ```
 
-A real plan or apply needs a recorded account ID, a published image digest, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md).
+A real plan or apply needs a recorded account ID, a published image digest, and the human reviews listed in [OPERATIONS.md](../../docs/OPERATIONS.md). GitHub Actions run `terraform-plan`, `deploy-dev`, and `deploy-prod` through OIDC as described in [CICD.md](../../docs/CICD.md). Plan files stay off the job log; unexpected destroys fail the guard.

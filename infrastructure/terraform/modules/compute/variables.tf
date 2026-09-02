@@ -226,3 +226,17 @@ variable "create_seed_task" {
   description = "Create an explicit seed task definition. Never attached to a service."
   nullable    = false
 }
+
+variable "git_sha" {
+  type        = string
+  description = "Git commit SHA recorded on the task definition and /version."
+  nullable    = false
+  default     = "unknown"
+}
+
+variable "app_version" {
+  type        = string
+  description = "Application SemVer recorded on the task definition and /version."
+  nullable    = false
+  default     = "0.1.0"
+}

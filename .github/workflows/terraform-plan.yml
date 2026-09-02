@@ -1,0 +1,105 @@
+name: Terraform plan
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+      - "scripts/terraform_plan_guard.py"
+      - "scripts/terraform-remote.sh"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment root to plan
+        required: true
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: terraform-plan-${{ github.event.inputs.environment || 'dev' }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Plan ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    env:
+      TF_ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+      TF_ROOT: infrastructure/terraform/environments/${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Require GitHub variables
+        run: |
+          test -n "${{ vars.AWS_REGION }}"
+          test -n "${{ vars.AWS_ACCOUNT_ID }}"
+          test -n "${{ vars.TF_STATE_BUCKET }}"
+          test -n "${{ vars.PLAN_ROLE_ARN }}"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-plan-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Terraform init with remote backend
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          chmod +x scripts/terraform-remote.sh
+          scripts/terraform-remote.sh
+
+      - name: Terraform plan
+        env:
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform -chdir="${TF_ROOT}" plan \
+            -input=false \
+            -no-color \
+            -lock=true \
+            -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}" \
+            -out=tfplan
+          terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
+          python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
+
+      - name: Upload plan file as a restricted artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.sha }}
+          path: |
+            ${{ env.TF_ROOT }}/tfplan
+            tfplan.json
+            plan-summary.md
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Comment secret-free plan summary
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Terraform plan (${TF_ENVIRONMENT})"
+            echo
+            echo "Plan file is stored as a short-lived artifact and is not printed."
+            echo
+            cat plan-summary.md
+          } > /tmp/plan-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/plan-comment.md

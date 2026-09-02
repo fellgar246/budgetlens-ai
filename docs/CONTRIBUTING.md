@@ -16,6 +16,10 @@ Automated update PRs are welcome. Major-version PRs are reviewed by a human and 
 - Branch names: `codex/<topic>` or `<type>/<topic>` (for example `fix/import-timeout`).
 - Commits are small and use the imperative mood.
 - Do not version `.env`, credentials, Terraform plans or state, uploads, exports, or real financial files.
+- Required status check: the `CI` job.
+- Require a review and resolved conversations when a team exists. Do not allow force-push to `main`.
+- `.github/CODEOWNERS` covers `infrastructure/`, migrations, and auth. Replace the placeholder team when one exists.
+- Release tags are SemVer (`vMAJOR.MINOR.PATCH`). See [CICD.md](CICD.md).
 
 Every pull request names the requirement and plan it implements:
 

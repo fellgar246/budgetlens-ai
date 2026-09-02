@@ -25,10 +25,16 @@ data "aws_iam_policy_document" "plan_trust" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:iss"
+      values   = ["https://token.actions.githubusercontent.com"]
+    }
+    condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${local.repository}:ref:refs/heads/main",
+        "repo:${local.repository}:ref:refs/tags/v*",
         "repo:${local.repository}:pull_request",
         "repo:${local.repository}:environment:dev",
         "repo:${local.repository}:environment:prod",
@@ -51,10 +57,16 @@ data "aws_iam_policy_document" "deploy_dev_trust" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:iss"
+      values   = ["https://token.actions.githubusercontent.com"]
+    }
+    condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${local.repository}:ref:refs/heads/main",
+        "repo:${local.repository}:ref:refs/tags/v*",
         "repo:${local.repository}:environment:dev",
       ]
     }
@@ -75,6 +87,11 @@ data "aws_iam_policy_document" "deploy_prod_trust" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:iss"
+      values   = ["https://token.actions.githubusercontent.com"]
+    }
+    condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
@@ -85,18 +102,21 @@ data "aws_iam_policy_document" "deploy_prod_trust" {
 }
 
 resource "aws_iam_role" "plan" {
-  name               = "${var.name_prefix}-github-plan"
-  assume_role_policy = data.aws_iam_policy_document.plan_trust.json
+  name                 = "${var.name_prefix}-github-plan"
+  assume_role_policy   = data.aws_iam_policy_document.plan_trust.json
+  max_session_duration = 3600
 }
 
 resource "aws_iam_role" "deploy_dev" {
-  name               = "${var.name_prefix}-github-deploy-dev"
-  assume_role_policy = data.aws_iam_policy_document.deploy_dev_trust.json
+  name                 = "${var.name_prefix}-github-deploy-dev"
+  assume_role_policy   = data.aws_iam_policy_document.deploy_dev_trust.json
+  max_session_duration = 3600
 }
 
 resource "aws_iam_role" "deploy_prod" {
-  name               = "${var.name_prefix}-github-deploy-prod"
-  assume_role_policy = data.aws_iam_policy_document.deploy_prod_trust.json
+  name                 = "${var.name_prefix}-github-deploy-prod"
+  assume_role_policy   = data.aws_iam_policy_document.deploy_prod_trust.json
+  max_session_duration = 3600
 }
 
 data "aws_iam_policy_document" "state" {

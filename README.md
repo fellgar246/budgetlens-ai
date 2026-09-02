@@ -146,6 +146,6 @@ Recommended editor settings live in `.vscode/`: format on save, the `uv` interpr
 
 Do not commit `.env`, credentials, Terraform state, uploads, or real financial files. Local PostgreSQL credentials in `.env.example` are labeled development-only. Logs must not include tokens, `DATABASE_URL`, or financial rows.
 
-Operational runbooks for rollback, restore, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
+Operational runbooks for rollback, restore, retention, load measurement, and local recovery are in `docs/OPERATIONS.md`. CI/CD, OIDC, and release evidence are in `docs/CICD.md`. Requirements, acceptance, and external gates are in `docs/TRACEABILITY.md`. Risks are in `docs/RISKS.md`. Deferred Should work is in `docs/BACKLOG.md`. Branch, commit, pull request, and definition-of-done conventions are in `docs/CONTRIBUTING.md`.
 
 `packages/api-client/openapi.json` is generated (`make openapi`). A snapshot change needs an explicit review; do not edit that file by hand.

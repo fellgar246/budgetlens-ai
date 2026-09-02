@@ -28,6 +28,8 @@ locals {
     { name = "CONVERSATION_CONTENT_MODE", value = "redacted" },
     { name = "RUN_MIGRATIONS_ON_START", value = "0" },
     { name = "LOCAL_STORAGE_PATH", value = "/tmp/budgetlens-storage" },
+    { name = "GIT_SHA", value = var.git_sha },
+    { name = "APP_VERSION", value = var.app_version },
   ]
   api_secrets = [
     { name = "DATABASE_URL", valueFrom = "${var.app_secret_arn}:DATABASE_URL::" },

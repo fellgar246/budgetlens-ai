@@ -1,0 +1,225 @@
+name: Deploy prod
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Image digest already published from main (repository@sha256:...). Required for promotion.
+        required: true
+        type: string
+      git_sha:
+        description: Commit SHA that produced the digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      TF_ROOT: infrastructure/terraform/environments/prod
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Require GitHub variables
+        run: |
+          test -n "${{ vars.AWS_REGION }}"
+          test -n "${{ vars.AWS_ACCOUNT_ID }}"
+          test -n "${{ vars.TF_STATE_BUCKET }}"
+          test -n "${{ vars.DEPLOY_PROD_ROLE_ARN }}"
+          test -n "${{ vars.PROD_ECR_REPOSITORY }}"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_PROD_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-deploy-prod-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve promoted digest
+        id: image
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            sha="${GITHUB_SHA}"
+            version="${GITHUB_REF_NAME#v}"
+            digest="${{ github.event.inputs.image_digest }}"
+          else
+            sha="${{ github.event.inputs.git_sha }}"
+            version="${{ github.event.inputs.git_sha }}"
+            digest="${{ github.event.inputs.image_digest }}"
+          fi
+          case "${digest}" in
+            *@sha256:*) source="${digest}" ;;
+            *:latest|*:LATEST|"")
+              if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ -n "${{ vars.DEV_ECR_REPOSITORY }}" ]; then
+                repo="${{ vars.DEV_ECR_REPOSITORY }}"
+                image_digest="$(aws ecr describe-images --repository-name "${repo##*/}" --image-ids "imageTag=${sha}" --query 'imageDetails[0].imageDigest' --output text)"
+                source="${repo}@${image_digest}"
+              else
+                echo "Production must promote a digest URI (repository@sha256:...), not latest." >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Production must promote a digest URI (repository@sha256:...), not latest." >&2
+              exit 1
+              ;;
+          esac
+          chmod +x scripts/promote-image.sh
+          promoted="$(SOURCE_IMAGE="${source}" DEST_REPOSITORY="${{ vars.PROD_ECR_REPOSITORY }}" DEST_TAGS="${sha} ${version}" scripts/promote-image.sh)"
+          echo "digest=${promoted}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform init with remote backend
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/terraform-remote.sh
+
+      - name: Capture rollback target
+        id: previous
+        run: |
+          previous="$(terraform -chdir="${TF_ROOT}" output -raw api_task_definition_arn 2>/dev/null || true)"
+          echo "task_definition=${previous}" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight RDS snapshot
+        run: |
+          identifier="$(terraform -chdir="${TF_ROOT}" output -raw rds_identifier)"
+          stamp="$(date -u +%Y%m%d%H%M%S)"
+          snapshot="budgetlens-prod-predeploy-${{ steps.image.outputs.sha }}-${stamp}"
+          aws rds create-db-snapshot \
+            --db-instance-identifier "${identifier}" \
+            --db-snapshot-identifier "${snapshot}"
+          aws rds wait db-snapshot-available --db-snapshot-identifier "${snapshot}"
+          echo "snapshot=${snapshot}" >> "$GITHUB_ENV"
+
+      - name: Run expand-compatible migration once
+        env:
+          IMAGE: ${{ steps.image.outputs.digest }}
+        run: |
+          cluster="$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)"
+          family="$(terraform -chdir="${TF_ROOT}" output -raw migration_task_definition_family)"
+          subnets="$(terraform -chdir="${TF_ROOT}" output -json private_subnet_ids | python -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
+          sg="$(terraform -chdir="${TF_ROOT}" output -raw ecs_security_group_id)"
+          CLUSTER="${cluster}" TASK_DEFINITION="${family}" SUBNETS="${subnets}" SECURITY_GROUPS="${sg}" \
+            IMAGE="${IMAGE}" scripts/run-migration-task.sh
+
+      - name: Apply approved Terraform with the promoted digest
+        env:
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform -chdir="${TF_ROOT}" plan \
+            -input=false \
+            -no-color \
+            -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}" \
+            -var="api_image=${{ steps.image.outputs.digest }}" \
+            -var="git_sha=${{ steps.image.outputs.sha }}" \
+            -var="app_version=${{ steps.image.outputs.version }}" \
+            -out=tfplan
+          terraform -chdir="${TF_ROOT}" show -json tfplan > tfplan.json
+          python scripts/terraform_plan_guard.py tfplan.json --summary plan-summary.md
+          terraform -chdir="${TF_ROOT}" apply -input=false -no-color tfplan
+
+      - name: Wait for ECS service
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)" \
+            --services "$(terraform -chdir="${TF_ROOT}" output -raw ecs_service_name)"
+
+      - name: Upload web assets and invalidate CloudFront
+        run: |
+          sha="${{ steps.image.outputs.sha }}"
+          mkdir -p /tmp/web-out
+          export NEXT_PUBLIC_API_BASE_URL="${{ vars.PROD_APPLICATION_URL || vars.DEV_APPLICATION_URL || 'https://localhost' }}"
+          export NEXT_PUBLIC_APP_ENV=production
+          python scripts/review_public_env.py \
+            "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+            "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}"
+          pnpm install --frozen-lockfile
+          pnpm --filter web build
+          cp -R apps/web/out/. /tmp/web-out/
+          SOURCE=/tmp/web-out \
+            WEB_BUCKET="$(terraform -chdir="${TF_ROOT}" output -raw web_bucket_name)" \
+            DISTRIBUTION_ID="$(terraform -chdir="${TF_ROOT}" output -raw cloudfront_distribution_id)" \
+            RELEASE_SHA="${sha}" \
+            scripts/deploy-web.sh
+
+      - name: Smoke tests
+        run: |
+          API_HEALTH_URL="$(terraform -chdir="${TF_ROOT}" output -raw api_health_url)" \
+            APPLICATION_URL="${{ vars.PROD_APPLICATION_URL || '' }}" \
+            EXPECTED_COMMIT="${{ steps.image.outputs.sha }}" \
+            scripts/smoke-release.sh
+
+      - name: Write release evidence
+        if: always()
+        run: |
+          python scripts/changelog.py --ref "${{ github.ref_name }}" --range "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~20)..HEAD" --output changelog-fragment.md || true
+          python scripts/release_evidence.py \
+            --commit "${{ steps.image.outputs.sha }}" \
+            --tag "${{ github.ref_name }}" \
+            --app-version "${{ steps.image.outputs.version }}" \
+            --environment prod \
+            --image-digest "${{ steps.image.outputs.digest }}" \
+            --terraform-plan approved \
+            --migration-revision "$(terraform -chdir="${TF_ROOT}" output -raw migration_task_definition_arn)" \
+            --smoke-results "${{ job.status }}" \
+            --ai-evaluation "record live eval model ID before enabling Bedrock" \
+            --known-risks "R-06 cost and R-15 restore still block calling the product production-ready" \
+            --rollback-target "${{ steps.previous.outputs.task_definition }} snapshot=${snapshot:-none}" \
+            --output "var/release-evidence-prod.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-evidence-prod-${{ steps.image.outputs.sha }}
+          path: |
+            var/release-evidence-prod.json
+            var/release-evidence-prod.md
+            plan-summary.md
+            changelog-fragment.md
+          if-no-files-found: ignore
+
+      - name: Compatible rollback
+        if: failure() && steps.previous.outputs.task_definition != ''
+        env:
+          PREVIOUS_TASK_DEFINITION: ${{ steps.previous.outputs.task_definition }}
+        run: |
+          CLUSTER="$(terraform -chdir="${TF_ROOT}" output -raw ecs_cluster_name)" \
+            SERVICE="$(terraform -chdir="${TF_ROOT}" output -raw ecs_service_name)" \
+            scripts/rollback-release.sh

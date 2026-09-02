@@ -99,6 +99,10 @@ Required tags on every managed resource: `Project=BudgetLens`, `Environment`, `M
 
 Remaining human steps before apply: secure the AWS account, choose a region with Bedrock access if the copilot will be live, confirm the budget email subscription, configure GitHub Environments for OIDC, and review the plan. Production apply is never `-auto-approve`.
 
+## CI/CD
+
+The GitHub pipeline is documented in [CICD.md](CICD.md). CI uses GitHub OIDC roles, not permanent access keys. Images publish with a commit SHA and, for SemVer tags, that version. Deploy identity is the image digest. Development can apply after `main`; production requires the protected `prod` environment, a human approval, the same digest, an RDS snapshot, a one-off migration, smoke tests, and written evidence.
+
 ## Images and rollback
 
 `make build` keeps the `previous` tag when a `local` image already exists.
@@ -111,6 +115,8 @@ docker compose up -d api
 ```
 
 Do not roll back to an incompatible schema. If the new version required a migration, application rollback uses an image compatible with the current schema.
+
+On AWS, `scripts/rollback-release.sh` updates the ECS service to the previous task definition and can restore the previous web artifact. It does not downgrade the database. Terraform rollback is a new plan from reverted code.
 
 ## Restore
 

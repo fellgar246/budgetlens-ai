@@ -754,7 +754,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "primary_specs": ["Observability/infrastructure"],
         "plans": ["00", "07", "08", "09", "10"],
         "acceptance": ["AC-025", "AC-026"],
-        "evidence": ["docs/OPERATIONS.md"],
+        "evidence": ["docs/OPERATIONS.md", "docs/CICD.md", "scripts/rollback-release.sh"],
     },
     {
         "id": "FR-UI-001",
@@ -899,7 +899,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Deployments keep at least one identifiable previous image for rollback",
         "status": "implemented",
         "plans": ["02", "07", "09", "10"],
-        "evidence": ["Makefile", "docs/OPERATIONS.md"],
+        "evidence": ["Makefile", "docs/OPERATIONS.md", "scripts/rollback-release.sh", ".github/workflows/deploy-dev.yml"],
     },
     {
         "id": "NFR-SEC-001",
@@ -916,12 +916,15 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
     {
         "id": "NFR-SEC-002",
         "summary": "AWS credentials through roles/OIDC, not permanent CI access keys",
-        "status": "partial",
+        "status": "implemented",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
         "evidence": [
             "docs/OPERATIONS.md",
+            "docs/CICD.md",
             "infrastructure/terraform/modules/github_oidc/main.tf",
+            ".github/workflows/deploy-prod.yml",
             "apps/api/tests/unit/test_architecture_decisions.py",
+            "apps/api/tests/unit/test_cicd_release.py",
         ],
     },
     {
@@ -951,7 +954,7 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Dependencies and images scanned; confirmed critical findings block release",
         "status": "implemented",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
-        "evidence": ["scripts/scan.sh", "docs/OPERATIONS.md"],
+        "evidence": ["scripts/scan.sh", "docs/OPERATIONS.md", ".github/workflows/build.yml"],
     },
     {
         "id": "NFR-SEC-006",
@@ -1354,6 +1357,8 @@ ACCEPTANCE_CRITERIA: list[AcceptanceCriterion] = [
         "evidence": [
             "docs/OPERATIONS.md#images-and-rollback",
             "scripts/acceptance-rollback.sh",
+            "scripts/rollback-release.sh",
+            ".github/workflows/deploy-dev.yml",
             "apps/api/tests/integration/acceptance/test_operations.py::test_application_rollback_keeps_the_previous_image_without_schema_downgrade",
         ],
     },
@@ -1543,7 +1548,7 @@ PLANS: list[PlanRecord] = [
     {
         "id": "09",
         "name": "CI/CD",
-        "status": "pending",
+        "status": "implemented",
         "requirements": ["NFR-SEC-002", "NFR-SEC-005", "NFR-REL-005", "NFR-MNT-004", "FR-OPS-004"],
         "acceptance": ["AC-001", "AC-025"],
     },
@@ -2008,6 +2013,7 @@ DOC_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "docs" / "BACKLOG.md",
     REPO_ROOT / "docs" / "DECISIONS.md",
     REPO_ROOT / "docs" / "OPERATIONS.md",
+    REPO_ROOT / "docs" / "CICD.md",
 )
 
 

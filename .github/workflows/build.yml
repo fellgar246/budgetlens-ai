@@ -1,0 +1,209 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build API image and web artifact
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.image.outputs.digest }}
+      image_uri: ${{ steps.image.outputs.uri }}
+      app_version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject latest as a deploy reference
+        run: |
+          if [ "${{ github.ref_name }}" = "latest" ]; then
+            echo "Refusing to publish a latest reference." >&2
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: |
+          (cd apps/api && uv sync --frozen)
+          pnpm install --frozen-lockfile
+
+      - name: Relevant tests before push
+        working-directory: apps/api
+        run: |
+          uv run pytest -m "not integration and not perf"
+          uv run pytest tests/unit/test_openapi.py
+
+      - name: Web unit tests
+        run: pnpm --filter web test
+
+      - name: Resolve version metadata
+        id: meta
+        run: |
+          sha="${GITHUB_SHA}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(python -c 'import tomllib; print(tomllib.load(open("apps/api/pyproject.toml","rb"))["project"]["version"])')"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Review public frontend configuration
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.DEV_APPLICATION_URL || 'https://localhost' }}
+          NEXT_PUBLIC_APP_ENV: ${{ github.ref_type == 'tag' && 'production' || 'dev' }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            export NEXT_PUBLIC_API_BASE_URL="${{ vars.PROD_APPLICATION_URL || vars.DEV_APPLICATION_URL || 'https://localhost' }}"
+          fi
+          python scripts/review_public_env.py \
+            "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+            "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}"
+
+      - name: Build immutable web artifact
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.DEV_APPLICATION_URL || 'https://localhost' }}
+          NEXT_PUBLIC_APP_ENV: ${{ github.ref_type == 'tag' && 'production' || 'dev' }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            export NEXT_PUBLIC_API_BASE_URL="${{ vars.PROD_APPLICATION_URL || vars.DEV_APPLICATION_URL || 'https://localhost' }}"
+          fi
+          python scripts/review_public_env.py \
+            "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+            "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}"
+          pnpm --filter web build
+          tar -C apps/web/out -czf "web-${{ steps.meta.outputs.sha }}.tar.gz" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ steps.meta.outputs.sha }}
+          path: web-${{ steps.meta.outputs.sha }}.tar.gz
+          retention-days: 30
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials via OIDC
+        if: ${{ vars.DEPLOY_DEV_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_DEV_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-build-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Log in to Amazon ECR
+        if: ${{ vars.DEV_ECR_REPOSITORY != '' && vars.DEPLOY_DEV_ROLE_ARN != '' }}
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, scan, and publish API image
+        id: image
+        env:
+          ECR_REPOSITORY: ${{ vars.DEV_ECR_REPOSITORY }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          SHA: ${{ steps.meta.outputs.sha }}
+          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
+        run: |
+          local_tag="budgetlens-api:${SHA}"
+          extra=""
+          if docker buildx build --help 2>/dev/null | grep -q -- '--sbom'; then
+            extra="--sbom=true --provenance=true"
+          else
+            echo "NOTE  buildx SBOM/provenance flags are not available"
+          fi
+          set +e
+          # shellcheck disable=SC2086
+          docker buildx build \
+            --load \
+            --build-arg APP_VERSION="${VERSION}" \
+            --build-arg GIT_SHA="${SHA}" \
+            --build-arg BUILD_TIME="${BUILD_TIME}" \
+            -t "${local_tag}" \
+            ${extra} \
+            apps/api
+          status=$?
+          set -e
+          if [ "${status}" -ne 0 ] && [ -n "${extra}" ]; then
+            echo "NOTE  retrying image build without SBOM/provenance"
+            docker buildx build \
+              --load \
+              --build-arg APP_VERSION="${VERSION}" \
+              --build-arg GIT_SHA="${SHA}" \
+              --build-arg BUILD_TIME="${BUILD_TIME}" \
+              -t "${local_tag}" \
+              apps/api
+          elif [ "${status}" -ne 0 ]; then
+            exit "${status}"
+          fi
+          TRIVY_VERSION="0.67.2"
+          if ! command -v trivy >/dev/null 2>&1; then
+            curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | sudo tar -xz -C /usr/local/bin trivy
+          fi
+          trivy image --severity CRITICAL --exit-code 1 "${local_tag}"
+          if [ -z "${ECR_REPOSITORY}" ] || [ -z "${{ vars.DEPLOY_DEV_ROLE_ARN }}" ]; then
+            echo "NOTE  ECR publish skipped; set DEV_ECR_REPOSITORY and DEPLOY_DEV_ROLE_ARN"
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "uri=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docker tag "${local_tag}" "${ECR_REPOSITORY}:${SHA}"
+          docker push "${ECR_REPOSITORY}:${SHA}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            docker tag "${local_tag}" "${ECR_REPOSITORY}:${VERSION}"
+            docker push "${ECR_REPOSITORY}:${VERSION}"
+          fi
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${ECR_REPOSITORY}:${SHA}")"
+          case "${digest}" in
+            *@sha256:*) ;;
+            *)
+              echo "Published image did not resolve to a digest." >&2
+              exit 1
+              ;;
+          esac
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "uri=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Write image identity
+        if: steps.image.outputs.digest != ''
+        run: |
+          printf '%s\n' "${{ steps.image.outputs.digest }}" > image-digest.txt
+          python scripts/changelog.py --ref "${{ github.ref_name }}" --range "${{ github.event.before }}..HEAD" --output changelog-fragment.md || \
+            python scripts/changelog.py --version "${{ steps.meta.outputs.version }}" --output changelog-fragment.md
+
+      - uses: actions/upload-artifact@v4
+        if: steps.image.outputs.digest != ''
+        with:
+          name: image-${{ steps.meta.outputs.sha }}
+          path: |
+            image-digest.txt
+            changelog-fragment.md
+          retention-days: 30
