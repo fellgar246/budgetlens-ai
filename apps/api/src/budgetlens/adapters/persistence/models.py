@@ -442,6 +442,13 @@ class FinancialEntryRow(Base):
             "ix_financial_entries_org_fy_period", "organization_id", "fiscal_year", "period_start"
         ),
         Index(
+            "ix_financial_entries_org_fy_scenario_period",
+            "organization_id",
+            "fiscal_year",
+            "scenario_type",
+            "period_start",
+        ),
+        Index(
             "ix_financial_entries_org_version_period",
             "organization_id",
             "budget_version_id",

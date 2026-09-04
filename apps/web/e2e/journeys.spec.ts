@@ -33,6 +33,8 @@ test("local analyst can enter Alpha, open the summary, and reach variances", asy
   }
   await page.getByRole("link", { name: "Variaciones" }).click();
   await expect(page.getByRole("heading", { name: "Variaciones" })).toBeVisible();
+  await page.getByRole("link", { name: "Escenarios" }).click();
+  await expect(page.getByRole("heading", { name: "Escenarios" })).toBeVisible();
 });
 
 test("keyboard reaches skip link and main content", async ({ page }) => {
@@ -42,6 +44,37 @@ test("keyboard reaches skip link and main content", async ({ page }) => {
   await expect(skip).toBeFocused();
   await skip.press("Enter");
   await expect(page.locator("#contenido")).toBeFocused();
+});
+
+test("import wizard keeps mapping, blocks commit on errors, and offers a download", async ({
+  page,
+}) => {
+  await signInAsAlphaAnalyst(page);
+  await page.goto("/imports/new/");
+  await expect(page.getByRole("heading", { name: "Importar archivo" })).toBeVisible();
+  await page.getByLabel("Tipo de importación").selectOption("actual");
+  const csv = [
+    "period,account_code,department_code,cost_center_code,amount,currency",
+    "2026-01,6100,OPS,CC-GEN,not-a-number,MXN",
+  ].join("\n");
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "invalid-actuals.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+  await expect(page.getByText(/Archivo seleccionado/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByLabel("period · Requerido")).toHaveValue("period");
+  await page.getByRole("button", { name: "Vista previa" }).click();
+  await expect(page.getByRole("button", { name: "Continuar" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Hay filas que debes corregir antes de confirmar.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Descargar errores" })).toBeEnabled();
+  await page.getByRole("button", { name: "Atrás" }).click();
+  await expect(page.getByLabel("period · Requerido")).toHaveValue("period");
+  await page.getByRole("button", { name: "Cancelar importación" }).click();
 });
 
 test("login controls are labelled and the document language is Spanish", async ({ page }) => {

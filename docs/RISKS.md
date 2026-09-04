@@ -23,7 +23,7 @@ Scale for likelihood and impact: `low`, `medium`, `high`. The owner is a role, n
 | R-08 | Migration prevents rollback | M | H | Expand/contract, one-off jobs, N-1 tests | Engineering | Deploy requires a schema downgrade | Verified |
 | R-09 | Bedrock or model unavailable | M | M | Model config, stub, region gate, adapter | AI owner | M-04 not completed | Verified (local stub) |
 | R-10 | API change breaks the frontend | M | M | OpenAPI snapshot and client drift gate | Engineering | CI contract failure | Verified |
-| R-11 | Performance degrades at 250k rows | M | M | SQL aggregates, indexes, load tests | Engineering | p95 misses the read threshold | Partial |
+| R-11 | Performance degrades at 250k rows | M | M | SQL aggregates, indexes, EXPLAIN in integration, local load script | Engineering | p95 misses the read threshold | Partial — CI proves index use; 250k p95 stays a local measurement |
 | R-12 | Secret in a log, state file, or build | M | H | Secret tests/scans, OIDC, sensitive outputs | Security owner | Scanner or log assertion | Verified |
 | R-13 | Excess design delays the MVP | M | M | Must/Should/Could, one plan at a time | Product | Could work starts before Must work | Verified |
 | R-14 | Dependency or provider change | M | M | Lockfiles, adapters, decision record, eval on upgrade | Engineering | Renovate or provider update | Verified |

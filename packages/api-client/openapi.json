@@ -9266,6 +9266,296 @@
         ]
       }
     },
+    "/api/v1/analytics/compare-periods": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Compare two inclusive period ranges with the same filters and version.",
+        "operationId": "compare_periods",
+        "parameters": [
+          {
+            "name": "fiscal_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fiscal Year"
+            }
+          },
+          {
+            "name": "period_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Period From"
+            }
+          },
+          {
+            "name": "period_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Period To"
+            }
+          },
+          {
+            "name": "budget_version_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Budget Version Id"
+            }
+          },
+          {
+            "name": "compare_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Compare From"
+            }
+          },
+          {
+            "name": "compare_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Compare To"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "cost_center_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cost Center Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparePeriodsResponse"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated without permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found or hidden cross-tenant resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Compare two inclusive period ranges with the same filters and version. Permission: READ_ANALYSIS.",
+        "x-permission": "READ_ANALYSIS",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/exports": {
       "post": {
         "tags": [
@@ -12643,6 +12933,71 @@
         ],
         "title": "AccountResponse"
       },
+      "AnalyticsFilterRequest": {
+        "properties": {
+          "fiscal_year": {
+            "type": "integer",
+            "title": "Fiscal Year"
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Period To"
+          },
+          "budget_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Budget Version Id"
+          },
+          "account_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Account Ids"
+          },
+          "department_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Department Ids"
+          },
+          "cost_center_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Cost Center Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fiscal_year",
+          "period_from",
+          "period_to",
+          "budget_version_id"
+        ],
+        "title": "AnalyticsFilterRequest",
+        "example": {
+          "account_ids": [],
+          "budget_version_id": "00000000-0000-0000-0000-000000000001",
+          "cost_center_ids": [],
+          "department_ids": [],
+          "fiscal_year": 2026,
+          "period_from": "2026-01-01",
+          "period_to": "2026-06-01"
+        }
+      },
       "AnalyticsGroupBy": {
         "type": "string",
         "enum": [
@@ -13045,6 +13400,23 @@
         ],
         "title": "Capabilities"
       },
+      "ComparePeriodsResponse": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/VarianceSummaryResponse"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/VarianceSummaryResponse"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "baseline",
+          "comparison"
+        ],
+        "title": "ComparePeriodsResponse"
+      },
       "ConversationListResponse": {
         "properties": {
           "items": {
@@ -13365,9 +13737,7 @@
             "default": "csv"
           },
           "filters": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Filters"
+            "$ref": "#/components/schemas/AnalyticsFilterRequest"
           },
           "group_by": {
             "type": "string",
@@ -13389,7 +13759,12 @@
         "title": "CreateExportRequest",
         "example": {
           "export_type": "variance_breakdown",
-          "filters": {},
+          "filters": {
+            "budget_version_id": "00000000-0000-0000-0000-000000000001",
+            "fiscal_year": 2026,
+            "period_from": "2026-01-01",
+            "period_to": "2026-01-01"
+          },
           "format": "csv",
           "group_by": "account"
         }

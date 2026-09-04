@@ -464,6 +464,8 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-005"],
         "evidence": [
             "apps/api/tests/unit/domain/test_variance.py",
+            "apps/api/tests/unit/test_analytics_query.py",
+            "apps/api/tests/integration/test_analytics.py",
             "apps/api/src/budgetlens/application/analytics.py",
         ],
     },
@@ -490,6 +492,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-008"],
         "evidence": [
             "apps/api/src/budgetlens/application/analytics.py",
+            "apps/api/tests/integration/test_analytics.py",
             "apps/web/src/features/analysis/FilterBar.tsx",
         ],
     },
@@ -539,6 +542,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-009"],
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_export_download_is_authorized_and_expires",
+            "apps/api/tests/integration/test_analytics.py",
         ],
     },
     {
@@ -551,6 +555,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-010"],
         "evidence": [
             "apps/api/tests/integration/test_import_and_analytics.py::test_scenario_preview_does_not_mutate_entries",
+            "apps/api/tests/integration/test_analytics.py",
         ],
     },
     {
@@ -563,6 +568,7 @@ FUNCTIONAL_REQUIREMENTS: list[FunctionalRequirement] = [
         "acceptance": ["AC-010"],
         "evidence": [
             "apps/api/src/budgetlens/application/scenarios.py",
+            "apps/api/tests/integration/test_analytics.py",
             "apps/web/src/features/scenarios/ScenariosPage.tsx",
         ],
     },
@@ -850,6 +856,8 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "evidence": [
             "scripts/load_test.py",
             "scripts/generate_large_dataset.py",
+            "apps/api/tests/integration/test_analytics.py",
+            "apps/api/migrations/versions/20260902_0010_analytics_read_indexes.py",
             "docs/OPERATIONS.md",
         ],
     },

@@ -5,16 +5,16 @@ from decimal import Decimal
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.finance_repositories import SqlScenarioRepository
-from budgetlens.adapters.persistence.models import FinancialEntryRow
+from budgetlens.adapters.persistence.models import AccountRow, FinancialEntryRow
 from budgetlens.adapters.persistence.repositories import (
     SqlAuditRepository,
     SqlBudgetVersionRepository,
 )
-from budgetlens.application.analytics import AnalyticsQuery, build_variance_metrics
+from budgetlens.application.analytics_query import AnalyticsQuery, build_variance_metrics
 from budgetlens.application.audit import record_audit
 from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, clamp_limit
@@ -177,7 +177,13 @@ class ScenarioService:
             result_total = result_total + outcome.result
             current = monthly.get(grain.period_start, (MoneyAmount("0"), MoneyAmount("0")))
             monthly[grain.period_start] = (current[0] + grain.amount, current[1] + outcome.result)
-        types = [AccountType.EXPENSE] if not grains else grains[0].account_types
+        types: list[AccountType] = []
+        seen: set[AccountType] = set()
+        for grain in grains:
+            for account_type in grain.account_types:
+                if account_type not in seen:
+                    seen.add(account_type)
+                    types.append(account_type)
         comparison = build_variance_metrics(baseline_total, result_total, types)
         return {
             "baseline": baseline_total.as_text(),
@@ -213,8 +219,15 @@ class ScenarioService:
                 FinancialEntryRow.account_id,
                 FinancialEntryRow.department_id,
                 FinancialEntryRow.cost_center_id,
-                func.min(FinancialEntryRow.amount * 0).label("pad"),
                 func.coalesce(func.sum(FinancialEntryRow.amount), 0).label("amount"),
+                func.min(AccountRow.account_type).label("account_type"),
+            )
+            .join(
+                AccountRow,
+                and_(
+                    AccountRow.id == FinancialEntryRow.account_id,
+                    AccountRow.organization_id == FinancialEntryRow.organization_id,
+                ),
             )
             .where(
                 FinancialEntryRow.organization_id == organization_id,
@@ -246,7 +259,7 @@ class ScenarioService:
                 department_id=row.department_id,
                 cost_center_id=row.cost_center_id,
                 amount=MoneyAmount(row.amount),
-                account_types=[AccountType.EXPENSE],
+                account_types=[AccountType(row.account_type)] if row.account_type else [],
             )
             for row in rows
         ]

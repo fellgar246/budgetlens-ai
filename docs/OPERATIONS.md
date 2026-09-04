@@ -328,6 +328,14 @@ python scripts/load_test.py --token <user-id> --organization-id <org> --budget-v
 
 The read threshold is p95 < 500 ms, excluding AI. Preview of a 25 MiB CSV must finish in under 60 s.
 
+Variance totals are `SUM(numeric)` in PostgreSQL. The planner should use `ix_financial_entries_org_fy_period` or `ix_financial_entries_org_fy_scenario_period` for tenant + fiscal year + inclusive period filters. Integration tests record `EXPLAIN` on that statement. A 250k-row soak is not run on every pull request: load the tenant, then run `scripts/load_test.py` and keep the JSON under `var/perf/`. Until that measurement is recorded for a given engine change, treat the 500 ms target as a local gate rather than a CI gate. SQL aggregation plus those indexes is the accepted approach; do not load the ledger into application memory to compute a summary.
+
+Measured local baseline (2026-09-02, host Python 3.12, `make test-perf`): a generated 25.00 MiB UTF-8 CSV (60,823 rows) parsed in **0.263 s**. That is inside the 60 s objective; no deviation plan is required. Re-measure after a parser or limit change:
+
+```text
+make test-perf
+```
+
 ## Scans
 
 ```text

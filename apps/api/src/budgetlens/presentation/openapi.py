@@ -222,6 +222,11 @@ OPERATIONS: dict[str, OperationContract] = {
     "get_top_unfavorable": OperationContract(
         "READ_ANALYSIS", TENANT_ERRORS, "Top unfavorable variances. Limit is at most 20."
     ),
+    "compare_periods": OperationContract(
+        "READ_ANALYSIS",
+        TENANT_ERRORS,
+        "Compare two inclusive period ranges with the same filters and version.",
+    ),
     "create_export": OperationContract(
         "EXPORT", RATE_LIMITED_MUTATION, "Create an authorized, time-limited export job."
     ),

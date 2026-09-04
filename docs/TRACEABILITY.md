@@ -176,8 +176,8 @@ The automated suite is organized around monetary accuracy, atomic imports, tenan
 Commands (local close, 2026-09-01):
 
 - `make lint` — format, lint, and types
-- `make test` — API unit tests (including portfolio documentation) and 22 web unit tests
-- `make test-integration` — 34 PostgreSQL tests (245 API tests excluding perf)
+- `make test` — API unit tests (including portfolio documentation) and web unit tests
+- `make test-integration` — PostgreSQL tests including analytics accuracy, tenant isolation, and EXPLAIN on the read path
 - `make test-contract` — OpenAPI snapshot
 - `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
 - `make coverage` — 85% branch coverage on the financial engine (98.68% on the measured domain modules) and 85.40% backend (gate 75%)

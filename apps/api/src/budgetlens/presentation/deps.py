@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from budgetlens.adapters.db import get_session_factory
 from budgetlens.adapters.factory import (
     build_ai_provider,
+    build_export_runner,
     build_identity_adapter,
     build_import_runner,
     build_object_storage,
@@ -35,6 +36,7 @@ from budgetlens.domain.errors import NotFoundError, PermissionDeniedError, Unaut
 from budgetlens.domain.identities import Clock, IdFactory, SystemClock, Uuid4Factory
 from budgetlens.domain.organization import User
 from budgetlens.observability import metrics_registry
+from budgetlens.ports.exports import ExportExecutor
 from budgetlens.ports.identity import IdentityProvider
 from budgetlens.ports.imports import ImportExecutor
 from budgetlens.ports.parsing import WorkbookParser
@@ -193,6 +195,10 @@ def get_import_executor(settings: Annotated[Settings, Depends(get_settings)]) ->
     return build_import_runner(settings)
 
 
+def get_export_executor(settings: Annotated[Settings, Depends(get_settings)]) -> ExportExecutor:
+    return build_export_runner(settings)
+
+
 def get_workbook_parser(settings: Annotated[Settings, Depends(get_settings)]) -> WorkbookParser:
     return build_workbook_parser(settings)
 
@@ -214,8 +220,9 @@ def get_analytics_service(
     clock: Annotated[Clock, Depends(get_clock)],
     ids: Annotated[IdFactory, Depends(get_ids)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+    executor: Annotated[ExportExecutor, Depends(get_export_executor)],
 ) -> AnalyticsService:
-    return AnalyticsService(session, clock, ids, storage)
+    return AnalyticsService(session, clock, ids, storage, executor)
 
 
 def get_scenario_service(

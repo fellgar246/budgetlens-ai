@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, or_, select, tuple_
+from sqlalchemy import Select, and_, case, delete, distinct, func, literal, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.persistence.mapping import (
@@ -25,8 +27,11 @@ from budgetlens.adapters.persistence.mapping import (
     scenario_from_rows,
 )
 from budgetlens.adapters.persistence.models import (
+    AccountRow,
     AiRunRow,
     ConversationRow,
+    CostCenterRow,
+    DepartmentRow,
     ExportJobRow,
     FinancialEntryRow,
     ImportErrorRow,
@@ -37,13 +42,16 @@ from budgetlens.adapters.persistence.models import (
     ScenarioRuleRow,
     ToolExecutionRow,
 )
+from budgetlens.application.analytics_query import AnalyticsQuery, parse_account_types
 from budgetlens.application.pagination import Page, decode_cursor, encode_cursor
 from budgetlens.domain.conversation import AiRun, Conversation, ConversationMessage, ToolExecution
+from budgetlens.domain.enums import AccountType, AnalyticsGroupBy
 from budgetlens.domain.errors import ValidationError
 from budgetlens.domain.exporting import ExportJob
 from budgetlens.domain.financial_entry import FinancialEntry
 from budgetlens.domain.identities import IdFactory
 from budgetlens.domain.importing import ImportIssue, ImportJob
+from budgetlens.domain.money import MoneyAmount
 from budgetlens.domain.scenario import Scenario
 
 
@@ -522,3 +530,173 @@ class SqlConversationRepository:
         row = ToolExecutionRow()
         apply_tool_execution(row, execution)
         self._session.add(row)
+
+
+@dataclass(frozen=True, slots=True)
+class AggregatedTotals:
+    budget_amount: MoneyAmount
+    actual_amount: MoneyAmount
+    account_types: list[AccountType]
+
+
+@dataclass(frozen=True, slots=True)
+class GroupedTotals:
+    group_id: str
+    group_code: str
+    group_name: str
+    budget_amount: MoneyAmount
+    actual_amount: MoneyAmount
+    account_types: list[AccountType]
+
+
+class SqlAnalyticsRepository:
+    """Tenant-scoped SQL aggregates. Callers never load raw financial rows for a summary."""
+
+    def __init__(self, session: Session, organization_id: UUID) -> None:
+        self._session = session
+        self._organization_id = organization_id
+
+    def totals(self, query: AnalyticsQuery) -> AggregatedTotals:
+        row = self._session.execute(self.totals_statement(query)).one()
+        return AggregatedTotals(
+            budget_amount=MoneyAmount(row.budget_amount or 0),
+            actual_amount=MoneyAmount(row.actual_amount or 0),
+            account_types=parse_account_types(row.account_types),
+        )
+
+    def grouped_totals(
+        self, query: AnalyticsQuery, group_by: AnalyticsGroupBy
+    ) -> list[GroupedTotals]:
+        group_id, group_code, group_name = _group_columns(group_by)
+        rows = self._session.execute(
+            self._grouped_statement(query, group_id, group_code, group_name)
+        ).all()
+        return [
+            GroupedTotals(
+                group_id=str(row.group_id),
+                group_code=str(row.group_code),
+                group_name=str(row.group_name),
+                budget_amount=MoneyAmount(row.budget_amount or 0),
+                actual_amount=MoneyAmount(row.actual_amount or 0),
+                account_types=parse_account_types(row.account_types),
+            )
+            for row in rows
+        ]
+
+    def totals_statement(self, query: AnalyticsQuery) -> Select[Any]:
+        stmt = select(
+            *_amount_columns(query),
+            func.array_agg(distinct(AccountRow.account_type)).label("account_types"),
+        )
+        return self._apply_filters(stmt, query).join(
+            AccountRow,
+            and_(
+                AccountRow.id == FinancialEntryRow.account_id,
+                AccountRow.organization_id == FinancialEntryRow.organization_id,
+            ),
+        )
+
+    def _grouped_statement(
+        self,
+        query: AnalyticsQuery,
+        group_id: Any,
+        group_code: Any,
+        group_name: Any,
+    ) -> Select[Any]:
+        stmt = select(
+            group_id.label("group_id"),
+            group_code.label("group_code"),
+            group_name.label("group_name"),
+            *_amount_columns(query),
+            func.array_agg(distinct(AccountRow.account_type)).label("account_types"),
+        )
+        stmt = self._apply_filters(stmt, query)
+        stmt = stmt.join(
+            AccountRow,
+            and_(
+                AccountRow.id == FinancialEntryRow.account_id,
+                AccountRow.organization_id == FinancialEntryRow.organization_id,
+            ),
+        )
+        if group_id is DepartmentRow.id:
+            stmt = stmt.join(
+                DepartmentRow,
+                and_(
+                    DepartmentRow.id == FinancialEntryRow.department_id,
+                    DepartmentRow.organization_id == FinancialEntryRow.organization_id,
+                ),
+            )
+        if group_id is CostCenterRow.id:
+            stmt = stmt.join(
+                CostCenterRow,
+                and_(
+                    CostCenterRow.id == FinancialEntryRow.cost_center_id,
+                    CostCenterRow.organization_id == FinancialEntryRow.organization_id,
+                ),
+            )
+        return stmt.group_by(group_id, group_code, group_name)
+
+    def _apply_filters(self, stmt: Select[Any], query: AnalyticsQuery) -> Select[Any]:
+        stmt = stmt.where(
+            FinancialEntryRow.organization_id == self._organization_id,
+            FinancialEntryRow.fiscal_year == query.fiscal_year,
+            FinancialEntryRow.period_start >= query.period_from,
+            FinancialEntryRow.period_start <= query.period_to,
+            or_(
+                and_(
+                    FinancialEntryRow.scenario_type == "budget",
+                    FinancialEntryRow.budget_version_id == query.budget_version_id,
+                ),
+                FinancialEntryRow.scenario_type == "actual",
+            ),
+        )
+        if query.account_ids:
+            stmt = stmt.where(FinancialEntryRow.account_id.in_(query.account_ids))
+        if query.department_ids:
+            stmt = stmt.where(FinancialEntryRow.department_id.in_(query.department_ids))
+        if query.cost_center_ids:
+            stmt = stmt.where(FinancialEntryRow.cost_center_id.in_(query.cost_center_ids))
+        return stmt
+
+
+def _amount_columns(query: AnalyticsQuery) -> tuple[Any, Any]:
+    return (
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            FinancialEntryRow.scenario_type == "budget",
+                            FinancialEntryRow.budget_version_id == query.budget_version_id,
+                        ),
+                        FinancialEntryRow.amount,
+                    ),
+                    else_=literal(0),
+                )
+            ),
+            0,
+        ).label("budget_amount"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (FinancialEntryRow.scenario_type == "actual", FinancialEntryRow.amount),
+                    else_=literal(0),
+                )
+            ),
+            0,
+        ).label("actual_amount"),
+    )
+
+
+def _group_columns(group_by: AnalyticsGroupBy) -> tuple[Any, Any, Any]:
+    if group_by is AnalyticsGroupBy.PERIOD:
+        return (
+            FinancialEntryRow.period_start,
+            FinancialEntryRow.period_start,
+            FinancialEntryRow.period_start,
+        )
+    if group_by is AnalyticsGroupBy.ACCOUNT:
+        return AccountRow.id, AccountRow.code, AccountRow.name
+    if group_by is AnalyticsGroupBy.DEPARTMENT:
+        return DepartmentRow.id, DepartmentRow.code, DepartmentRow.name
+    return CostCenterRow.id, CostCenterRow.code, CostCenterRow.name

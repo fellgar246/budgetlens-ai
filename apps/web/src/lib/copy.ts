@@ -51,7 +51,8 @@ export const copy = {
   changeOrganization: "Cambiar organización",
   signOut: "Cerrar sesión",
   loginTitle: "Iniciar sesión",
-  loginDescription: "Selecciona un usuario local para continuar. La autorización no depende de la ruta.",
+  loginDescription:
+    "Selecciona un usuario local para continuar. La autorización no depende de la ruta.",
   continueToOrganization: "Continuar a la organización",
   selectOrganizationTitle: "Seleccionar organización",
   selectOrganizationDescription:
@@ -79,7 +80,8 @@ export const copy = {
   noImportSource: "Aún no hay una importación aplicada para este alcance.",
   emptyFiltered: "No hay resultados con estos filtros",
   emptyFilteredHint: "Restablece los filtros o cambia el periodo para ver otras cifras.",
-  emptyActuals: "Aún no hay actuals para este periodo. Importa un archivo para comparar contra el presupuesto.",
+  emptyActuals:
+    "Aún no hay actuals para este periodo. Importa un archivo para comparar contra el presupuesto.",
   exportScopeHint: "El CSV conservará los filtros y el desglose actuales.",
   exportConfirm: "Generar CSV",
   cancel: "Cancelar",
@@ -123,11 +125,14 @@ export const copy = {
   warningRows: "Advertencias",
   errorRows: "Errores",
   sampleRows: "Muestra",
-  understandReplace: "Entiendo que esta importación reemplazará registros existentes de forma atómica.",
-  replaceWarning: "Reemplazarás registros del periodo indicado. Esta importación se aplicará de forma atómica.",
+  understandReplace:
+    "Entiendo que esta importación reemplazará registros existentes de forma atómica.",
+  replaceWarning:
+    "Reemplazarás registros del periodo indicado. Esta importación se aplicará de forma atómica.",
   goToDashboard: "Ir al resumen",
   goToAudit: "Ir a auditoría",
-  tabletHint: "El mapping masivo y la revisión de errores son más eficientes en una pantalla grande.",
+  tabletHint:
+    "El mapping masivo y la revisión de errores son más eficientes en una pantalla grande.",
   conversationsTitle: "Conversaciones",
   newConversation: "Nueva conversación",
   copilotExampleVariance: "¿Qué explica la desviación de este periodo?",
@@ -149,7 +154,8 @@ export const copy = {
   collapseConversations: "Ocultar conversaciones",
   expandConversations: "Mostrar conversaciones",
   collapseEvidence: "Ocultar evidencia",
-  scenarioListEmpty: "Aún no hay escenarios. Crea uno con reglas explícitas; guardar no publica el baseline.",
+  scenarioListEmpty:
+    "Aún no hay escenarios. Crea uno con reglas explícitas; guardar no publica el baseline.",
   newScenario: "Crear escenario",
   addRule: "Agregar regla",
   removeRule: "Quitar regla",
@@ -176,7 +182,8 @@ export const copy = {
   confirmArchiveDimension: "La dimensión dejará de aparecer por defecto. ¿Quieres continuar?",
   emailLabel: "Correo",
   auditTitle: "Auditoría",
-  auditDescription: "Consulta acciones de administración sin cifras financieras. Solo administradores.",
+  auditDescription:
+    "Consulta acciones de administración sin cifras financieras. Solo administradores.",
   auditEmpty: "No hay eventos de auditoría para los filtros actuales.",
   filterActor: "Actor",
   filterAction: "Acción",
@@ -194,7 +201,8 @@ export const copy = {
   hashLabel: "Huella",
   importAppliedLinks: "Siguiente paso: revisa el resumen o la auditoría del job.",
   importRejected: "La importación no se aplicó.",
-  cancelImportHint: "Cancelar conserva o cierra el job según su estado. No borra el archivo original en tu equipo.",
+  cancelImportHint:
+    "Cancelar conserva o cierra el job según su estado. No borra el archivo original en tu equipo.",
   settingsNav: "Ajustes",
   membersEmail: "Correo",
   noMoreResults: "No hay más resultados.",
@@ -292,6 +300,8 @@ export const copy = {
   futureMonths: "Meses futuros",
   previewImpact: "Calcular impacto",
   saveScenario: "Guardar escenario",
+  updateScenario: "Actualizar escenario",
+  archiveScenario: "Archivar escenario",
   compareScenario: "Comparar con baseline",
   emptyScenarioImpact: "No hay un baseline con cifras para calcular el impacto total y mensual.",
   copilotTitle: "Copiloto",
@@ -383,6 +393,18 @@ export const copy = {
   copilotWorking: "El copiloto sigue trabajando…",
   copilotStillWorking: "La consulta continúa. Puedes esperar o salir sin perder el contexto.",
   importWorking: "Validando el archivo. El proceso continúa…",
+  importStillWorking:
+    "La importación continúa. Puedes esperar o cancelar sin perder el seguimiento.",
+  importProcessing: "Procesando el archivo…",
+  mappingField: "Campo canónico",
+  mappingSource: "Columna de origen",
+  mappingSamples: "Valores de muestra",
+  validationErrorsHeading: "Errores de validación",
+  importAppendHint:
+    "Esta importación se aplicará de forma atómica. Los registros existentes se conservan; el reemplazo de un rango no está disponible.",
+  matchingExisting: "Filas que coinciden con datos existentes",
+  mappingIncomplete: "Asigna todas las columnas requeridas para continuar.",
+  fileNotExecuted: "El archivo se lee como datos. No se ejecutan fórmulas ni macros.",
   metricsTitle: "Métricas técnicas",
   metricsEmpty: "Aún no hay muestras de latencia en este proceso.",
   requestsLabel: "Solicitudes",

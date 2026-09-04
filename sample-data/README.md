@@ -17,6 +17,7 @@ Alpha eval amounts match `apps/api` seed and the copilot evaluation dataset (FY2
 | `duplicates.csv` | Duplicate keys |
 | `locale-ambiguous.csv` | Ambiguous decimal/thousands separators |
 | `leading-zero.csv` | Codes that must keep leading zeros |
+| (generated) | A 25 MiB CSV for preview timing; produced by `make test-perf`, not versioned |
 
 ## Reproduce the demo ledger
 
@@ -25,6 +26,8 @@ make seed
 ```
 
 Or import `budget-valid.csv` and `actuals-valid.csv` from the web **Importaciones** flow after signing in as Ana Analyst / Alpha.
+
+Analytics integration tests build a separate FY2027 ledger so seed actuals for FY2026 cannot leak into those totals.
 
 Expected checkable facts after a valid Alpha import or seed:
 

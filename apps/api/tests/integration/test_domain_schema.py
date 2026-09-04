@@ -17,6 +17,7 @@ def test_schema_enforces_domain_invariants(migrated_database: str) -> None:
     user_checks = {item["name"] for item in inspector.get_check_constraints("users")}
     membership_uniques = {item["name"] for item in inspector.get_unique_constraints("memberships")}
     assert "ix_financial_entries_org_fy_period" in entry_indexes
+    assert "ix_financial_entries_org_fy_scenario_period" in entry_indexes
     assert "ix_financial_entries_org_version_period" in entry_indexes
     assert "ix_financial_entries_org_account_period" in entry_indexes
     assert "ix_financial_entries_org_department_period" in entry_indexes

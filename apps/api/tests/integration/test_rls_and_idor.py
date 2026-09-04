@@ -129,6 +129,8 @@ def test_cross_tenant_idor_covers_jobs_scenarios_conversations_and_exports(
     for path in (
         f"{PREFIX}/imports/{job_id}",
         f"{PREFIX}/imports/{job_id}/errors",
+        f"{PREFIX}/imports/{job_id}/preview",
+        f"{PREFIX}/imports/{job_id}/error-report",
         f"{PREFIX}/scenarios/{scenario_id}",
         f"{PREFIX}/conversations/{conversation_id}",
         f"{PREFIX}/exports/{export_id}/content",

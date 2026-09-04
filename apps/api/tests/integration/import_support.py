@@ -7,7 +7,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
+from budgetlens.adapters.db import session_scope
+from budgetlens.adapters.persistence.models import FinancialEntryRow, ImportJobRow
+from budgetlens.config import get_settings
 from budgetlens.dev_identities import ALPHA_ANALYST_ID, ALPHA_ORG_ID
 
 PREFIX = "/api/v1"
@@ -105,6 +109,25 @@ def import_workbook(
     assert isinstance(body, dict)
     typed = {str(key): value for key, value in body.items()}
     return typed | {"_status": committed.status_code, "_body": typed}
+
+
+def entry_count_for_job(job_id: str) -> int:
+    with session_scope() as session:
+        stmt = (
+            select(func.count())
+            .select_from(FinancialEntryRow)
+            .where(FinancialEntryRow.import_job_id == UUID(job_id))
+        )
+        return int(session.scalar(stmt) or 0)
+
+
+def overwrite_job_object(job_id: str, content: bytes) -> None:
+    with session_scope() as session:
+        row = session.get(ImportJobRow, UUID(job_id))
+        assert row is not None
+        assert row.object_key
+        path = Path(get_settings().local_storage_path) / row.object_key
+        path.write_bytes(content)
 
 
 def account_id(client: TestClient, code: str) -> str:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from budgetlens.adapters.ai import build_ai_provider_from_settings
+from budgetlens.adapters.exports import build_export_executor
 from budgetlens.adapters.identity import build_identity_provider
 from budgetlens.adapters.imports import build_import_executor
 from budgetlens.adapters.parsing import OpenpyxlWorkbookParser, ParseLimits
@@ -10,6 +11,7 @@ from budgetlens.adapters.persistence.repositories import SqlUserRepository
 from budgetlens.adapters.storage import LocalObjectStorage, S3ObjectStorage
 from budgetlens.config import Settings
 from budgetlens.ports.ai import AIProvider
+from budgetlens.ports.exports import ExportExecutor
 from budgetlens.ports.identity import IdentityProvider
 from budgetlens.ports.imports import ImportExecutor
 from budgetlens.ports.parsing import WorkbookParser
@@ -43,6 +45,10 @@ def build_identity_adapter(settings: Settings, session: Session) -> IdentityProv
 
 def build_import_runner(settings: Settings) -> ImportExecutor:
     return build_import_executor(settings.import_executor)
+
+
+def build_export_runner(settings: Settings) -> ExportExecutor:
+    return build_export_executor(settings.export_executor)
 
 
 def build_workbook_parser(settings: Settings | None = None) -> WorkbookParser:

@@ -20,6 +20,8 @@ from budgetlens.dev_identities import (
 from tests.integration.import_support import (
     CANONICAL,
     PREFIX,
+    entry_count_for_job,
+    overwrite_job_object,
 )
 from tests.integration.import_support import (
     account_id as _account_id,
@@ -98,6 +100,7 @@ def test_invalid_row_blocks_commit_and_leaves_no_entries(seeded_client: TestClie
         headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID, "blocked"),
     )
     assert blocked.status_code == 409
+    assert entry_count_for_job(str(result["id"])) == 0
 
 
 @pytest.mark.integration
@@ -623,3 +626,280 @@ def test_import_contract_fixtures_cover_normalization_and_preview(
     )
     assert replay["id"] == first["_body"]["id"]
     assert replay["status"] == "applied"
+
+
+def _upload_only(
+    client: TestClient,
+    *,
+    content: bytes,
+    filename: str,
+    import_type: str,
+    version_id: str | None,
+    user: UUID = ALPHA_ANALYST_ID,
+    org: UUID = ALPHA_ORG_ID,
+    media_type: str = "text/csv",
+) -> str:
+    digest = hashlib.sha256(content).hexdigest()
+    created = client.post(
+        f"{PREFIX}/imports",
+        headers=_headers(user, org),
+        json={
+            "import_type": import_type,
+            "budget_version_id": version_id,
+            "original_filename": filename,
+            "size_bytes": len(content),
+            "sha256": digest,
+        },
+    )
+    assert created.status_code == 201, created.text
+    job_id = str(created.json()["id"])
+    uploaded = client.put(
+        f"{PREFIX}/imports/{job_id}/content",
+        headers={**_headers(user, org), "Content-Type": media_type},
+        content=content,
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    return job_id
+
+
+@pytest.mark.integration
+def test_preview_after_upload_shows_sanitized_source_rows(seeded_client: TestClient) -> None:
+    version_id = _create_version(seeded_client, "Inspect")
+    content = _read("budget-valid.csv")
+    job_id = _upload_only(
+        seeded_client,
+        content=content,
+        filename="budget-valid.csv",
+        import_type="budget",
+        version_id=version_id,
+    )
+    preview = seeded_client.get(
+        f"{PREFIX}/imports/{job_id}/preview",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert "period" in body["headers"]
+    assert body["proposed_mapping"]["period"] == "period"
+    assert body["items"]
+    assert body["items"][0]["period"] == "2026-01"
+    assert body["job"]["status"] == "uploaded"
+    assert entry_count_for_job(job_id) == 0
+
+
+@pytest.mark.integration
+def test_hash_change_after_validate_rejects_commit(seeded_client: TestClient) -> None:
+    version_id = _create_version(seeded_client, "Hash change")
+    ready = _import_file(
+        seeded_client,
+        content=_read("budget-valid.csv"),
+        filename="budget-valid.csv",
+        import_type="budget",
+        version_id=version_id,
+        commit=False,
+    )
+    assert ready["status"] == "ready"
+    overwrite_job_object(str(ready["id"]), b"tampered-after-validate")
+    blocked = seeded_client.post(
+        f"{PREFIX}/imports/{ready['id']}/commit",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID, "hash-changed"),
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "IMPORT_HASH_MISMATCH"
+    assert entry_count_for_job(str(ready["id"])) == 0
+    still_ready = seeded_client.get(
+        f"{PREFIX}/imports/{ready['id']}",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert still_ready.json()["status"] == "ready"
+
+
+@pytest.mark.integration
+def test_unknown_dimension_flag_depends_on_role(seeded_client: TestClient) -> None:
+    content = (
+        b"period,account_code,account_name,account_type,department_code,"
+        b"department_name,cost_center_code,amount,currency\n"
+        b"2026-01,9999,Nueva cuenta,expense,OPS,Operaciones,CC-GEN,1000.0000,MXN\n"
+    )
+    mapping = {
+        **CANONICAL,
+        "account_name": "account_name",
+        "account_type": "account_type",
+        "department_name": "department_name",
+    }
+    analyst_job = _upload_only(
+        seeded_client,
+        content=content,
+        filename="new-account.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Unknown analyst"),
+    )
+    analyst = seeded_client.post(
+        f"{PREFIX}/imports/{analyst_job}/validate",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={"mapping": mapping, "create_missing_dimensions": True},
+    )
+    assert analyst.status_code == 200
+    assert analyst.json()["status"] == "invalid"
+    analyst_errors = seeded_client.get(
+        f"{PREFIX}/imports/{analyst_job}/errors",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    ).json()["items"]
+    assert any(
+        item["code"] == "UNKNOWN_ACCOUNT" and item["severity"] == "error" for item in analyst_errors
+    )
+    admin_job = _upload_only(
+        seeded_client,
+        content=content,
+        filename="new-account.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Unknown admin"),
+        user=ALPHA_ADMIN_ID,
+    )
+    admin = seeded_client.post(
+        f"{PREFIX}/imports/{admin_job}/validate",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+        json={"mapping": mapping, "create_missing_dimensions": True},
+    )
+    assert admin.status_code == 200
+    assert admin.json()["status"] == "ready"
+    admin_errors = seeded_client.get(
+        f"{PREFIX}/imports/{admin_job}/errors",
+        headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID),
+    ).json()["items"]
+    assert any(
+        item["code"] == "UNKNOWN_ACCOUNT" and item["severity"] == "warning" for item in admin_errors
+    )
+
+
+@pytest.mark.integration
+def test_preview_totals_match_commit_totals(seeded_client: TestClient) -> None:
+    version_id = _create_version(seeded_client, "Preview totals")
+    ready = _import_file(
+        seeded_client,
+        content=_read("budget-valid.csv"),
+        filename="budget-valid.csv",
+        import_type="budget",
+        version_id=version_id,
+        commit=False,
+    )
+    preview = seeded_client.get(
+        f"{PREFIX}/imports/{ready['id']}/preview",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert preview.status_code == 200
+    assert preview.json()["job"]["valid_amount_total"] == ready["valid_amount_total"]
+    assert preview.json()["job"]["valid_count"] == ready["valid_count"]
+    committed = seeded_client.post(
+        f"{PREFIX}/imports/{ready['id']}/commit",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID, "preview-equals-commit"),
+    )
+    assert committed.status_code == 200
+    assert committed.json()["valid_amount_total"] == ready["valid_amount_total"]
+    assert committed.json()["valid_count"] == ready["valid_count"]
+    assert entry_count_for_job(str(ready["id"])) == ready["valid_count"]
+
+
+@pytest.mark.integration
+def test_error_report_neutralizes_csv_injection(seeded_client: TestClient) -> None:
+    content = (
+        b"period,account_code,department_code,cost_center_code,amount,currency\n"
+        b"2026-01,=CMD,OPS,CC-GEN,10.0000,MXN\n"
+    )
+    job = _import_file(
+        seeded_client,
+        content=content,
+        filename="inject.csv",
+        import_type="budget",
+        version_id=_create_version(seeded_client, "Injection"),
+        commit=False,
+    )
+    report = seeded_client.get(
+        f"{PREFIX}/imports/{job['id']}/error-report",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert report.status_code == 200
+    text = report.content.decode("utf-8")
+    assert "'=CMD" in text
+    assert ",=CMD" not in text
+
+
+@pytest.mark.integration
+def test_alpha_cannot_read_beta_import_objects(seeded_client: TestClient) -> None:
+    content = (
+        b"period,account_code,department_code,cost_center_code,amount,currency\n"
+        b"2026-01,6100,OPS,CC-GEN,10.0000,USD\n"
+    )
+    beta_version = seeded_client.post(
+        f"{PREFIX}/budget-versions",
+        headers=_headers(BETA_ADMIN_ID, BETA_ORG_ID),
+        json={"name": "Beta objects", "fiscal_year": 2026},
+    )
+    assert beta_version.status_code == 201
+    job_id = _upload_only(
+        seeded_client,
+        content=content,
+        filename="beta.csv",
+        import_type="budget",
+        version_id=str(beta_version.json()["id"]),
+        user=BETA_ADMIN_ID,
+        org=BETA_ORG_ID,
+    )
+    seeded_client.post(
+        f"{PREFIX}/imports/{job_id}/validate",
+        headers=_headers(BETA_ADMIN_ID, BETA_ORG_ID),
+        json={"mapping": CANONICAL, "create_missing_dimensions": False},
+    )
+    for path, method in (
+        (f"{PREFIX}/imports/{job_id}/preview", "GET"),
+        (f"{PREFIX}/imports/{job_id}/errors", "GET"),
+        (f"{PREFIX}/imports/{job_id}/error-report", "GET"),
+        (f"{PREFIX}/imports/{job_id}/content", "PUT"),
+    ):
+        if method == "PUT":
+            response = seeded_client.put(
+                path,
+                headers={**_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID), "Content-Type": "text/csv"},
+                content=content,
+            )
+        else:
+            response = seeded_client.get(path, headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID))
+        assert response.status_code in {403, 404}, path
+
+
+@pytest.mark.integration
+def test_invalid_mime_and_size_are_rejected(seeded_client: TestClient) -> None:
+    content = _read("budget-valid.csv")
+    version_id = _create_version(seeded_client, "Rejected file")
+    digest = hashlib.sha256(content).hexdigest()
+    oversized = seeded_client.post(
+        f"{PREFIX}/imports",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={
+            "import_type": "budget",
+            "budget_version_id": version_id,
+            "original_filename": "budget-valid.csv",
+            "size_bytes": 30 * 1024 * 1024,
+            "sha256": digest,
+        },
+    )
+    assert oversized.status_code == 413
+    created = seeded_client.post(
+        f"{PREFIX}/imports",
+        headers=_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={
+            "import_type": "budget",
+            "budget_version_id": version_id,
+            "original_filename": "budget-valid.csv",
+            "size_bytes": len(content),
+            "sha256": digest,
+        },
+    )
+    assert created.status_code == 201
+    wrong_mime = seeded_client.put(
+        f"{PREFIX}/imports/{created.json()['id']}/content",
+        headers={**_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID), "Content-Type": "application/pdf"},
+        content=content,
+    )
+    assert wrong_mime.status_code == 422
+    assert wrong_mime.json()["error"]["code"] == "UNSUPPORTED_FILE"

@@ -7,7 +7,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from budgetlens.adapters.ai import BedrockAIProvider, DeterministicAIProvider
-from budgetlens.adapters.factory import build_ai_provider, build_import_runner, build_object_storage
+from budgetlens.adapters.exports import InlineExportExecutor, ProcessExportExecutor
+from budgetlens.adapters.factory import (
+    build_ai_provider,
+    build_export_runner,
+    build_import_runner,
+    build_object_storage,
+)
 from budgetlens.adapters.identity import DevIdentityAdapter, OidcIdentityAdapter
 from budgetlens.adapters.imports import InlineImportExecutor, ProcessImportExecutor
 from budgetlens.adapters.storage import LocalObjectStorage, S3ObjectStorage
@@ -81,6 +87,7 @@ def test_factory_selects_local_storage_and_stub_ai() -> None:
     assert isinstance(build_object_storage(settings), LocalObjectStorage)
     assert isinstance(build_ai_provider(settings), DeterministicAIProvider)
     assert isinstance(build_import_runner(settings), InlineImportExecutor)
+    assert isinstance(build_export_runner(settings), InlineExportExecutor)
 
 
 def test_factory_selects_s3_bedrock_and_process_executor() -> None:
@@ -90,10 +97,12 @@ def test_factory_selects_s3_bedrock_and_process_executor() -> None:
         ai_provider="bedrock",
         bedrock_model_id="model",
         import_executor="process",
+        export_executor="process",
     )
     assert isinstance(build_object_storage(settings), S3ObjectStorage)
     assert isinstance(build_ai_provider(settings), BedrockAIProvider)
     assert isinstance(build_import_runner(settings), ProcessImportExecutor)
+    assert isinstance(build_export_runner(settings), ProcessExportExecutor)
 
 
 def test_s3_adapter_round_trip_and_missing_object() -> None:
@@ -190,6 +199,18 @@ def test_import_executor_runs_work() -> None:
 
     assert InlineImportExecutor().run("validate", work) == "ok"
     assert ProcessImportExecutor().run("apply", work) == "ok"
+    assert seen == ["ran", "ran"]
+
+
+def test_export_executor_runs_work() -> None:
+    seen: list[str] = []
+
+    def work() -> str:
+        seen.append("ran")
+        return "ready"
+
+    assert InlineExportExecutor().run("export", work) == "ready"
+    assert ProcessExportExecutor().run("export", work) == "ready"
     assert seen == ["ran", "ran"]
 
 

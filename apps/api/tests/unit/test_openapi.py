@@ -58,6 +58,7 @@ REQUIRED_CONTRACT_PATHS = {
     ("GET", "/api/v1/analytics/variance-summary"),
     ("GET", "/api/v1/analytics/variance-breakdown"),
     ("GET", "/api/v1/analytics/top-unfavorable"),
+    ("GET", "/api/v1/analytics/compare-periods"),
     ("POST", "/api/v1/exports"),
     ("GET", "/api/v1/scenarios"),
     ("POST", "/api/v1/scenarios"),

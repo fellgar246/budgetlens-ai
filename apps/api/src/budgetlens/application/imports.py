@@ -480,6 +480,8 @@ class ImportService:
         new_departments = 0
         new_cost_centers = 0
         replaced_records = 0
+        if not columns:
+            sanitized = _source_preview_rows(table, offset=offset, page_limit=page_limit)
         if columns:
             version_fy = self._fiscal_year_for_job(context, job)
             normalized, _issues = self._collect_rows(
@@ -577,10 +579,20 @@ class ImportService:
         job = self.get(context, job_id)
         issues = self._errors(context.organization_id).list_all(job.id)
         rows = [
-            [str(item.row_number), item.field, item.code, item.message, item.severity.value]
+            [
+                str(item.row_number),
+                item.field,
+                item.code,
+                item.message,
+                item.severity.value,
+                item.raw_value_redacted,
+            ]
             for item in issues
         ]
-        return render_csv(("row_number", "field", "code", "message", "severity"), rows)
+        return render_csv(
+            ("row_number", "field", "code", "message", "severity", "raw_value_redacted"),
+            rows,
+        )
 
     def commit(self, context: TenantContext, *, job_id: UUID, idempotency_key: str) -> ImportJob:
         require_permission(context.role, Permission.IMPORT)
@@ -1021,3 +1033,23 @@ def _preview_row(item: NormalizedImportRow) -> dict[str, str]:
         "amount": item.amount.as_text(),
         "currency": item.currency,
     }
+
+
+def _source_preview_rows(
+    table: WorkbookTable, *, offset: int, page_limit: int
+) -> list[dict[str, str]]:
+    sanitized: list[dict[str, str]] = []
+    for index, row in enumerate(table.rows):
+        if index < offset:
+            continue
+        sanitized.append(
+            {"row_number": str(row.row_number)}
+            | {
+                header: redact_cell(row.values.get(header, ""))
+                for header in table.headers
+                if header
+            }
+        )
+        if len(sanitized) > page_limit:
+            break
+    return sanitized

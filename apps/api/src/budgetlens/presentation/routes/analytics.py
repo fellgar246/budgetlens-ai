@@ -13,6 +13,7 @@ from budgetlens.presentation.deps import AnalyticsServiceDep, CurrentTenant
 from budgetlens.presentation.schemas import PageInfo
 from budgetlens.presentation.schemas_ops import (
     BreakdownListResponse,
+    ComparePeriodsResponse,
     CreateExportRequest,
     ExportJobResponse,
     VarianceSummaryResponse,
@@ -159,24 +160,54 @@ def get_top_unfavorable(
     )
 
 
+@router.get(
+    "/analytics/compare-periods",
+    response_model=ComparePeriodsResponse,
+    operation_id="compare_periods",
+)
+def compare_periods(
+    context: CurrentTenant,
+    service: AnalyticsServiceDep,
+    fiscal_year: int,
+    period_from: date,
+    period_to: date,
+    budget_version_id: UUID,
+    compare_from: date,
+    compare_to: date,
+    account_id: RepeatUuid = None,
+    department_id: RepeatUuid = None,
+    cost_center_id: RepeatUuid = None,
+) -> ComparePeriodsResponse:
+    compared = service.compare_periods(
+        context,
+        _query(
+            fiscal_year,
+            period_from,
+            period_to,
+            budget_version_id,
+            account_id,
+            department_id,
+            cost_center_id,
+        ),
+        compare_from=compare_from,
+        compare_to=compare_to,
+    )
+    return ComparePeriodsResponse(
+        baseline=summary_response(compared["baseline"]),
+        comparison=summary_response(compared["comparison"]),
+    )
+
+
 @router.post("/exports", response_model=ExportJobResponse, operation_id="create_export")
 def create_export(
     payload: CreateExportRequest,
     context: CurrentTenant,
     service: AnalyticsServiceDep,
 ) -> ExportJobResponse:
-    filters = payload.filters
-    query = parse_analytics_query(
-        fiscal_year=int(filters["fiscal_year"]),
-        period_from=date.fromisoformat(str(filters["period_from"])),
-        period_to=date.fromisoformat(str(filters["period_to"])),
-        budget_version_id=UUID(str(filters["budget_version_id"])),
-        account_ids=[UUID(str(item)) for item in filters.get("account_ids", [])],
-        department_ids=[UUID(str(item)) for item in filters.get("department_ids", [])],
-        cost_center_ids=[UUID(str(item)) for item in filters.get("cost_center_ids", [])],
-    )
     return export_job_response(
-        service.export_breakdown(context, query, group_by=AnalyticsGroupBy(payload.group_by))
+        service.export_breakdown(
+            context, payload.filters.to_query(), group_by=AnalyticsGroupBy(payload.group_by)
+        )
     )
 
 

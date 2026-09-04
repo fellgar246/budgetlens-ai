@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   cancelImport,
   commitImport,
   createImportJob,
   downloadAuthorized,
+  getImport,
   importErrorReportUrl,
   listImportErrors,
   previewImport,
@@ -30,23 +31,17 @@ import { useSession } from "@/features/session/SessionProvider";
 import { trackEvent } from "@/lib/analytics";
 import { copy } from "@/lib/copy";
 import { apiBaseUrl } from "@/lib/env";
+import {
+  CANONICAL_IMPORT_FIELDS,
+  REQUIRED_IMPORT_FIELDS,
+  requiredMappingComplete,
+  sampleValuesForHeader,
+} from "@/lib/import-mapping";
+import { isImportJobSettled, pollWithBackoff } from "@/lib/poll";
 import { sessionAuth } from "@/lib/session-auth";
 
 const MAX_BYTES = 25 * 1024 * 1024;
-const CANONICAL = [
-  "period",
-  "account_code",
-  "account_name",
-  "account_type",
-  "department_code",
-  "department_name",
-  "cost_center_code",
-  "cost_center_name",
-  "amount",
-  "currency",
-  "source_reference",
-] as const;
-const REQUIRED = new Set(["period", "account_code", "department_code", "amount", "currency"]);
+const REQUIRED = new Set<string>(REQUIRED_IMPORT_FIELDS);
 const STEPS = [
   copy.importStepType,
   copy.importStepMapping,
@@ -64,30 +59,64 @@ export function ImportWizardPage() {
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [sourceRows, setSourceRows] = useState<Array<Record<string, string>>>([]);
   const [errors, setErrors] = useState<ImportErrorItem[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [delimiter, setDelimiter] = useState<"," | ";" | "\t" | "">("");
   const [sheetName, setSheetName] = useState("");
   const [amountLocale, setAmountLocale] = useState<"en" | "es">("es");
   const [createMissing, setCreateMissing] = useState(false);
-  const [understood, setUnderstood] = useState(false);
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState(false);
+  const [longWait, setLongWait] = useState(false);
   const [error, setError] = useState<Error | string | null>(null);
+  const errorSummaryRef = useRef<HTMLElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const hasSession = Boolean(userId && organizationId);
   const auth = useMemo(() => sessionAuth(userId, organizationId), [organizationId, userId]);
   const draftVersions = catalog.versions.filter((item) => item.status === "draft");
-  const replaces = (preview?.replaced_records ?? 0) > 0;
-  const commitEnabled = job?.status === "ready" && job.error_count === 0 && (!replaces || understood);
+  const mappingReady = requiredMappingComplete(mapping);
+  const commitEnabled = job?.status === "ready" && job.error_count === 0;
 
   useEffect(() => {
     if (!busy) {
       setWorking(false);
+      setLongWait(false);
       return;
     }
-    const timer = window.setTimeout(() => setWorking(true), 1000);
-    return () => window.clearTimeout(timer);
+    const started = window.setTimeout(() => setWorking(true), 1000);
+    const longer = window.setTimeout(() => setLongWait(true), 10_000);
+    return () => {
+      window.clearTimeout(started);
+      window.clearTimeout(longer);
+    };
   }, [busy]);
+
+  function beginWork() {
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setBusy(true);
+    setError(null);
+    return abortRef.current.signal;
+  }
+
+  async function settleJob(current: ImportJob, signal: AbortSignal): Promise<ImportJob> {
+    if (isImportJobSettled(current.status)) {
+      return current;
+    }
+    return pollWithBackoff(
+      async () => (await getImport(apiBaseUrl(), auth, current.id)).data,
+      (next) => isImportJobSettled(next.status),
+      {
+        signal,
+        onWait: (elapsed) => {
+          if (elapsed >= 10_000) {
+            setLongWait(true);
+          }
+        },
+      },
+    );
+  }
 
   async function uploadSelected(nextFile: File, keepMapping = true) {
     if (!userId || !organizationId) return;
@@ -95,9 +124,8 @@ export function ImportWizardPage() {
       setError(copy.importLimits);
       return;
     }
-    setBusy(true);
-    setError(null);
     const previousMapping = keepMapping ? mapping : {};
+    const signal = beginWork();
     try {
       const digest = await sha256Hex(await nextFile.arrayBuffer());
       const created = await createImportJob(apiBaseUrl(), auth, {
@@ -107,7 +135,8 @@ export function ImportWizardPage() {
         size_bytes: nextFile.size,
         sha256: digest,
       });
-      await uploadImportContent(
+      if (signal.aborted) return;
+      const uploaded = await uploadImportContent(
         apiBaseUrl(),
         auth,
         created.data.id,
@@ -116,8 +145,9 @@ export function ImportWizardPage() {
       );
       const nextPreview = await previewImport(apiBaseUrl(), auth, created.data.id);
       setFile(nextFile);
-      setJob(created.data);
+      setJob(uploaded.data);
       setPreview(nextPreview.data);
+      setSourceRows(nextPreview.data.items);
       setMapping(
         Object.keys(previousMapping).length ? previousMapping : nextPreview.data.proposed_mapping,
       );
@@ -126,9 +156,80 @@ export function ImportWizardPage() {
       trackEvent("import_started", { import_type: importType });
       setStep(2);
     } catch (err) {
-      setError(err as Error);
+      if ((err as Error).name !== "AbortError") {
+        setError(err as Error);
+      }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function runValidate() {
+    if (!job) return;
+    const signal = beginWork();
+    try {
+      const result = await validateImport(apiBaseUrl(), auth, job.id, {
+        mapping,
+        create_missing_dimensions: createMissing,
+        amount_locale: amountLocale,
+        sheet_name: sheetName || null,
+        delimiter: delimiter || null,
+      });
+      const settled = await settleJob(result.data, signal);
+      const [nextPreview, nextErrors] = await Promise.all([
+        previewImport(apiBaseUrl(), auth, job.id),
+        listImportErrors(apiBaseUrl(), auth, job.id),
+      ]);
+      setJob(settled);
+      setPreview(nextPreview.data);
+      setErrors(nextErrors.data.items);
+      trackEvent("import_validated", { import_type: importType });
+      setStep(3);
+      window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setError(
+          err instanceof Error && err.message === "POLL_TIMEOUT"
+            ? copy.importFailed
+            : (err as Error),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runCommit() {
+    if (!job) return;
+    const signal = beginWork();
+    try {
+      const result = await commitImport(apiBaseUrl(), auth, job.id);
+      const settled = await settleJob(result.data, signal);
+      setJob(settled);
+      trackEvent("import_applied", { import_type: importType });
+      setStep(5);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setError(
+          err instanceof Error && err.message === "POLL_TIMEOUT"
+            ? copy.importFailed
+            : (err as Error),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runCancel() {
+    abortRef.current?.abort();
+    if (!job) return;
+    try {
+      const result = await cancelImport(apiBaseUrl(), auth, job.id);
+      setJob(result.data);
+      setBusy(false);
+    } catch (err) {
+      setError(err as Error);
     }
   }
 
@@ -139,6 +240,7 @@ export function ImportWizardPage() {
         {STEPS.map((label, index) => (
           <li
             key={label}
+            aria-current={index + 1 === step ? "step" : undefined}
             className={index + 1 === step ? "font-semibold text-brand-700" : "text-secondary"}
           >
             {index + 1}. {label}
@@ -148,7 +250,7 @@ export function ImportWizardPage() {
       <p className="mt-2 text-xs text-secondary lg:hidden">{copy.tabletHint}</p>
       {working ? (
         <p className="mt-4 text-sm text-secondary" aria-live="polite">
-          {copy.importWorking}
+          {longWait ? copy.importStillWorking : copy.importWorking}
         </p>
       ) : null}
       <ErrorBanner error={error} />
@@ -179,6 +281,7 @@ export function ImportWizardPage() {
               </Select>
             ) : null}
           </div>
+          <p className="text-sm text-secondary">{copy.fileNotExecuted}</p>
           <label
             className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-surface border border-dashed border-border bg-canvas px-4 py-8 text-center"
             onDragOver={(event) => event.preventDefault()}
@@ -207,12 +310,16 @@ export function ImportWizardPage() {
       {step === 2 && preview ? (
         <section className="mt-6 space-y-4 rounded-surface border border-border bg-surface p-6">
           <p className="text-sm text-secondary">{copy.mappingHint}</p>
-          {file ? (
+          {file && job ? (
             <p className="text-sm text-primary">
-              {copy.fileSelected}: {file.name} · {copy.fileSize} {file.size} B
+              {copy.fileSelected}: {file.name} · {copy.fileSize} {file.size} B · {copy.hashLabel}{" "}
+              {job.sha256_short}
             </p>
           ) : null}
-          <Button variant="secondary" onClick={() => document.getElementById("replace-file")?.click()}>
+          <Button
+            variant="secondary"
+            onClick={() => document.getElementById("replace-file")?.click()}
+          >
             {copy.replaceFile}
           </Button>
           <input
@@ -225,25 +332,53 @@ export function ImportWizardPage() {
               if (next) void uploadSelected(next, true);
             }}
           />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {CANONICAL.map((field) => (
-              <Select
-                key={field}
-                label={`${field} · ${REQUIRED.has(field) ? copy.requiredField : copy.optionalField}`}
-                value={mapping[field] ?? ""}
-                onChange={(event) =>
-                  setMapping((current) => ({ ...current, [field]: event.target.value }))
-                }
-              >
-                <option value="">—</option>
-                {preview.headers.map((header) => (
-                  <option key={header} value={header}>
-                    {header}
-                  </option>
-                ))}
-              </Select>
-            ))}
-          </div>
+          <Table caption={copy.mapColumns}>
+            <thead>
+              <tr className="text-left text-secondary">
+                <th className="pb-2 pr-4 font-medium">{copy.mappingField}</th>
+                <th className="pb-2 pr-4 font-medium">{copy.mappingSamples}</th>
+                <th className="pb-2 pr-4 font-medium">{copy.mappingSource}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CANONICAL_IMPORT_FIELDS.map((field) => {
+                const header = mapping[field] ?? "";
+                return (
+                  <tr key={field} className="border-t border-border">
+                    <td className="py-2 pr-4">
+                      {field} · {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
+                    </td>
+                    <td className="py-2 pr-4 text-secondary">
+                      {header ? sampleValuesForHeader(sourceRows, header) : "—"}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <label className="sr-only" htmlFor={`map-${field}`}>
+                        {field} · {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
+                      </label>
+                      <select
+                        id={`map-${field}`}
+                        className="h-10 w-full rounded-control border border-border bg-white px-3 text-sm text-primary"
+                        value={header}
+                        onChange={(event) =>
+                          setMapping((current) => ({ ...current, [field]: event.target.value }))
+                        }
+                      >
+                        <option value="">—</option>
+                        {preview.headers.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+          {!mappingReady ? (
+            <p className="text-sm text-secondary">{copy.mappingIncomplete}</p>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-3">
             {preview.available_sheets.length > 1 ? (
               <Select
@@ -278,36 +413,30 @@ export function ImportWizardPage() {
               <option value="en">{copy.localeEn}</option>
             </Select>
           </div>
-          {preview.delimiter_ambiguous ? <Alert title={copy.delimiterAmbiguous} tone="warning" /> : null}
-          <Table caption={copy.sampleRows}>
-            <thead>
-              <tr className="text-left text-secondary">
-                {preview.headers.slice(0, 5).map((header) => (
-                  <th key={header} className="pb-2 pr-4 font-medium">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {preview.items.slice(0, 5).map((row, index) => (
-                <tr key={index} className="border-t border-border">
-                  {preview.headers.slice(0, 5).map((header) => (
-                    <td key={header} className="py-2 pr-4">
-                      {row[header] ?? row[header.toLowerCase()] ?? ""}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          {capabilities.can_manage_members ? (
+            <label className="flex items-center gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={createMissing}
+                onChange={(event) => setCreateMissing(event.target.checked)}
+              />
+              {copy.createMissingDimensions}
+            </label>
+          ) : null}
+          {preview.delimiter_ambiguous ? (
+            <Alert title={copy.delimiterAmbiguous} tone="warning" />
+          ) : null}
         </section>
       ) : null}
 
       {step === 3 && job && preview ? (
-        <section className="mt-6 space-y-4 rounded-surface border border-border bg-surface p-6">
+        <section
+          ref={errorSummaryRef}
+          tabIndex={-1}
+          className="mt-6 space-y-4 rounded-surface border border-border bg-surface p-6 outline-none"
+        >
           <div className="grid gap-3 md:grid-cols-4">
-            <Stat label={copy.periodLabel} value={`${job.valid_count + job.error_count}`} />
+            <Stat label={copy.periodLabel} value={String(job.row_count)} />
             <Stat label={copy.validRows} value={String(job.valid_count)} />
             <Stat label={copy.warningRows} value={String(job.warning_count)} />
             <Stat label={copy.errorRows} value={String(job.error_count)} />
@@ -317,7 +446,7 @@ export function ImportWizardPage() {
             {selectedOrganization?.functional_currency}
           </p>
           {preview.error_groups.length > 0 ? (
-            <ul className="space-y-1 text-sm text-danger">
+            <ul className="space-y-1 text-sm text-danger" aria-label={copy.validationErrorsHeading}>
               {preview.error_groups.map((group) => (
                 <li key={`${group.code}-${group.severity}`}>
                   {group.code} · {group.count} · {group.sample_message}
@@ -325,6 +454,13 @@ export function ImportWizardPage() {
               ))}
             </ul>
           ) : null}
+          {job.error_count > 0 ? (
+            <Alert title={copy.importInvalid} tone="danger">
+              {copy.commitBlocked}
+            </Alert>
+          ) : (
+            <Alert title={copy.importReady} tone="success" />
+          )}
           {errors.length > 0 ? (
             <ul className="space-y-1 text-sm text-danger">
               {errors.slice(0, 8).map((item) => (
@@ -334,35 +470,43 @@ export function ImportWizardPage() {
               ))}
             </ul>
           ) : null}
+          <Table caption={copy.sampleRows}>
+            <thead>
+              <tr className="text-left text-secondary">
+                {["period", "account_code", "department_code", "amount", "currency"].map(
+                  (header) => (
+                    <th key={header} className="pb-2 pr-4 font-medium">
+                      {header}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.items.slice(0, 8).map((row, index) => (
+                <tr key={row.row_number ?? index} className="border-t border-border">
+                  {["period", "account_code", "department_code", "amount", "currency"].map(
+                    (header) => (
+                      <td key={header} className="py-2 pr-4">
+                        {row[header] ?? ""}
+                      </td>
+                    ),
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         </section>
       ) : null}
 
       {step === 4 && job && preview ? (
         <section className="mt-6 space-y-4 rounded-surface border border-border bg-surface p-6">
-          <Alert title={copy.importImpact} tone="warning">
-            {copy.newDimensions} {preview.new_accounts + preview.new_departments + preview.new_cost_centers} ·{" "}
-            {copy.replacedRecords} {preview.replaced_records}
+          <Alert title={copy.importImpact} tone="info">
+            {copy.newDimensions}{" "}
+            {preview.new_accounts + preview.new_departments + preview.new_cost_centers} ·{" "}
+            {copy.matchingExisting} {preview.replaced_records}
           </Alert>
-          {replaces ? (
-            <label className="flex items-start gap-2 text-sm text-primary">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={understood}
-                onChange={(event) => setUnderstood(event.target.checked)}
-              />
-              {copy.understandReplace}
-            </label>
-          ) : null}
-          <p className="text-sm text-secondary">{copy.replaceWarning}</p>
-          <label className="flex items-center gap-2 text-sm text-secondary">
-            <input
-              type="checkbox"
-              checked={createMissing}
-              onChange={(event) => setCreateMissing(event.target.checked)}
-            />
-            {copy.createMissingDimensions}
-          </label>
+          <p className="text-sm text-secondary">{copy.importAppendHint}</p>
         </section>
       ) : null}
 
@@ -372,13 +516,17 @@ export function ImportWizardPage() {
             title={job.status === "applied" ? copy.importApplied : copy.importRejected}
             tone={job.status === "applied" ? "success" : "danger"}
           >
-            {job.original_filename} · {copy.hashLabel} {job.sha256_short}
+            {job.original_filename} · {copy.hashLabel} {job.sha256_short} · {job.valid_count}/
+            {job.row_count}
           </Alert>
           <div className="flex flex-wrap gap-3">
             <Link className="text-sm font-medium text-brand-600" href="/dashboard">
               {copy.goToDashboard}
             </Link>
-            <Link className="text-sm font-medium text-brand-600" href={`/imports/job/?id=${job.id}`}>
+            <Link
+              className="text-sm font-medium text-brand-600"
+              href={`/imports/job/?id=${job.id}`}
+            >
               {copy.viewImportJob}
             </Link>
             {capabilities.can_manage_members ? (
@@ -398,34 +546,12 @@ export function ImportWizardPage() {
         ) : null}
         {step === 2 ? (
           <Button
-            disabled={busy || !job}
+            disabled={busy || !job || !mappingReady}
             loading={busy}
-            onClick={() => {
-              if (!job) return;
-              setBusy(true);
-              void validateImport(apiBaseUrl(), auth, job.id, {
-                mapping,
-                create_missing_dimensions: createMissing,
-                amount_locale: amountLocale,
-                sheet_name: sheetName || null,
-                delimiter: delimiter || null,
-              })
-                .then(async (result) => {
-                  setJob(result.data);
-                  const [nextPreview, nextErrors] = await Promise.all([
-                    previewImport(apiBaseUrl(), auth, job.id),
-                    listImportErrors(apiBaseUrl(), auth, job.id),
-                  ]);
-                  setPreview(nextPreview.data);
-                  setErrors(nextErrors.data.items);
-                  trackEvent("import_validated", { import_type: importType });
-                  setStep(3);
-                })
-                .catch((err: Error) => setError(err))
-                .finally(() => setBusy(false));
-            }}
+            title={mappingReady ? copy.previewTitle : copy.mappingIncomplete}
+            onClick={() => void runValidate()}
           >
-            {copy.previewTitle}
+            {busy ? copy.validating : copy.previewTitle}
           </Button>
         ) : null}
         {step === 3 ? (
@@ -454,34 +580,20 @@ export function ImportWizardPage() {
             disabled={!commitEnabled || busy}
             loading={busy}
             title={commitEnabled ? copy.commitImport : copy.commitBlocked}
-            onClick={() => {
-              if (!job) return;
-              setBusy(true);
-              void commitImport(apiBaseUrl(), auth, job.id)
-                .then((result) => {
-                  setJob(result.data);
-                  trackEvent("import_applied", { import_type: importType });
-                  setStep(5);
-                })
-                .catch((err: Error) => setError(err))
-                .finally(() => setBusy(false));
-            }}
+            onClick={() => void runCommit()}
           >
-            {copy.commitImport}
+            {busy ? copy.importProcessing : copy.commitImport}
           </Button>
         ) : null}
         {job && step < 5 ? (
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => {
-              void cancelImport(apiBaseUrl(), auth, job.id).then((result) => setJob(result.data));
-            }}
-          >
+          <Button variant="ghost" onClick={() => void runCancel()}>
             {copy.cancelImport}
           </Button>
         ) : null}
       </div>
+      {job && step < 5 ? (
+        <p className="mt-2 text-xs text-secondary">{copy.cancelImportHint}</p>
+      ) : null}
     </CapabilityGate>
   );
 }

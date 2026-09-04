@@ -7,7 +7,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from budgetlens.application.ai import CopilotAnswer
-from budgetlens.application.analytics import BreakdownItem, VarianceMetrics, VarianceSummary
+from budgetlens.application.analytics_query import (
+    AnalyticsQuery,
+    BreakdownItem,
+    VarianceMetrics,
+    VarianceSummary,
+    parse_analytics_query,
+)
 from budgetlens.domain.audit import AUDIT_SCHEMA_VERSION_LABEL, AuditEvent, sanitized_metadata
 from budgetlens.domain.conversation import Conversation
 from budgetlens.domain.enums import ScenarioType
@@ -183,6 +189,41 @@ class BreakdownListResponse(BaseModel):
     page: PageInfo
 
 
+class AnalyticsFilterRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "fiscal_year": 2026,
+                "period_from": "2026-01-01",
+                "period_to": "2026-06-01",
+                "budget_version_id": "00000000-0000-0000-0000-000000000001",
+                "account_ids": [],
+                "department_ids": [],
+                "cost_center_ids": [],
+            }
+        },
+    )
+    fiscal_year: int
+    period_from: date
+    period_to: date
+    budget_version_id: UUID
+    account_ids: list[UUID] = Field(default_factory=list[UUID])
+    department_ids: list[UUID] = Field(default_factory=list[UUID])
+    cost_center_ids: list[UUID] = Field(default_factory=list[UUID])
+
+    def to_query(self) -> AnalyticsQuery:
+        return parse_analytics_query(
+            fiscal_year=self.fiscal_year,
+            period_from=self.period_from,
+            period_to=self.period_to,
+            budget_version_id=self.budget_version_id,
+            account_ids=self.account_ids,
+            department_ids=self.department_ids,
+            cost_center_ids=self.cost_center_ids,
+        )
+
+
 class CreateExportRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -190,15 +231,26 @@ class CreateExportRequest(BaseModel):
             "example": {
                 "export_type": "variance_breakdown",
                 "format": "csv",
-                "filters": {},
+                "filters": {
+                    "fiscal_year": 2026,
+                    "period_from": "2026-01-01",
+                    "period_to": "2026-01-01",
+                    "budget_version_id": "00000000-0000-0000-0000-000000000001",
+                },
                 "group_by": "account",
             }
         },
     )
     export_type: Literal["variance_breakdown"] = "variance_breakdown"
     format: Literal["csv"] = "csv"
-    filters: dict[str, Any]
+    filters: AnalyticsFilterRequest
     group_by: Literal["period", "account", "department", "cost_center"] = "account"
+
+
+class ComparePeriodsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baseline: VarianceSummaryResponse
+    comparison: VarianceSummaryResponse
 
 
 class ExportJobResponse(BaseModel):

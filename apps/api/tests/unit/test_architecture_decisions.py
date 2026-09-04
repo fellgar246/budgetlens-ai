@@ -5,6 +5,7 @@ from pathlib import Path
 
 from budgetlens.adapters.persistence.models import FinancialEntryRow
 from budgetlens.config import Settings
+from budgetlens.ports.exports import ExportExecutor
 from budgetlens.ports.imports import ImportExecutor
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -99,6 +100,12 @@ def test_import_executor_port_is_swappable() -> None:
     assert hasattr(ImportExecutor, "run")
     assert _settings().import_executor == "inline"
     assert _settings(import_executor="process").import_executor == "process"
+
+
+def test_export_executor_port_is_swappable() -> None:
+    assert hasattr(ExportExecutor, "run")
+    assert _settings().export_executor == "inline"
+    assert _settings(export_executor="process").export_executor == "process"
 
 
 def test_copilot_persists_through_the_content_policy() -> None:

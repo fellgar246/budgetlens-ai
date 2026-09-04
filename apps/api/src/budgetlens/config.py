@@ -12,6 +12,7 @@ AuthMode = Literal["dev", "oidc"]
 ObjectStorageBackend = Literal["local", "s3"]
 AiProvider = Literal["stub", "bedrock"]
 ImportExecutorMode = Literal["inline", "process"]
+ExportExecutorMode = Literal["inline", "process"]
 ConversationContentMode = Literal["full_synthetic", "redacted"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
@@ -60,6 +61,7 @@ class Settings(BaseSettings):
     ai_timeout_seconds: int = Field(default=20, ge=1)
     ai_max_concurrent_conversations: int = Field(default=2, ge=1)
     import_executor: ImportExecutorMode = "inline"
+    export_executor: ExportExecutorMode = "inline"
     conversation_content_mode: ConversationContentMode = "full_synthetic"
     max_upload_bytes: int = Field(default=26_214_400, ge=1)
     import_max_sheets: int = Field(default=8, ge=1)

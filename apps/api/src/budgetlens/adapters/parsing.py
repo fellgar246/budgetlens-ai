@@ -183,16 +183,17 @@ def _parse_csv(content: bytes, *, delimiter: str | None, limits: ParseLimits) ->
     text = content.decode("utf-8-sig")
     chosen, ambiguous = detect_csv_delimiter(text, confirmed=delimiter)
     reader = csv.reader(io.StringIO(text), delimiter=chosen)
-    raw_rows = list(reader)
-    if not raw_rows:
+    try:
+        header_row = next(reader)
+    except StopIteration:
         raise ValidationError(
             "MISSING_COLUMN",
             "El archivo no tiene encabezados.",
             field_errors=[
                 field_issue("file", "MISSING_COLUMN", "La primera fila debe ser el encabezado.")
             ],
-        )
-    headers = [_bounded_text(cell.strip()) for cell in raw_rows[0]]
+        ) from None
+    headers = [_bounded_text(cell.strip()) for cell in header_row]
     if not any(headers):
         raise ValidationError(
             "MISSING_COLUMN",
@@ -204,7 +205,7 @@ def _parse_csv(content: bytes, *, delimiter: str | None, limits: ParseLimits) ->
     if len(headers) > limits.max_columns:
         raise PayloadTooLargeError("El archivo excede el número máximo de columnas.")
     rows: list[ParsedCellRow] = []
-    for index, raw in enumerate(raw_rows[1:], start=2):
+    for index, raw in enumerate(reader, start=2):
         if len(rows) >= limits.max_rows:
             raise PayloadTooLargeError("El archivo excede el número máximo de filas.")
         values = {

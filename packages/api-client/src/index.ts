@@ -658,6 +658,11 @@ export type VarianceSummary = {
   metrics: VarianceMetrics;
 };
 
+export type ComparePeriods = {
+  baseline: VarianceSummary;
+  comparison: VarianceSummary;
+};
+
 export type BreakdownItem = {
   group_id: string;
   group_code: string;
@@ -906,6 +911,21 @@ export function getTopUnfavorable(
   return requestJson<Paginated<BreakdownItem>>(
     baseUrl,
     `${API_PREFIX}/analytics/top-unfavorable?${analyticsQuery(query)}&group_by=${groupBy}${suffix}`,
+    {},
+    auth,
+  );
+}
+
+export function comparePeriods(
+  baseUrl: string,
+  auth: AuthContext,
+  query: AnalyticsQuery,
+  compareFrom: string,
+  compareTo: string,
+) {
+  return requestJson<ComparePeriods>(
+    baseUrl,
+    `${API_PREFIX}/analytics/compare-periods?${analyticsQuery(query)}&compare_from=${compareFrom}&compare_to=${compareTo}`,
     {},
     auth,
   );
