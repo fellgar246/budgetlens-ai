@@ -102,7 +102,7 @@ jobs:
           pnpm --filter web build
           tar -C apps/web/out -czf "web-${{ steps.meta.outputs.sha }}.tar.gz" .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-${{ steps.meta.outputs.sha }}
           path: web-${{ steps.meta.outputs.sha }}.tar.gz
@@ -199,7 +199,7 @@ jobs:
           python scripts/changelog.py --ref "${{ github.ref_name }}" --range "${{ github.event.before }}..HEAD" --output changelog-fragment.md || \
             python scripts/changelog.py --version "${{ steps.meta.outputs.version }}" --output changelog-fragment.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.image.outputs.digest != ''
         with:
           name: image-${{ steps.meta.outputs.sha }}
