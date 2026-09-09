@@ -19,6 +19,7 @@ def test_docs_are_disabled_outside_local_and_test(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("OIDC_ISSUER", "https://cognito.example/pool")
     monkeypatch.setenv("OIDC_AUDIENCE", "web-client")
     monkeypatch.setenv("OIDC_JWKS_URL", "https://cognito.example/jwks")
+    monkeypatch.setenv("STORAGE_KEY_PEPPER", "prod-pepper-from-secrets-manager")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",

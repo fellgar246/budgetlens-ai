@@ -88,13 +88,17 @@ def test_oidc_validates_signature_issuer_audience_and_maps_subject() -> None:
 def test_oidc_rejects_unsigned_malformed_and_wrong_algorithm_tokens() -> None:
     _private_key, jwk = _rsa_pair()
     jwks = JwksCache("https://example.test/jwks", fetcher=lambda url: {"keys": [jwk]})
-    kwargs = {
-        "issuer": "https://cognito.example/pool",
-        "audience": "web-client",
-        "jwks": jwks,
-    }
+
+    def _decode(token: str) -> None:
+        decode_and_validate_token(
+            token,
+            issuer="https://cognito.example/pool",
+            audience="web-client",
+            jwks=jwks,
+        )
+
     with pytest.raises(UnauthenticatedError):
-        decode_and_validate_token("not-a-jwt", **kwargs)
+        _decode("not-a-jwt")
     unsigned = jwt.encode(
         {
             "iss": "https://cognito.example/pool",
@@ -102,12 +106,12 @@ def test_oidc_rejects_unsigned_malformed_and_wrong_algorithm_tokens() -> None:
             "aud": "web-client",
             "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
-        key=None,
+        key="",
         algorithm="none",
         headers={"kid": "test-key"},
     )
     with pytest.raises(UnauthenticatedError):
-        decode_and_validate_token(unsigned, **kwargs)
+        _decode(unsigned)
     hmac_token = jwt.encode(
         {
             "iss": "https://cognito.example/pool",
@@ -120,7 +124,7 @@ def test_oidc_rejects_unsigned_malformed_and_wrong_algorithm_tokens() -> None:
         headers={"kid": "test-key"},
     )
     with pytest.raises(UnauthenticatedError):
-        decode_and_validate_token(hmac_token, **kwargs)
+        _decode(hmac_token)
 
 
 def test_jwks_rotation_refreshes_unknown_kid() -> None:

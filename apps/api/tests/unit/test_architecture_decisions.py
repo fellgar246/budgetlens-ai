@@ -124,5 +124,6 @@ def test_production_forces_redacted_conversation_content() -> None:
         oidc_audience="web-client",
         oidc_jwks_url="https://cognito.example/jwks",
         conversation_content_mode="full_synthetic",
+        storage_key_pepper="prod-pepper-from-secrets-manager",
     )
     assert prod.conversation_content_mode == "redacted"

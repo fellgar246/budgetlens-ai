@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -38,7 +39,7 @@ def test_object_key_is_prefixed_and_does_not_embed_the_organization_id() -> None
         require_tenant_object_key(key, BETA, PEPPER)
 
 
-def test_local_storage_refuses_to_presign_a_foreign_key(tmp_path) -> None:
+def test_local_storage_refuses_to_presign_a_foreign_key(tmp_path: Path) -> None:
     storage = LocalObjectStorage(str(tmp_path), key_pepper=PEPPER)
     key = storage.generate_key(organization_id=ALPHA, namespace="imports/a", name="book.csv")
     assert storage.presign_put(key, organization_id=ALPHA, content_type="text/csv") is None

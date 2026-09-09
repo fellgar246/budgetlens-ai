@@ -37,7 +37,7 @@ def test_csv_detects_semicolon_and_tab() -> None:
 
 def test_ambiguous_delimiter_requires_confirmation() -> None:
     text = "period,account;department\n2026-01,6100;OPS\n"
-    detected, ambiguous = detect_csv_delimiter(text)
+    _detected, ambiguous = detect_csv_delimiter(text)
     assert ambiguous is True
     confirmed, still_ambiguous = detect_csv_delimiter(text, confirmed=",")
     assert confirmed == ","

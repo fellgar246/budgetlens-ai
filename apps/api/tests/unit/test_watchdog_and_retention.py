@@ -203,9 +203,13 @@ def test_expired_conversations_are_soft_deleted(monkeypatch: pytest.MonkeyPatch)
         def save(self, item: Conversation) -> None:
             saved.append(item)
 
+    def _list_expired_conversations(_session: object, *, now: datetime) -> list[Conversation]:
+        del now
+        return [conversation]
+
     monkeypatch.setattr(
         "budgetlens.application.retention.list_expired_conversations",
-        lambda _session, *, now: [conversation],
+        _list_expired_conversations,
     )
     monkeypatch.setattr(
         "budgetlens.application.retention.SqlConversationRepository",
@@ -232,9 +236,15 @@ def test_retention_purges_error_reports_and_keeps_job(monkeypatch: pytest.Monkey
         def delete_for_job(self, job_id: UUID) -> None:
             deleted.append(job_id)
 
+    def _list_jobs_with_expired_error_reports(
+        _session: object, *, cutoff: datetime
+    ) -> list[ImportJob]:
+        del cutoff
+        return [job]
+
     monkeypatch.setattr(
         "budgetlens.application.retention.list_jobs_with_expired_error_reports",
-        lambda _session, *, cutoff: [job],
+        _list_jobs_with_expired_error_reports,
     )
     monkeypatch.setattr(
         "budgetlens.application.retention.SqlImportErrorRepository",
@@ -284,9 +294,13 @@ def test_retention_expires_exports_and_deletes_objects(monkeypatch: pytest.Monke
         def save(self, item: ExportJob) -> None:
             saved.append(item)
 
+    def _list_expired_exports(_session: object, *, now: datetime) -> list[ExportJob]:
+        del now
+        return [job]
+
     monkeypatch.setattr(
         "budgetlens.application.retention.list_expired_exports",
-        lambda _session, *, now: [job],
+        _list_expired_exports,
     )
     monkeypatch.setattr(
         "budgetlens.application.retention.SqlExportJobRepository",

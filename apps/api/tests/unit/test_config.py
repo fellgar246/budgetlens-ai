@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from budgetlens.config import Settings, default_env_files
+from budgetlens.config import LOCAL_STORAGE_KEY_PEPPER, Settings, default_env_files
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
@@ -78,6 +78,7 @@ def test_prod_accepts_oidc() -> None:
             "oidc_issuer": "https://cognito.example/pool",
             "oidc_audience": "web-client",
             "oidc_jwks_url": "https://cognito.example/jwks",
+            "storage_key_pepper": "prod-pepper-from-secrets-manager",
         }
     )
     assert settings.docs_enabled is False
@@ -93,6 +94,44 @@ def test_local_keeps_full_synthetic_conversation_content() -> None:
         }
     )
     assert settings.conversation_content_mode == "full_synthetic"
+
+
+def test_prod_rejects_the_local_storage_key_pepper_default() -> None:
+    with pytest.raises(ValidationError, match="STORAGE_KEY_PEPPER"):
+        Settings.model_validate(
+            {
+                "app_env": "prod",
+                "auth_mode": "oidc",
+                "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+                "oidc_issuer": "https://cognito.example/pool",
+                "oidc_audience": "web-client",
+                "oidc_jwks_url": "https://cognito.example/jwks",
+            }
+        )
+
+
+def test_dev_env_rejects_the_local_storage_key_pepper_default() -> None:
+    with pytest.raises(ValidationError, match="STORAGE_KEY_PEPPER"):
+        Settings.model_validate(
+            {
+                "app_env": "dev",
+                "auth_mode": "oidc",
+                "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+                "oidc_issuer": "https://cognito.example/pool",
+                "oidc_audience": "web-client",
+                "oidc_jwks_url": "https://cognito.example/jwks",
+            }
+        )
+
+
+def test_local_keeps_the_default_storage_key_pepper() -> None:
+    settings = Settings.model_validate(
+        {
+            "app_env": "local",
+            "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+        }
+    )
+    assert settings.storage_key_pepper == LOCAL_STORAGE_KEY_PEPPER
 
 
 def _docs_block_for(text: str, env_name: str) -> str:

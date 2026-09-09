@@ -16,6 +16,8 @@ ExportExecutorMode = Literal["inline", "process"]
 ConversationContentMode = Literal["full_synthetic", "redacted"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
+LOCAL_STORAGE_KEY_PEPPER = "budgetlens-local-storage-pepper"
+
 
 def default_env_files() -> tuple[Path, ...]:
     here = Path(__file__).resolve()
@@ -51,7 +53,7 @@ class Settings(BaseSettings):
     oidc_jwks_url: str = ""
     oidc_jwks_cache_seconds: int = Field(default=300, ge=30)
     database_runtime_role: str = "budgetlens_app"
-    storage_key_pepper: str = "budgetlens-local-storage-pepper"
+    storage_key_pepper: str = LOCAL_STORAGE_KEY_PEPPER
     ai_provider: AiProvider = "stub"
     bedrock_region: str = "us-east-1"
     bedrock_model_id: str = ""
@@ -116,6 +118,13 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL are required when AUTH_MODE=oidc"
                 )
+        if (
+            self.app_env not in {"local", "test"}
+            and self.storage_key_pepper == LOCAL_STORAGE_KEY_PEPPER
+        ):
+            raise ValueError(
+                "STORAGE_KEY_PEPPER must be set to a non-default value when APP_ENV is dev or prod"
+            )
         if self.app_env not in {"local", "test"} and self.conversation_content_mode != "redacted":
             object.__setattr__(self, "conversation_content_mode", "redacted")
         return self
