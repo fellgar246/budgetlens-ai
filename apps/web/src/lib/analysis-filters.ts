@@ -1,3 +1,5 @@
+import type { BudgetVersion } from "@budgetlens/api-client";
+
 export type GroupByDimension = "department" | "account" | "cost_center";
 
 export type AnalysisFilters = {
@@ -111,7 +113,86 @@ export function clearStoredFilters(organizationId: string | null): void {
   window.sessionStorage.removeItem(filtersStorageKey(organizationId));
 }
 
+export function withTrailingSlash(pathname: string): string {
+  if (!pathname || pathname === "/") {
+    return "/";
+  }
+  return pathname.endsWith("/") ? pathname : `${pathname}/`;
+}
+
 export function withPathFilters(pathname: string, filters: AnalysisFilters): string {
   const query = serializeAnalysisFilters(filters);
-  return query ? `${pathname}?${query}` : pathname;
+  const path = withTrailingSlash(pathname);
+  return query ? `${path}?${query}` : path;
+}
+
+export function normalizeAnalysisHref(pathAndSearch: string): string {
+  const trimmed = pathAndSearch.trim();
+  const queryIndex = trimmed.indexOf("?");
+  const path = queryIndex === -1 ? trimmed : trimmed.slice(0, queryIndex);
+  const search = queryIndex === -1 ? "" : trimmed.slice(queryIndex + 1);
+  const normalizedPath = path.replace(/\/$/, "") || "/";
+  const query = serializeAnalysisFilters(parseAnalysisFilters(search));
+  return query ? `${normalizedPath}?${query}` : normalizedPath;
+}
+
+export function resolveAnalysisFilters(
+  search: string,
+  organizationId: string | null,
+  versions: BudgetVersion[],
+): AnalysisFilters {
+  const parsed = parseAnalysisFilters(search);
+  const base = hasAnalysisFilterParams(search) ? parsed : readStoredFilters(organizationId);
+  return withDefaultVersion(base, versions);
+}
+
+export function hasAnalysisFilterParams(search: string): boolean {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return Boolean(
+    params.get("version") ||
+    params.get("period_from") ||
+    params.get("period_to") ||
+    params.get("department") ||
+    params.get("account") ||
+    params.get("cost_center") ||
+    params.get("sort") ||
+    params.get("group_by") ||
+    params.get("cursor"),
+  );
+}
+
+export function hasMeaningfulFilters(filters: AnalysisFilters): boolean {
+  return Boolean(
+    filters.budgetVersionId ||
+    filters.periodFrom ||
+    filters.periodTo ||
+    filters.departmentId ||
+    filters.accountId ||
+    filters.costCenterId ||
+    filters.cursor ||
+    filters.sort !== "unfavorable" ||
+    filters.groupBy !== "department",
+  );
+}
+
+export function preferredBudgetVersionId(versions: BudgetVersion[]): string {
+  return (
+    versions.find((item) => item.is_active)?.id ??
+    versions.find((item) => item.status === "published")?.id ??
+    versions[0]?.id ??
+    ""
+  );
+}
+
+export function withDefaultVersion(
+  filters: AnalysisFilters,
+  versions: BudgetVersion[],
+): AnalysisFilters {
+  if (versions.length === 0) {
+    return filters;
+  }
+  if (filters.budgetVersionId && versions.some((item) => item.id === filters.budgetVersionId)) {
+    return filters;
+  }
+  return { ...filters, budgetVersionId: preferredBudgetVersionId(versions) };
 }

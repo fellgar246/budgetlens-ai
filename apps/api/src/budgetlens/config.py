@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     rate_limit_upload_per_minute: int = Field(default=20, ge=1)
     rate_limit_export_per_minute: int = Field(default=20, ge=1)
     rate_limit_ai_per_minute: int = Field(default=10, ge=1)
+    dependency_retry_attempts: int = Field(default=3, ge=1)
+    dependency_retry_base_ms: int = Field(default=50, ge=1)
+    dependency_retry_max_ms: int = Field(default=400, ge=1)
+    dependency_circuit_failures: int = Field(default=5, ge=1)
+    dependency_circuit_reset_seconds: int = Field(default=30, ge=1)
     ai_input_unit_cost_micros: int = Field(default=0, ge=0)
     ai_output_unit_cost_micros: int = Field(default=0, ge=0)
 

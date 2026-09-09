@@ -34,6 +34,7 @@ import { useSession } from "@/features/session/SessionProvider";
 import { withPathFilters } from "@/lib/analysis-filters";
 import { trackEvent } from "@/lib/analytics";
 import { copy } from "@/lib/copy";
+import { DASHBOARD_EXPORT_GROUP, exportScopeText } from "@/lib/export-scope";
 import { apiBaseUrl } from "@/lib/env";
 import { sessionAuth } from "@/lib/session-auth";
 import { formatPercent } from "@/lib/format";
@@ -41,8 +42,8 @@ import { queryFromFilters } from "@/lib/query-from-filters";
 
 export function DashboardPage() {
   const { userId, organizationId, selectedOrganization, capabilities } = useSession();
-  const { filters, update, reset } = useAnalysisFilters();
   const catalog = useCatalogOptions();
+  const { filters, update, reset } = useAnalysisFilters(catalog.versions);
   const hasSession = Boolean(userId && organizationId);
   const query = useMemo(
     () =>
@@ -125,14 +126,26 @@ export function DashboardPage() {
         title={copy.dashboardTitle}
         description={copy.dashboardDescription}
         actions={
-          <Button
-            variant="secondary"
-            disabled={!query || status !== "ready"}
-            title={status === "ready" ? copy.exportView : copy.exportDisabled}
-            onClick={() => setExportOpen(true)}
-          >
-            {copy.exportView}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {capabilities.can_use_copilot ? (
+              <Link
+                className="inline-flex h-10 items-center rounded-control px-4 text-sm font-medium text-brand-600 hover:bg-canvas"
+                href={withPathFilters("/copilot", filters)}
+              >
+                {copy.askFromDashboard}
+              </Link>
+            ) : null}
+            {capabilities.can_export ? (
+              <Button
+                variant="secondary"
+                disabled={!query || status !== "ready"}
+                title={status === "ready" ? copy.exportView : copy.exportDisabled}
+                onClick={() => setExportOpen(true)}
+              >
+                {copy.exportView}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <FilterBar
@@ -146,8 +159,8 @@ export function DashboardPage() {
         eventName="dashboard_filtered"
       />
       <p className="mt-3 text-xs text-secondary">
-        {currency} · {copy.filterSort}:{" "}
-        {filters.sort === "unfavorable" ? copy.sortOrderLabel : copy.sortVariance}
+        {currency} ·{" "}
+        {filters.sort === "variance_amount" ? copy.sortVarianceOrder : copy.sortOrderLabel}
         {refreshing ? ` · ${copy.updating}` : null}
         {updatedAt ? ` · ${copy.lastDataAt} ${updatedAt}.` : null}
       </p>
@@ -160,21 +173,39 @@ export function DashboardPage() {
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <KpiCard
               label={copy.kpiBudget}
-              value={<Money value={summary.metrics.budget_amount} currency={currency} display="compact" />}
+              value={
+                <Money
+                  value={summary.metrics.budget_amount}
+                  currency={currency}
+                  display="compact"
+                />
+              }
               currency={currency}
               scope={periodLabel}
               hint={copy.vsBudget}
             />
             <KpiCard
               label={copy.kpiActual}
-              value={<Money value={summary.metrics.actual_amount} currency={currency} display="compact" />}
+              value={
+                <Money
+                  value={summary.metrics.actual_amount}
+                  currency={currency}
+                  display="compact"
+                />
+              }
               currency={currency}
               scope={periodLabel}
               hint={copy.vsBudget}
             />
             <KpiCard
               label={copy.kpiVariance}
-              value={<Money value={summary.metrics.variance_amount} currency={currency} display="compact" />}
+              value={
+                <Money
+                  value={summary.metrics.variance_amount}
+                  currency={currency}
+                  display="compact"
+                />
+              }
               currency={currency}
               scope={periodLabel}
               hint={<VarianceBadge value={summary.metrics.favorability} />}
@@ -253,7 +284,10 @@ export function DashboardPage() {
             )}
             <div className="mt-3 flex flex-wrap gap-3">
               {latestImport ? (
-                <Link className="text-sm font-medium text-brand-600" href={`/imports/job/?id=${latestImport.id}`}>
+                <Link
+                  className="text-sm font-medium text-brand-600"
+                  href={`/imports/job/?id=${latestImport.id}`}
+                >
                   {copy.viewImportJob}
                 </Link>
               ) : (
@@ -292,20 +326,23 @@ export function DashboardPage() {
       ) : null}
       <ExportDialog
         open={exportOpen}
-        scope={`${currency} · ${periodLabel} · ${copy.groupByAccount}`}
+        scope={exportScopeText(currency, periodLabel, DASHBOARD_EXPORT_GROUP, filters.sort)}
         onClose={() => setExportOpen(false)}
         onConfirm={() => {
           if (!query || !userId || !organizationId) return;
-          void createExport(apiBaseUrl(), sessionAuth(userId, organizationId), query, "account").then(
-            (result) => {
-              trackEvent("export_created", { group_by: "account" });
-              return downloadAuthorized(
-                exportDownloadUrl(apiBaseUrl(), result.data.id),
-                sessionAuth(userId, organizationId),
-                result.data.filename,
-              );
-            },
-          );
+          void createExport(
+            apiBaseUrl(),
+            sessionAuth(userId, organizationId),
+            query,
+            DASHBOARD_EXPORT_GROUP,
+          ).then((result) => {
+            trackEvent("export_created", { group_by: DASHBOARD_EXPORT_GROUP });
+            return downloadAuthorized(
+              exportDownloadUrl(apiBaseUrl(), result.data.id),
+              sessionAuth(userId, organizationId),
+              result.data.filename,
+            );
+          });
           setExportOpen(false);
         }}
       />

@@ -70,6 +70,7 @@ REQUIRED_CONTRACT_PATHS = {
     ("POST", "/api/v1/conversations"),
     ("GET", "/api/v1/conversations/{conversation_id}"),
     ("DELETE", "/api/v1/conversations/{conversation_id}"),
+    ("GET", "/api/v1/conversations/{conversation_id}/messages"),
     ("POST", "/api/v1/conversations/{conversation_id}/messages"),
     ("GET", "/api/v1/audit-events"),
 }

@@ -6,7 +6,7 @@ export function Skeleton({ className, label }: { className?: string; label?: str
     <div
       aria-busy="true"
       aria-label={label ?? copy.loadingLabel}
-      className={cn("animate-pulse rounded bg-[#eaecf0]", className)}
+      className={cn("animate-pulse rounded bg-[var(--bl-neutral-100)]", className)}
     />
   );
 }

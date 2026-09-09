@@ -4,6 +4,7 @@ Application releases use SemVer (`vMAJOR.MINOR.PATCH`). Generate a fragment from
 
 ## Unreleased
 
+- Local hardening: sanitized JSON logs, in-process metrics, upload/export/AI limits, provider retries with jitter and a circuit breaker, job watchdog, graceful shutdown, non-root images with healthchecks, SBOM/scan commands, and a read-only release Compose file.
 - Local portfolio demo: product README, architecture diagrams, 6–8 minute walkthrough, synthetic sample-data guide, sanitized stub AI eval aggregate, dated Terraform sizes without an invented bill, and a release checklist that refuses `v1.0.0` until production gates are recorded.
 - AWS deployment runbook: preflight, bootstrap, plan/apply guards, smoke, explicit demo seed, observation, rollback, isolated restore, and teardown.
 - CI/CD workflows for path-filtered CI, image publish, Terraform plan, and environment deploys.

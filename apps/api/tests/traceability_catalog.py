@@ -855,7 +855,9 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "plans": ["02", "03", "04", "05", "07"],
         "evidence": [
             "scripts/load_test.py",
+            "scripts/load_volume.py",
             "scripts/generate_large_dataset.py",
+            "compose.release.yaml",
             "apps/api/tests/integration/test_analytics.py",
             "apps/api/migrations/versions/20260902_0010_analytics_read_indexes.py",
             "docs/OPERATIONS.md",
@@ -866,7 +868,11 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Initial dashboard usable under 2.5 s p75 on the reference connection",
         "status": "partial",
         "plans": ["02", "03", "04", "05", "07"],
-        "evidence": ["apps/web/src/features/dashboard/DashboardPage.tsx"],
+        "evidence": [
+            "apps/web/src/features/dashboard/DashboardPage.tsx",
+            "docs/WEB.md",
+            "scripts/web-perf-baseline.sh",
+        ],
     },
     {
         "id": "NFR-PERF-003",
@@ -994,14 +1000,22 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "summary": "Dependencies and images scanned; confirmed critical findings block release",
         "status": "implemented",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
-        "evidence": ["scripts/scan.sh", "docs/OPERATIONS.md", ".github/workflows/build.yml"],
+        "evidence": [
+            "scripts/scan.sh",
+            "docs/OPERATIONS.md",
+            ".github/workflows/build.yml",
+            "apps/api/tests/unit/test_docker_hardening.py",
+        ],
     },
     {
         "id": "NFR-SEC-006",
         "summary": "Secrets never appear in logs, errors, Terraform plans, or web bundles",
         "status": "implemented",
         "plans": ["02", "05", "06", "07", "08", "09", "10"],
-        "evidence": ["apps/api/tests/unit/test_logging_sanitization.py"],
+        "evidence": [
+            "apps/api/tests/unit/test_logging_sanitization.py",
+            "apps/api/tests/unit/test_observability.py",
+        ],
     },
     {
         "id": "NFR-SEC-007",
@@ -1160,7 +1174,9 @@ NON_FUNCTIONAL_REQUIREMENTS: list[NonFunctionalRequirement] = [
         "plans": ["00", "05", "07", "08", "10"],
         "evidence": [
             "apps/api/src/budgetlens/observability.py",
+            "apps/api/src/budgetlens/application/resilience.py",
             "apps/api/tests/unit/test_observability.py",
+            "apps/api/tests/unit/test_resilience.py",
         ],
     },
     {

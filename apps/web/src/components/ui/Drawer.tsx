@@ -25,7 +25,8 @@ export function Drawer({
     if (!open) {
       return;
     }
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previousFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     drawerRef.current?.querySelector<HTMLElement>("button, input, select")?.focus();
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -57,7 +58,11 @@ export function Drawer({
           <h2 id={titleId} className="text-lg font-semibold text-primary">
             {title}
           </h2>
-          <button type="button" className="h-10 px-3 text-sm font-medium text-brand-600" onClick={onClose}>
+          <button
+            type="button"
+            className="h-10 px-3 text-sm font-medium text-brand-600"
+            onClick={onClose}
+          >
             {copy.close}
           </button>
         </div>

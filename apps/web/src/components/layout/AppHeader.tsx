@@ -1,26 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { personaLabel } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
 import { appEnvLabel, isProductionApp } from "@/lib/env";
 import { useSession } from "@/features/session/SessionProvider";
 
-const MONTHS = [
-  "ene",
-  "feb",
-  "mar",
-  "abr",
-  "may",
-  "jun",
-  "jul",
-  "ago",
-  "sep",
-  "oct",
-  "nov",
-  "dic",
-];
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export function AppHeader({ onOpenNavigation }: { onOpenNavigation: () => void }) {
   const {
@@ -31,9 +19,9 @@ export function AppHeader({ onOpenNavigation }: { onOpenNavigation: () => void }
     selectedOrganization,
     me,
     switchNotice,
-    setUserId,
     setOrganizationId,
   } = useSession();
+  const router = useRouter();
   const currentUser = users.find((user) => user.id === userId);
 
   return (
@@ -85,10 +73,12 @@ export function AppHeader({ onOpenNavigation }: { onOpenNavigation: () => void }
           ) : null}
           <details className="relative">
             <summary className="flex h-10 cursor-pointer list-none items-center rounded-control px-3 text-sm font-medium text-primary">
-              {currentUser?.display_name ?? copy.profileLabel}
+              {me?.display_name ?? currentUser?.display_name ?? copy.profileLabel}
             </summary>
             <div className="absolute right-0 z-20 mt-2 w-64 rounded-surface border border-border bg-surface p-3 shadow-overlay">
-              <p className="text-sm text-primary">{currentUser?.email ?? copy.chooseUser}</p>
+              <p className="text-sm text-primary">
+                {me?.email ?? currentUser?.email ?? copy.chooseUser}
+              </p>
               {me?.persona ? (
                 <p className="mt-1 text-xs text-secondary">{personaLabel(me.persona)}</p>
               ) : null}
@@ -102,7 +92,7 @@ export function AppHeader({ onOpenNavigation }: { onOpenNavigation: () => void }
                 <button
                   type="button"
                   className="h-10 text-left text-sm font-medium text-danger"
-                  onClick={() => setUserId("")}
+                  onClick={() => router.push("/logout/")}
                 >
                   {copy.signOut}
                 </button>

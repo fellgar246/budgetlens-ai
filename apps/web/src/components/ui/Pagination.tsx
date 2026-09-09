@@ -17,7 +17,10 @@ export function Pagination({
   canPrevious?: boolean;
 }) {
   return (
-    <nav aria-label={copy.paginationLabel} className="mt-4 flex flex-wrap items-center justify-between gap-3">
+    <nav
+      aria-label={copy.paginationLabel}
+      className="mt-4 flex flex-wrap items-center justify-between gap-3"
+    >
       <p className="text-sm text-secondary">
         {from}–{to} {copy.paginationRange}
         {hasMore ? "" : `. ${copy.noMoreResults}`}

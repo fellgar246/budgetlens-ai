@@ -6,10 +6,18 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from budgetlens.domain.errors import PermissionDeniedError
+
 _ROLE_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
 
-def apply_runtime_role(session: Session, role: str) -> None:
+def require_tenant_id(organization_id: UUID | None) -> UUID:
+    if organization_id is None:
+        raise PermissionDeniedError("Selecciona una organización válida.")
+    return organization_id
+
+
+def apply_runtime_role(session: Session, role: str, *, app_env: str = "local") -> None:
     if not role:
         return
     if _ROLE_RE.fullmatch(role) is None:
@@ -19,6 +27,8 @@ def apply_runtime_role(session: Session, role: str) -> None:
         {"role": role},
     ).scalar()
     if exists is None:
+        if app_env not in {"local", "test"}:
+            raise RuntimeError("DATABASE_RUNTIME_ROLE is not available")
         return
     session.execute(text(f"SET LOCAL ROLE {role}"))
 

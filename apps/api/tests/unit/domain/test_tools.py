@@ -53,3 +53,24 @@ def test_bedrock_specs_are_closed() -> None:
     for spec in default_tool_registry().bedrock_specs():
         schema = spec["toolSpec"]["inputSchema"]["json"]
         assert schema["additionalProperties"] is False
+
+
+def test_every_builtin_tool_drops_organization_id_and_rejects_extra_fields() -> None:
+    registry = default_tool_registry()
+    assert registry.names() == {
+        "get_variance_summary",
+        "get_variance_breakdown",
+        "get_top_unfavorable_variances",
+        "compare_periods",
+        "calculate_scenario_preview",
+    }
+    for name in registry.names():
+        cleaned = registry.validate_arguments(
+            name,
+            {"organization_id": "beta-forged", "fiscal_year": 2026},
+        )
+        assert "organization_id" not in cleaned
+        assert cleaned["fiscal_year"] == 2026
+        with pytest.raises(ValidationError) as exc:
+            registry.validate_arguments(name, {"fiscal_year": 2026, "unexpected": True})
+        assert exc.value.code == "INVALID_TOOL_ARGS"

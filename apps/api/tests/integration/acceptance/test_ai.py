@@ -11,8 +11,11 @@ from budgetlens.dev_identities import (
     ALPHA_ADMIN_ID,
     ALPHA_ANALYST_ID,
     ALPHA_ORG_ID,
+    BETA_ADMIN_ID,
     BETA_ORG_ID,
 )
+from budgetlens.domain.errors import ai_unavailable
+from budgetlens.domain.evidence import GROUNDING_FAILED_MESSAGE
 from budgetlens.domain.tools import default_tool_registry
 from budgetlens.observability import metrics_registry
 from budgetlens.ports.ai import ProviderResult, ToolRequest, ToolResult
@@ -196,6 +199,144 @@ def test_altered_tool_args_cannot_retarget_another_tenant(
     )
     tools = [item["tool"] for item in extra.get("evidence") or []]
     assert "get_variance_summary" not in tools or extra["scope"]["currency"] == "MXN"
+
+
+def test_conversation_messages_are_listed_and_hidden_from_other_tenants(
+    seeded_client: TestClient,
+) -> None:
+    version_id = active_budget_version(seeded_client)
+    conversation_id = create_conversation(seeded_client, version_id=version_id)
+    asked = ask_copilot(
+        seeded_client,
+        conversation_id=conversation_id,
+        version_id=version_id,
+        content="¿Cuál fue la variación de Maintenance en enero?",
+    )
+    listed = seeded_client.get(
+        f"{PREFIX}/conversations/{conversation_id}/messages",
+        headers=auth_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert listed.status_code == 200, listed.text
+    roles = [item["role"] for item in listed.json()["items"]]
+    assert roles == ["user", "assistant"]
+    assert any("Maintenance" in item["content"] for item in listed.json()["items"])
+    assert asked["answer"] in {item["content"] for item in listed.json()["items"]}
+    foreign = seeded_client.get(
+        f"{PREFIX}/conversations/{conversation_id}/messages",
+        headers=auth_headers(BETA_ADMIN_ID, BETA_ORG_ID),
+    )
+    assert foreign.status_code in {403, 404}
+
+
+def test_invented_figure_fails_grounding(
+    seeded_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def complete(
+        self: DeterministicAIProvider,
+        *,
+        messages: list[Any],
+        question: str,
+        settings: Any,
+        system_prompt: str = "",
+        tool_results: tuple[ToolResult, ...] = (),
+        timeout_seconds: int | None = None,
+    ) -> ProviderResult:
+        del self, messages, question, settings, system_prompt, timeout_seconds
+        if tool_results:
+            return ProviderResult(
+                text="La variación fue 99999.0000. Evidencia: ev_1.",
+                tool_requests=(),
+                input_units=4,
+                output_units=8,
+                model_id="stub",
+            )
+        return ProviderResult(
+            text=None,
+            tool_requests=(ToolRequest("get_variance_summary", {}, request_id="call_x"),),
+            input_units=4,
+            output_units=4,
+            model_id="stub",
+        )
+
+    monkeypatch.setattr(DeterministicAIProvider, "complete", complete)
+    version_id = active_budget_version(seeded_client)
+    conversation_id = create_conversation(seeded_client, version_id=version_id)
+    answer = ask_copilot(
+        seeded_client,
+        conversation_id=conversation_id,
+        version_id=version_id,
+        content="Resume enero",
+    )
+    assert answer["answer"] == GROUNDING_FAILED_MESSAGE
+    assert any("verificar" in item.lower() for item in answer["limitations"])
+
+
+def test_analytics_still_works_when_copilot_is_unavailable(
+    seeded_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def complete(
+        self: DeterministicAIProvider,
+        *,
+        messages: list[Any],
+        question: str,
+        settings: Any,
+        system_prompt: str = "",
+        tool_results: tuple[ToolResult, ...] = (),
+        timeout_seconds: int | None = None,
+    ) -> ProviderResult:
+        del self, messages, question, settings, system_prompt, tool_results, timeout_seconds
+        raise ai_unavailable()
+
+    monkeypatch.setattr(DeterministicAIProvider, "complete", complete)
+    version_id = active_budget_version(seeded_client)
+    conversation_id = create_conversation(seeded_client, version_id=version_id)
+    asked = seeded_client.post(
+        f"{PREFIX}/conversations/{conversation_id}/messages",
+        headers=auth_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        json={
+            "content": "¿Cuál fue la variación de Maintenance en enero?",
+            "context": {
+                "fiscal_year": 2026,
+                "period_from": "2026-01-01",
+                "period_to": "2026-03-01",
+                "budget_version_id": version_id,
+            },
+        },
+    )
+    assert asked.status_code == 503
+    assert asked.json()["error"]["code"] == "AI_UNAVAILABLE"
+    summary = seeded_client.get(
+        f"{PREFIX}/analytics/variance-summary",
+        headers=auth_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+        params={
+            "fiscal_year": 2026,
+            "period_from": "2026-01-01",
+            "period_to": "2026-03-01",
+            "budget_version_id": version_id,
+        },
+    )
+    assert summary.status_code == 200
+    assert summary.json()["metrics"]["budget_amount"]
+
+
+def test_scenario_preview_tool_is_read_only(seeded_client: TestClient) -> None:
+    version_id = active_budget_version(seeded_client)
+    conversation_id = create_conversation(seeded_client, version_id=version_id)
+    answer = ask_copilot(
+        seeded_client,
+        conversation_id=conversation_id,
+        version_id=version_id,
+        content="Dame una vista previa de escenario con +5%",
+    )
+    tools = {item["tool"] for item in answer["evidence"]}
+    assert "calculate_scenario_preview" in tools
+    assert "apply_import" not in tools
+    listed = seeded_client.get(
+        f"{PREFIX}/scenarios",
+        headers=auth_headers(ALPHA_ANALYST_ID, ALPHA_ORG_ID),
+    )
+    assert listed.status_code == 200
+    assert listed.json()["items"] == []
 
 
 def test_unbounded_tool_loop_stops_and_records_a_metric(seeded_client: TestClient) -> None:

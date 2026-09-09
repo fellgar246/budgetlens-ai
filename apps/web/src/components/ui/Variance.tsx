@@ -20,10 +20,7 @@ export function Variance({
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <Money value={amount} currency={currency} />
-      <span
-        className="text-secondary"
-        title={budgetZero ? copy.zeroBudgetHint : undefined}
-      >
+      <span className="text-secondary" title={budgetZero ? copy.zeroBudgetHint : undefined}>
         {budgetZero ? copy.zeroBudgetPercent : formatPercent(percent)}
       </span>
       <VarianceBadge value={favorability} />

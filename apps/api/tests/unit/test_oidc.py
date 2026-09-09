@@ -85,6 +85,111 @@ def test_oidc_validates_signature_issuer_audience_and_maps_subject() -> None:
         adapter.authenticate(_token(private_key, exp=datetime.now(UTC) - timedelta(minutes=1)))
 
 
+def test_oidc_rejects_unsigned_malformed_and_wrong_algorithm_tokens() -> None:
+    _private_key, jwk = _rsa_pair()
+    jwks = JwksCache("https://example.test/jwks", fetcher=lambda url: {"keys": [jwk]})
+    kwargs = {
+        "issuer": "https://cognito.example/pool",
+        "audience": "web-client",
+        "jwks": jwks,
+    }
+    with pytest.raises(UnauthenticatedError):
+        decode_and_validate_token("not-a-jwt", **kwargs)
+    unsigned = jwt.encode(
+        {
+            "iss": "https://cognito.example/pool",
+            "sub": "cognito-user-1",
+            "aud": "web-client",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        key=None,
+        algorithm="none",
+        headers={"kid": "test-key"},
+    )
+    with pytest.raises(UnauthenticatedError):
+        decode_and_validate_token(unsigned, **kwargs)
+    hmac_token = jwt.encode(
+        {
+            "iss": "https://cognito.example/pool",
+            "sub": "cognito-user-1",
+            "aud": "web-client",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        "not-the-rsa-key",
+        algorithm="HS256",
+        headers={"kid": "test-key"},
+    )
+    with pytest.raises(UnauthenticatedError):
+        decode_and_validate_token(hmac_token, **kwargs)
+
+
+def test_jwks_rotation_refreshes_unknown_kid() -> None:
+    first_key, first_jwk = _rsa_pair()
+    rotated_key, rotated_jwk = _rsa_pair()
+    rotated_jwk["kid"] = "rotated-key"
+    published = {"keys": [first_jwk]}
+    fetches = {"count": 0}
+
+    def fetcher(url: str) -> dict[str, Any]:
+        del url
+        fetches["count"] += 1
+        return {"keys": list(published["keys"])}
+
+    jwks = JwksCache("https://example.test/jwks", ttl_seconds=3600, fetcher=fetcher)
+    first = decode_and_validate_token(
+        _token(first_key),
+        issuer="https://cognito.example/pool",
+        audience="web-client",
+        jwks=jwks,
+    )
+    assert first["sub"] == "cognito-user-1"
+    published["keys"] = [rotated_jwk]
+    rotated = jwt.encode(
+        {
+            "iss": "https://cognito.example/pool",
+            "sub": "cognito-user-1",
+            "aud": "web-client",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+            "token_use": "id",
+        },
+        rotated_key,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+    claims = decode_and_validate_token(
+        rotated,
+        issuer="https://cognito.example/pool",
+        audience="web-client",
+        jwks=jwks,
+    )
+    assert claims["sub"] == "cognito-user-1"
+    assert fetches["count"] >= 2
+
+
+def test_oidc_unmapped_subject_is_unauthenticated() -> None:
+    private_key, jwk = _rsa_pair()
+    jwks = JwksCache("https://example.test/jwks", fetcher=lambda url: {"keys": [jwk]})
+    settings = Settings.model_validate(
+        {
+            "app_env": "test",
+            "auth_mode": "oidc",
+            "database_url": "postgresql+psycopg://budgetlens:x@localhost:5432/budgetlens",
+            "oidc_issuer": "https://cognito.example/pool",
+            "oidc_audience": "web-client",
+            "oidc_jwks_url": "https://example.test/jwks",
+        }
+    )
+
+    class _Users:
+        def get_by_external_subject(self, subject: str) -> User | None:
+            del subject
+            return None
+
+    adapter = OidcIdentityAdapter(_Users(), settings, jwks=jwks)  # type: ignore[arg-type]
+    with pytest.raises(UnauthenticatedError):
+        adapter.authenticate(_token(private_key))
+
+
 def test_oidc_accepts_access_token_client_id_and_ignores_org_claim() -> None:
     private_key, jwk = _rsa_pair()
     jwks = JwksCache("https://example.test/jwks", fetcher=lambda url: {"keys": [jwk]})

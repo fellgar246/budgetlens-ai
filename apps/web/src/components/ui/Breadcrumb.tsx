@@ -1,10 +1,6 @@
 import Link from "next/link";
 
-export function Breadcrumb({
-  items,
-}: {
-  items: Array<{ href?: string; label: string }>;
-}) {
+export function Breadcrumb({ items }: { items: Array<{ href?: string; label: string }> }) {
   return (
     <nav aria-label="breadcrumb" className="text-sm text-secondary">
       <ol className="flex flex-wrap gap-2">

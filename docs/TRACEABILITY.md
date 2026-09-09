@@ -77,7 +77,7 @@ This catalog is the product record of requirements, acceptance, plans, and exter
 
 | Requirements | Plans | Evidence |
 |---|---|---|
-| NFR-PERF-001–005 | 02, 03, 04, 05, 07 | Import/API benchmark scripts, Lighthouse pending, AI telemetry, pagination tests |
+| NFR-PERF-001–005 | 02, 03, 04, 05, 07 | Import/API benchmark scripts, [web Lighthouse procedure](WEB.md), AI telemetry, pagination tests |
 | NFR-REL-001–005 | 02, 07, 09, 10 | Atomic import tests, health, rollback/restore/teardown runbooks |
 | NFR-SEC-001–007 | 02, 05–10 | Upload/security tests, tenant matrix, scans, Terraform encryption/OIDC, AWS apply pending |
 | NFR-PRI-001–005 | 02, 05–11 | Log tests, retention, synthetic seed, presigned export flow, portfolio sample-data |
@@ -179,7 +179,7 @@ Commands (local close, 2026-09-01):
 - `make test` — API unit tests (including portfolio documentation) and web unit tests
 - `make test-integration` — PostgreSQL tests including analytics accuracy, tenant isolation, and EXPLAIN on the read path
 - `make test-contract` — OpenAPI snapshot
-- `make test-e2e` — 4 Playwright journeys (`E2E_BASE_URL`)
+- `make test-e2e` — Playwright journeys for import, variances, scenarios, tenant switch, keyboard, and responsive smoke (`E2E_BASE_URL`)
 - `make coverage` — 85% branch coverage on the financial engine (98.68% on the measured domain modules) and 85.40% backend (gate 75%)
 - `make scan` — dependency, secret, and IaC scans
 - `make ci` — the same stages locally; GitHub Actions runs them on every pull request
@@ -188,4 +188,4 @@ Fixtures: two tenants (Alpha in MXN, Beta in USD), overlapping catalog codes, th
 
 Omitted on every PR: live Bedrock eval (manual or nightly, cost-controlled), 250k-row load, 25 MiB file soak, and a live AWS backup/restore. The [deployment runbook](DEPLOYMENT.md) and OIDC plan/deploy workflows exist; enabling them in GitHub and AWS is gate M-05. Live apply, smoke, and `budgetlens-dev-restore` remain gated by M-01–M-09 and R-15. Manual gates M-00–M-10 stay human; local defaults and stubs do not assume them. The local [portfolio demo](DEMO.md), [architecture](ARCHITECTURE.md), [AI eval aggregate](AI_EVALUATION.md), [cost sizes](COST.md), and [release checklist](RELEASE.md) are in-repo; `make portfolio-check` refuses tag `v1.0.0` until production gates are recorded.
 
-Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial).
+Residual risk: Playwright retries once in CI; a green retry is visible in the report and does not hide a flake trend. Accessibility automation covers labels, `lang=es`, skip-link, dialog Escape, table drill-down, and keyboard focus; full WCAG 2.2 AA contrast remains a product review (NFR-UX-001 is partial). The Lighthouse capture procedure is in [WEB.md](WEB.md).

@@ -21,6 +21,7 @@ Honest limits: one functional currency per organization, monthly periods, stub c
 | [docs/AI_EVALUATION.md](docs/AI_EVALUATION.md) | Stub eval aggregate (20/20); no live claim |
 | [docs/COST.md](docs/COST.md) | Dated sizes; no invented bill |
 | [docs/RELEASE.md](docs/RELEASE.md) | Checklist; `v1.0.0` remains gated |
+| [docs/WEB.md](docs/WEB.md) | Static web app, keyboard walkthrough, Lighthouse |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | ADRs and tradeoffs |
 | [sample-data/README.md](sample-data/README.md) | Synthetic files and expected facts |
 
@@ -112,11 +113,14 @@ pnpm --filter web dev
 | `make ci` | Lint, types, unit, integration when PostgreSQL is up, OpenAPI contract, web build, security scan, and image builds when Docker is up. |
 | `make coverage` | 85% branch coverage on the financial engine and 75% backend with the integration suite. |
 | `make coverage-unit` | Informational unit coverage, no fail threshold. |
-| `make scan` | Dependency, secret, Terraform (fmt/TFLint/Checkov), and optional image scans. Critical findings fail the command. |
-| `make watchdog` | Mark stale processing import jobs as timed out. |
+| `make scan` | Dependency, secret, SBOM inputs, Terraform (fmt/TFLint/Checkov), and optional image scans. Critical findings fail the command. |
+| `make watchdog` | Mark stale processing import jobs as timed out. The optional worker profile runs the same loop and stops on SIGTERM. |
 | `python -m budgetlens import-job validate\|apply <job-id>` | Run the same import modules as a worker process. |
 | `make retain-files` | Delete expired original files, import error reports, and export objects. |
 | `make test-perf` | Large-file preview timing. |
+| `make web-perf` | Lighthouse HTML/JSON for the local web app (`var/lighthouse/`). Needs Chrome and a running stack. |
+| `make load-volume` | Insert up to 250k synthetic Alpha rows for local read measurement. |
+| `make load-test` | Measure variance-summary p95 against a running API (`var/perf/`). |
 | `make traceability` | Check that every FR/NFR/AC, plan, gate, and high-impact risk is catalogued. |
 | `make reset-local-data CONFIRM=1` | Destroy the local database volume and object storage. |
 | `make record-cost-estimate ENVIRONMENT=dev SOURCE='https://calculator.aws/#…' MONTHLY_ESTIMATE='…'` | Record a dated official AWS estimate. Does not invent a price. |
@@ -141,7 +145,7 @@ The browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`). 
 
 ## Local identity
 
-`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. It also loads a synthetic financial dataset: revenue and expense, zero-budget rows, a negative actual, UNASSIGNED cost centers, overlapping account codes, and several periods. The web header lists those identities. Publish, activate, archive, and import commit require `Idempotency-Key`. JSON uses `snake_case`; amounts and ratios are decimal strings; every response includes `X-Trace-Id`.
+`AUTH_MODE=dev` is available only when `APP_ENV` is `local` or `test`. Send `Authorization: Bearer <user-id>` and, for tenant-scoped routes, `X-Organization-Id`. `AUTH_MODE=oidc` validates issuer, audience, expiry, and JWKS. The web app uses `NEXT_PUBLIC_AUTH_MODE=oidc` with a public client and PKCE; live Cognito remains an AWS apply step. `make seed` upserts two isolated organizations (Alpha in MXN with a January fiscal year, Beta in USD starting in April) plus viewer, analyst, admin, a dual-organization user, and a platform operator with no tenant membership. It also loads a synthetic financial dataset: revenue and expense, zero-budget rows, a negative actual, UNASSIGNED cost centers, overlapping account codes, and several periods. The web header lists those identities. Publish, activate, archive, and import commit require `Idempotency-Key`. JSON uses `snake_case`; amounts and ratios are decimal strings; every response includes `X-Trace-Id`.
 
 `GET /me` returns the active role, persona, and capability matrix. Changing organization clears incompatible filters and cached view state. A forged `organization_id` in the URL, payload, or `X-Organization-Id` header returns `403` or `404` without saying whether the other tenant exists. The operator can open `/estado` and never receives financial rows by default.
 

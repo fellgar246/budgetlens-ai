@@ -123,8 +123,17 @@ export function ScenarioBuilderPage({ scenarioId }: { scenarioId?: string }) {
 
   function sentence(rule: RuleDraft) {
     const dept = departments.find((item) => item.id === rule.departmentId);
-    const op = rule.operation === "percentage_change" ? `${rule.value}%` : rule.value;
-    return `${copy.operationLabel} ${op} ${dept ? `en ${dept.name}` : ""} ${rule.periodFrom || bounds?.from}–${rule.periodTo || bounds?.to}`;
+    const numeric = Number.parseFloat(rule.value.replace(",", ".")) || 0;
+    const direction =
+      rule.operation === "absolute_change"
+        ? copy.adjustRule
+        : numeric < 0
+          ? copy.decreaseRule
+          : copy.increaseRule;
+    const amount =
+      rule.operation === "percentage_change" ? `${Math.abs(numeric)}%` : String(Math.abs(numeric));
+    const scope = dept ? `en ${dept.name}` : copy.allAreas;
+    return `${direction} ${amount} ${scope}, ${rule.periodFrom || bounds?.from}–${rule.periodTo || bounds?.to}`;
   }
 
   return (
@@ -374,7 +383,7 @@ export function ScenarioBuilderPage({ scenarioId }: { scenarioId?: string }) {
           {preview ? (
             <>
               <h2 className="text-lg font-semibold text-primary">{copy.comparisonTitle}</h2>
-              <p className="mt-3 text-sm text-secondary">
+              <p className="mt-3 text-sm text-secondary" aria-live="polite">
                 {copy.impactTotal}: {formatMoney(preview.result, currency)} · {copy.baselineLabel}:{" "}
                 {formatMoney(preview.baseline, currency)}
               </p>

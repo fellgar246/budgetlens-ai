@@ -15,7 +15,7 @@ from budgetlens.application.analytics_query import (
     parse_analytics_query,
 )
 from budgetlens.domain.audit import AUDIT_SCHEMA_VERSION_LABEL, AuditEvent, sanitized_metadata
-from budgetlens.domain.conversation import Conversation
+from budgetlens.domain.conversation import Conversation, ConversationMessage
 from budgetlens.domain.enums import ScenarioType
 from budgetlens.domain.exporting import ExportJob
 from budgetlens.domain.importing import ImportErrorGroup, ImportIssue, ImportJob, abbreviated_sha256
@@ -357,6 +357,20 @@ class ConversationListResponse(BaseModel):
     page: PageInfo
 
 
+class ConversationMessageItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+
+
+class ConversationMessageListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[ConversationMessageItem]
+    page: PageInfo
+
+
 class CreateMessageRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -424,7 +438,19 @@ class AuditEventListResponse(BaseModel):
     page: PageInfo
 
 
-def import_job_response(job: ImportJob, *, include_upload: bool = False) -> ImportJobResponse:
+def import_job_response(
+    job: ImportJob,
+    *,
+    include_upload: bool = False,
+    upload: ImportUploadInfo | None = None,
+) -> ImportJobResponse:
+    resolved = upload
+    if resolved is None and include_upload:
+        resolved = ImportUploadInfo(
+            mode="proxy",
+            method="PUT",
+            url=f"/api/v1/imports/{job.id}/content",
+        )
     return ImportJobResponse(
         id=job.id,
         organization_id=job.organization_id,
@@ -447,13 +473,7 @@ def import_job_response(job: ImportJob, *, include_upload: bool = False) -> Impo
         sheet_name=job.sheet_name,
         failure_code=job.failure_code,
         created_at=job.created_at,
-        upload=ImportUploadInfo(
-            mode="proxy",
-            method="PUT",
-            url=f"/api/v1/imports/{job.id}/content",
-        )
-        if include_upload
-        else None,
+        upload=resolved,
     )
 
 
@@ -558,6 +578,16 @@ def conversation_response(conversation: Conversation) -> ConversationResponse:
         context_filters=conversation.context_filters,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
+    )
+
+
+def conversation_message_item(message: ConversationMessage) -> ConversationMessageItem:
+    role: Literal["user", "assistant"] = "user" if message.role.value == "user" else "assistant"
+    return ConversationMessageItem(
+        id=message.id,
+        role=role,
+        content=message.content,
+        created_at=message.created_at,
     )
 
 

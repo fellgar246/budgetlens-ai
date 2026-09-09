@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from typing import Any, Protocol, cast
 
+from budgetlens.application.resilience import (
+    CircuitBreaker,
+    RetryPolicy,
+    ai_circuit,
+    policy_from_settings,
+    retry_with_jitter,
+)
 from budgetlens.config import Settings
 from budgetlens.domain.conversation import ConversationMessage
-from budgetlens.domain.errors import ai_unavailable
+from budgetlens.domain.errors import CircuitOpenError, ai_unavailable
 from budgetlens.domain.tools import default_tool_registry
 from budgetlens.ports.ai import AIProvider, ProviderResult, ToolRequest, ToolResult
 
@@ -124,6 +132,32 @@ class DeterministicAIProvider:
                 output_units=8,
                 model_id="stub",
             )
+        if "escenario" in text or "vista previa" in text:
+            return ProviderResult(
+                text=None,
+                tool_requests=(
+                    ToolRequest(
+                        "calculate_scenario_preview",
+                        {
+                            "baseline_type": "budget",
+                            "rules": [
+                                {
+                                    "operation": "percentage_change",
+                                    "value": "0.0500",
+                                    "scope": {
+                                        "period_from": "2026-01-01",
+                                        "period_to": "2026-01-01",
+                                    },
+                                }
+                            ],
+                        },
+                        request_id="call_scenario",
+                    ),
+                ),
+                input_units=6,
+                output_units=4,
+                model_id="stub",
+            )
         if "desglosa" in text or "desglose" in text:
             return ProviderResult(
                 text=None,
@@ -212,11 +246,17 @@ class BedrockAIProvider:
         model_id: str,
         timeout_seconds: int,
         client: Any | None = None,
+        retry: RetryPolicy | None = None,
+        circuit: CircuitBreaker | None = None,
+        sleeper: Callable[[float], None] | None = None,
     ) -> None:
         self._region = region
         self._model_id = model_id.strip()
         self._timeout_seconds = timeout_seconds
         self._client = client
+        self._retry = retry or RetryPolicy()
+        self._circuit = circuit or ai_circuit()
+        self._sleeper = sleeper
 
     def _require_client(self) -> _ConverseClient:
         if self._client is not None:
@@ -239,26 +279,36 @@ class BedrockAIProvider:
         del settings
         payload_messages = _to_bedrock_messages(messages, question, tool_results)
         timeout = timeout_seconds if timeout_seconds is not None else self._timeout_seconds
-        try:
-            raw = self._require_client().converse(
-                modelId=self._model_id,
-                messages=payload_messages,
-                system=[{"text": system_prompt}] if system_prompt else [],
-                toolConfig={"tools": list(TOOL_SPECS)},
-                inferenceConfig={"maxTokens": 1024},
-                additionalModelRequestFields=_structured_output_hint(),
-                requestTimeout=timeout,
-            )
-        except TypeError:
+
+        def invoke() -> dict[str, Any]:
             try:
-                raw = self._require_client().converse(
+                return self._require_client().converse(
+                    modelId=self._model_id,
+                    messages=payload_messages,
+                    system=[{"text": system_prompt}] if system_prompt else [],
+                    toolConfig={"tools": list(TOOL_SPECS)},
+                    inferenceConfig={"maxTokens": 1024},
+                    additionalModelRequestFields=_structured_output_hint(),
+                    requestTimeout=timeout,
+                )
+            except TypeError:
+                return self._require_client().converse(
                     modelId=self._model_id,
                     messages=payload_messages,
                     system=[{"text": system_prompt}] if system_prompt else [],
                     toolConfig={"tools": list(TOOL_SPECS)},
                 )
-            except Exception as exc:
-                raise ai_unavailable() from exc
+
+        try:
+            raw = self._circuit.call(
+                lambda: retry_with_jitter(
+                    invoke,
+                    policy=self._retry,
+                    sleeper=self._sleeper,
+                )
+            )
+        except CircuitOpenError:
+            raise
         except Exception as exc:
             raise ai_unavailable() from exc
         return _from_bedrock_response(raw, model_id=self._model_id)
@@ -306,6 +356,11 @@ def _answer_from_payload(payload: dict[str, Any], cited: list[str]) -> str:
                 f"El principal contribuyente es {top.get('group_name') or top.get('group_code')} "
                 f"con variación {top.get('variance_amount')} ({top.get('favorability')}).{citation}"
             )
+    if payload.get("baseline") is not None and payload.get("result") is not None:
+        return (
+            f"La vista previa del escenario pasa de {payload.get('baseline')} "
+            f"a {payload.get('result')}.{citation}"
+        )
     if "baseline" in payload and "comparison" in payload:
         raw_baseline = payload["baseline"]
         raw_comparison = payload["comparison"]
@@ -440,10 +495,15 @@ def _boto3_client(service: str, **kwargs: object) -> object:
 
 def build_ai_provider_from_settings(settings: Settings, *, client: Any | None = None) -> AIProvider:
     if settings.ai_provider == "bedrock":
+        circuit = ai_circuit()
+        circuit.failure_threshold = settings.dependency_circuit_failures
+        circuit.reset_seconds = settings.dependency_circuit_reset_seconds
         return BedrockAIProvider(
             region=settings.bedrock_region,
             model_id=settings.bedrock_model_id,
             timeout_seconds=settings.ai_timeout_seconds,
             client=client,
+            retry=policy_from_settings(settings),
+            circuit=circuit,
         )
     return DeterministicAIProvider()

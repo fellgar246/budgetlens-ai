@@ -42,6 +42,7 @@ from budgetlens.adapters.persistence.models import (
     ScenarioRuleRow,
     ToolExecutionRow,
 )
+from budgetlens.adapters.tenancy import require_tenant_id
 from budgetlens.application.analytics_query import AnalyticsQuery, parse_account_types
 from budgetlens.application.pagination import Page, decode_cursor, encode_cursor
 from budgetlens.domain.conversation import AiRun, Conversation, ConversationMessage, ToolExecution
@@ -58,7 +59,7 @@ from budgetlens.domain.scenario import Scenario
 class SqlImportJobRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, job_id: UUID) -> ImportJob | None:
         row = self._session.get(ImportJobRow, job_id)
@@ -189,7 +190,7 @@ def list_expired_exports(session: Session, *, now: datetime) -> list[ExportJob]:
 class SqlImportErrorRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def replace_for_job(self, job_id: UUID, issues: list[ImportIssue], *, ids: IdFactory) -> None:
         self._session.execute(
@@ -269,7 +270,7 @@ class SqlImportErrorRepository:
 class SqlFinancialEntryRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def add(self, entry: FinancialEntry) -> None:
         row = FinancialEntryRow()
@@ -338,7 +339,7 @@ class SqlFinancialEntryRepository:
 class SqlScenarioRepository:
     def __init__(self, session: Session, organization_id: UUID, ids: IdFactory) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
         self._ids = ids
 
     def get(self, scenario_id: UUID) -> Scenario | None:
@@ -411,7 +412,7 @@ class SqlScenarioRepository:
 class SqlExportJobRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, export_id: UUID) -> ExportJob | None:
         row = self._session.get(ExportJobRow, export_id)
@@ -435,7 +436,7 @@ class SqlExportJobRepository:
 class SqlConversationRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, conversation_id: UUID) -> Conversation | None:
         row = self._session.get(ConversationRow, conversation_id)
@@ -554,7 +555,7 @@ class SqlAnalyticsRepository:
 
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def totals(self, query: AnalyticsQuery) -> AggregatedTotals:
         row = self._session.execute(self.totals_statement(query)).one()

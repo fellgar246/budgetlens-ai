@@ -35,6 +35,7 @@ from budgetlens.adapters.persistence.models import (
     OrganizationRow,
     UserRow,
 )
+from budgetlens.adapters.tenancy import require_tenant_id
 from budgetlens.application.pagination import Page, decode_cursor, encode_cursor
 from budgetlens.domain.audit import AuditEvent
 from budgetlens.domain.budget_version import BudgetVersion
@@ -158,7 +159,7 @@ class SqlOrganizationRepository:
 class SqlMembershipRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, membership_id: UUID) -> Membership | None:
         row = self._session.get(MembershipRow, membership_id)
@@ -232,7 +233,7 @@ class SqlMembershipRepository:
 class SqlAccountRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, account_id: UUID) -> Account | None:
         row = self._session.get(AccountRow, account_id)
@@ -317,7 +318,7 @@ class SqlAccountRepository:
 class SqlDepartmentRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, department_id: UUID) -> Department | None:
         row = self._session.get(DepartmentRow, department_id)
@@ -391,7 +392,7 @@ class SqlDepartmentRepository:
 class SqlCostCenterRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, cost_center_id: UUID) -> CostCenter | None:
         row = self._session.get(CostCenterRow, cost_center_id)
@@ -465,7 +466,7 @@ class SqlCostCenterRepository:
 class SqlBudgetVersionRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, version_id: UUID) -> BudgetVersion | None:
         row = self._session.get(BudgetVersionRow, version_id)
@@ -626,7 +627,7 @@ class SqlAuditRepository:
 class SqlIdempotencyRepository:
     def __init__(self, session: Session, organization_id: UUID) -> None:
         self._session = session
-        self._organization_id = organization_id
+        self._organization_id = require_tenant_id(organization_id)
 
     def get(self, *, user_id: UUID, operation: str, key: str) -> IdempotencyRecordRow | None:
         return self._session.scalar(

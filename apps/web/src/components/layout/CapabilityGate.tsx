@@ -16,7 +16,7 @@ export function CapabilityGate({
   children: ReactNode;
 }) {
   if (needsSession && !hasSession) {
-    return <EmptyState title={copy.sessionNeededGeneric} detail={copy.chooseUser} />;
+    return <EmptyState title={copy.sessionNeededGeneric} detail={copy.sessionNeededDetail} />;
   }
   if (!allowed) {
     return <EmptyState title={copy.forbiddenTitle} detail={copy.forbiddenDetail} />;

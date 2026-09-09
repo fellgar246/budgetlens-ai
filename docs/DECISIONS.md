@@ -26,6 +26,7 @@ Add an ADR with number, date, status, context, decision, positive and negative c
 | ADR-010 | accepted | One functional currency and monthly periods in 1.0 |
 | ADR-011 | accepted | Import execution behind an interchangeable `ImportExecutor` |
 | ADR-012 | proposed | Conversation persistence policy (full encrypted text vs redacted). Local synthetic content is allowed; production waits for a human decision |
+| ADR-013 | accepted | In-process portable metrics and W3C `traceparent`; no vendor telemetry SDK in the API process |
 
 ## ADR-001 — Modular monolith
 
@@ -160,6 +161,17 @@ If an older root still uses DynamoDB locking, upgrade Terraform to the pinned ve
 - **Negative consequences:** Production conversation history is not recoverable as prose until a human accepts a persistence policy.
 - **Alternatives:** Accept full encrypted storage or redacted storage now. Deferred: needs a product and privacy decision.
 - **Affected plans / requirements:** Plans 05, 10, 11; NFR-PRI-001–002; NFR-PRI-004; M-08.
+
+## ADR-013 — Portable in-process metrics and W3C traces
+
+- **Status:** accepted
+- **Date:** 2026-09-03
+- **Context:** The API must expose latency, errors, pool, job, and AI series without high-cardinality tenant labels, and every request must carry a trace identifier. A CloudWatch or OpenTelemetry SDK would add a vendor runtime to the local image.
+- **Decision:** Keep a process-local metrics registry with route-template labels and hashed identifiers in JSON logs. Accept a valid W3C `traceparent` or generate a trace id, and return `X-Trace-Id`. Estimated AI cost is emitted only when a price table is configured and is labeled as an estimate.
+- **Positive consequences:** The local image stays free of AWS telemetry SDKs. Tests can capture logs and snapshots. CloudWatch can still scrape or ingest the same JSON later.
+- **Negative consequences:** Multi-task aggregation is the operations platform's job, not the API process. Cardinality must stay constrained in this registry.
+- **Alternatives:** Embed OpenTelemetry or the CloudWatch SDK. Rejected for the local release candidate: extra dependencies without a measured need.
+- **Affected plans / requirements:** Plan 07; NFR-OBS-001–004; NFR-MNT-005.
 
 ## Template
 

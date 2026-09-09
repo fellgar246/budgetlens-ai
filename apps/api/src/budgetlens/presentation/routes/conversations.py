@@ -8,10 +8,12 @@ from budgetlens.presentation.deps import ConversationServiceDep, CurrentTenant
 from budgetlens.presentation.schemas import PageInfo
 from budgetlens.presentation.schemas_ops import (
     ConversationListResponse,
+    ConversationMessageListResponse,
     ConversationResponse,
     CopilotMessageResponse,
     CreateConversationRequest,
     CreateMessageRequest,
+    conversation_message_item,
     conversation_response,
     copilot_response,
 )
@@ -71,6 +73,25 @@ def delete_conversation(
     conversation_id: UUID, context: CurrentTenant, service: ConversationServiceDep
 ) -> ConversationResponse:
     return conversation_response(service.delete(context, conversation_id))
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages",
+    response_model=ConversationMessageListResponse,
+    operation_id="list_conversation_messages",
+)
+def list_conversation_messages(
+    conversation_id: UUID,
+    context: CurrentTenant,
+    service: ConversationServiceDep,
+    cursor: str | None = None,
+    limit: int | None = Query(default=None, ge=1, le=100),
+) -> ConversationMessageListResponse:
+    page = service.list_messages(context, conversation_id, cursor=cursor, limit=limit)
+    return ConversationMessageListResponse(
+        items=[conversation_message_item(item) for item in page.items],
+        page=PageInfo(next_cursor=page.next_cursor, has_more=page.has_more),
+    )
 
 
 @router.post(

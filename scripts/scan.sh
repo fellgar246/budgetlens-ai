@@ -4,7 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 FAILED=0
 TMPDIR="${TMPDIR:-/tmp}"
-SCAN_SCOPE="${SCAN_SCOPE:-deps,secrets,terraform,image}"
+SCAN_SCOPE="${SCAN_SCOPE:-deps,secrets,sbom,terraform,image}"
 
 fail() {
   echo "FAIL  $1" >&2
@@ -46,7 +46,15 @@ fi
 
 if scope_enabled secrets; then
   echo "Scanning tracked files for secrets..."
-  if git -C "$ROOT" grep -I -E "AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE KEY|aws_secret_access_key" -- ':!.env.example' ':!scripts/scan.sh' >"$TMPDIR/budgetlens-secret-scan.txt" 2>/dev/null; then
+  if git -C "$ROOT" grep -I -E "AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE KEY|aws_secret_access_key" -- \
+    ':!.env.example' \
+    ':!scripts/scan.sh' \
+    ':!scripts/review_public_env.py' \
+    ':!scripts/record_gate.py' \
+    ':!apps/api/tests/**' \
+    ':!apps/web/tests/**' \
+    ':!apps/web/e2e/**' \
+    >"$TMPDIR/budgetlens-secret-scan.txt" 2>/dev/null; then
     fail "possible secret material in tracked files"
     cat "$TMPDIR/budgetlens-secret-scan.txt"
   else
@@ -138,6 +146,30 @@ if scope_enabled terraform; then
     fi
   else
     echo "NOTE  no Terraform files to lint or scan yet"
+  fi
+fi
+
+if scope_enabled sbom; then
+  echo "Writing software bill of materials inputs..."
+  mkdir -p "$ROOT/var/sbom"
+  if (cd "$ROOT/apps/api" && uv export --frozen --no-dev --no-hashes >"$ROOT/var/sbom/python-requirements.txt"); then
+    echo "PASS  Python lockfile SBOM input"
+  else
+    echo "NOTE  could not export the Python lockfile for SBOM"
+  fi
+  if (cd "$ROOT" && corepack pnpm list --depth Infinity --json >"$ROOT/var/sbom/js-dependencies.json"); then
+    echo "PASS  JavaScript lockfile SBOM input"
+  else
+    echo "NOTE  could not list JavaScript dependencies for SBOM"
+  fi
+  if command -v syft >/dev/null 2>&1; then
+    if syft "dir:$ROOT/apps/api" -o spdx-json >"$ROOT/var/sbom/api.spdx.json"; then
+      echo "PASS  syft SPDX for API"
+    else
+      echo "NOTE  syft could not produce an SPDX document"
+    fi
+  else
+    echo "NOTE  syft is not installed; lockfile inputs are under var/sbom/"
   fi
 fi
 

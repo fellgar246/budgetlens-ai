@@ -141,6 +141,7 @@ class MetricsRegistry:
         self._queries: dict[str, _MetricSeries] = defaultdict(_MetricSeries)
         self._rollbacks = 0
         self._rate_limited = 0
+        self._circuit_open = 0
         self._error_codes: dict[str, int] = defaultdict(int)
 
     def record_request(
@@ -221,6 +222,10 @@ class MetricsRegistry:
         with self._lock:
             self._rate_limited += 1
 
+    def record_circuit_open(self) -> None:
+        with self._lock:
+            self._circuit_open += 1
+
     def record_error_code(self, code: str) -> None:
         if not SAFE_ERROR_CODE.fullmatch(code):
             return
@@ -269,6 +274,7 @@ class MetricsRegistry:
                     "amount": f"{micros / 1_000_000:.6f}",
                     "estimate": True,
                 }
+            circuit_open = self._circuit_open
             ai = {
                 "runs": self._ai_runs,
                 "tool_calls": self._ai_tool_calls,
@@ -278,6 +284,7 @@ class MetricsRegistry:
                 "output_units": self._ai_output_units,
                 "latency_ms_p95": self._ai_latency_ms.percentile(0.95),
                 "estimated_cost": estimated_cost,
+                "circuit_open": circuit_open,
             }
             queries = [
                 {

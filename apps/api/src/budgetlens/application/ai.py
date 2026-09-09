@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -43,6 +43,7 @@ from budgetlens.domain.audit import (
 from budgetlens.domain.conversation import (
     AiRun,
     Conversation,
+    ConversationMessage,
     ToolExecution,
     normalize_message,
     persistable_message_content,
@@ -165,6 +166,21 @@ class ConversationService:
         ):
             raise NotFoundError()
         return conversation
+
+    def list_messages(
+        self,
+        context: TenantContext,
+        conversation_id: UUID,
+        *,
+        cursor: str | None,
+        limit: int | None,
+    ) -> Page[ConversationMessage]:
+        del cursor
+        self.get(context, conversation_id)
+        items = self._repo(context.organization_id).list_messages(
+            conversation_id, limit=clamp_limit(limit)
+        )
+        return Page(items=items, next_cursor=None, has_more=False)
 
     def delete(self, context: TenantContext, conversation_id: UUID) -> Conversation:
         conversation = self.get(context, conversation_id)
@@ -403,6 +419,13 @@ class ConversationService:
             created_at=self._clock.now(),
         )
         repo.add_message(assistant)
+        repo.save(
+            replace(
+                conversation,
+                updated_at=self._clock.now(),
+                context_filters=view_context or conversation.context_filters,
+            )
+        )
         record_audit(
             self._audits,
             clock=self._clock,
@@ -920,6 +943,11 @@ def _answer_from_evidence(question: str, evidence: list[dict[str, Any]]) -> str:
         return (
             f"El principal contribuyente es {top.get('group_name') or top.get('group_code')} "
             f"con variación {top.get('variance_amount')} ({top.get('favorability')}).{suffix}"
+        )
+    if first.get("baseline") is not None and first.get("result") is not None:
+        return (
+            f"La vista previa del escenario pasa de {first.get('baseline')} "
+            f"a {first.get('result')}.{suffix}"
         )
     if "baseline" in first and "comparison" in first:
         baseline = cast(dict[str, Any], first["baseline"])

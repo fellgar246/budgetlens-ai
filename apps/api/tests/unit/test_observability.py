@@ -131,6 +131,7 @@ def test_metrics_cover_import_ai_and_safe_error_codes() -> None:
     assert snapshot["ai"]["input_units"] == 12
     assert snapshot["ai"]["output_units"] == 4
     assert snapshot["ai"]["estimated_cost"]["estimate"] is True
+    assert snapshot["ai"]["circuit_open"] == 0
     assert snapshot["error_codes"] == {"PERMISSION_DENIED": 1}
     assert snapshot["db_queries"][0]["name"] == "sql.select"
     assert "organization" not in json.dumps(snapshot).lower()

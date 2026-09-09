@@ -13,13 +13,7 @@ function toNumber(amount: string): number {
   return negative ? -value : value;
 }
 
-export function TrendChart({
-  items,
-  currency,
-}: {
-  items: BreakdownItem[];
-  currency: string;
-}) {
+export function TrendChart({ items, currency }: { items: BreakdownItem[]; currency: string }) {
   if (items.length === 0) {
     return null;
   }
@@ -51,15 +45,15 @@ export function TrendChart({
       >
         <polyline
           fill="none"
-          stroke="#14324b"
+          stroke="var(--bl-brand-700)"
           strokeDasharray="6 4"
           strokeWidth="2"
           points={budget}
         />
-        <polyline fill="none" stroke="#0f766e" strokeWidth="2" points={actual} />
+        <polyline fill="none" stroke="var(--bl-brand-600)" strokeWidth="2" points={actual} />
       </svg>
       <p className="mt-2 text-xs text-secondary">
-        {copy.kpiBudget}: {copy.filterVersion} · {copy.kpiActual}: {currency}
+        {copy.chartBudgetSeries} · {copy.chartActualSeries} · {currency}
       </p>
       <Table caption={copy.chartAccessible} className="mt-4">
         <thead>

@@ -14,6 +14,18 @@ This document covers availability, recovery, rollback, cost controls, and harden
 
 The production SLO is 99.5% of non-AI requests succeeding, excluding announced maintenance. Calibrate alarm thresholds from a baseline. Do not page on a single error.
 
+## Release security checklist
+
+- `AUTH_MODE=dev` is rejected unless `APP_ENV` is `local` or `test`.
+- OIDC validation covers issuer, audience/client, expiry, RS256, and JWKS refresh after key rotation.
+- PostgreSQL runtime role `budgetlens_app` has no `BYPASSRLS`. `budgetlens_migrator` is a separate role.
+- Tenant GUCs are set with `SET LOCAL`. A query without `app.organization_id` returns no business rows.
+- Cross-tenant reads and mutations return 403 or 404 and do not describe the other organization.
+- Object keys are HMAC-prefixed. A presigned URL is issued only after the key matches the caller’s organization.
+- Disabled users receive 401. Disabled memberships receive 403.
+- Logs must not include tokens, cookies, passwords, `DATABASE_URL`, presigned URLs, or financial rows.
+- The browser stores no access token in `localStorage`. There is no service worker cache for API responses.
+
 ## Daily checklist
 
 - Open alarms on the SNS topic and CloudWatch dashboard.
@@ -166,6 +178,12 @@ docker tag budgetlens-api:previous budgetlens-api:local
 docker compose up -d api
 ```
 
+The production-shaped local stack is `compose.release.yaml`. The API runs as uid `10001` with a read-only root filesystem, a `/tmp` tmpfs, and an explicit bind mount for `var/storage`. The web image is the nginx `release` stage (non-root, healthcheck). Do not use that file for day-to-day source reload.
+
+```text
+docker compose -f compose.release.yaml up --build
+```
+
 Do not roll back to an incompatible schema. If the new version required a migration, application rollback uses an image compatible with the current schema.
 
 On AWS, `scripts/rollback-release.sh` updates the ECS service to the previous task definition and can restore the previous web artifact. It does not downgrade the database. Terraform rollback is a new plan from reverted code.
@@ -212,7 +230,7 @@ Follow [restore](#restore). Restore onto an isolated instance first. Compare ten
 
 1. Analytics stays available. The copilot returns 503 `AI_UNAVAILABLE`.
 2. Check `ai` metrics and logs for `rate_limited` or provider 5xx. Do not write prompts to the ticket.
-3. Retry with jitter. Switch `ai_provider` to `stub` only in local or test.
+3. Retry with jitter. After consecutive provider failures the API opens a circuit and returns 503 `AI_UNAVAILABLE` until the reset window. Switch `ai_provider` to `stub` only in local or test.
 4. Keep the model ID configurable. Do not cache private responses unless a later design allows it.
 
 ### Import job stuck
@@ -311,26 +329,38 @@ make eval-ai
 python -m budgetlens eval-ai --output var/ai-eval/stub.json
 ```
 
-Live provider evaluation is not run on every PR. Use it before release, after a model/prompt/tool-schema change, or on a scheduled job:
+Live provider evaluation is not run on every PR. Use it before release, after a model/prompt/tool-schema change, or on a scheduled job. Credentials stay in the process environment or Secrets Manager; they are not written to Git. Reports land under `var/ai-eval/` and are local artifacts.
 
 ```text
-AI_PROVIDER=bedrock BEDROCK_MODEL_ID=<id> python -m budgetlens eval-ai --live
+AI_PROVIDER=bedrock BEDROCK_REGION=<region> BEDROCK_MODEL_ID=<id> python -m budgetlens eval-ai --live --output var/ai-eval/live.json
 ```
 
-Each result records prompt version, model ID, tool schema hash, and commit SHA. Do not commit reports that contain non-synthetic answers. Clarity still needs a human pass; do not use another LLM as the only judge.
+If Bedrock access is missing, the command fails closed and the live result stays blocked. Do not record a live pass without gate M-04. Each result records prompt version, model ID, tool schema hash, and commit SHA. Do not commit reports that contain non-synthetic answers. Clarity still needs a human pass; do not use another LLM as the only judge.
 
 ## Load
 
 ```text
+make seed
+make load-volume
 python scripts/generate_large_dataset.py
-python scripts/load_test.py --token <user-id> --organization-id <org> --budget-version-id <version>
+make load-test
 ```
+
+`make load-volume` inserts up to 250k synthetic Alpha rows (marker `volume-load`) through SQL. It does not print amounts. `make load-test` calls the seeded Analyst/Admin identity against the running API and writes `var/perf/read-baseline.json`. Override with `LOAD_TEST_ARGS='--iterations 40'`.
 
 The read threshold is p95 < 500 ms, excluding AI. Preview of a 25 MiB CSV must finish in under 60 s.
 
-Variance totals are `SUM(numeric)` in PostgreSQL. The planner should use `ix_financial_entries_org_fy_period` or `ix_financial_entries_org_fy_scenario_period` for tenant + fiscal year + inclusive period filters. Integration tests record `EXPLAIN` on that statement. A 250k-row soak is not run on every pull request: load the tenant, then run `scripts/load_test.py` and keep the JSON under `var/perf/`. Until that measurement is recorded for a given engine change, treat the 500 ms target as a local gate rather than a CI gate. SQL aggregation plus those indexes is the accepted approach; do not load the ledger into application memory to compute a summary.
+Variance totals are `SUM(numeric)` in PostgreSQL. The planner should use `ix_financial_entries_org_fy_period` or `ix_financial_entries_org_fy_scenario_period` for tenant + fiscal year + inclusive period filters. Integration tests record `EXPLAIN` on that statement. SQL aggregation plus those indexes is the accepted approach; do not load the ledger into application memory to compute a summary.
 
-Measured local baseline (2026-09-02, host Python 3.12, `make test-perf`): a generated 25.00 MiB UTF-8 CSV (60,823 rows) parsed in **0.263 s**. That is inside the 60 s objective; no deviation plan is required. Re-measure after a parser or limit change:
+Measured local baselines (host Python 3.12):
+
+| Date | Gate | Result | Notes |
+|---|---|---|---|
+| 2026-09-02 | NFR-PERF-003 preview | 0.263 s for a 25.00 MiB CSV (60,823 rows) | Inside the 60 s objective |
+| 2026-09-04 | NFR-PERF-003 preview | `make test-perf` passed | Same parser path |
+| 2026-09-04 | NFR-PERF-001 read p95 | 11 ms (20 iterations, seed ledger) | `make load-test`; well under 500 ms |
+
+A 250k-row CSV is generated at `var/perf/250k-actuals.csv`. Loading those rows into Alpha (`make load-volume`) mutates the local database and is an operator step, not a CI gate. Until that soak is recorded after an engine change, treat the 500 ms target as a local operator gate. The seed-sized measurement does not hide that gap.
 
 ```text
 make test-perf
@@ -342,4 +372,4 @@ make test-perf
 make scan
 ```
 
-The scan covers Python and JavaScript dependencies, a secret-pattern grep, Terraform `fmt` / TFLint / Checkov when `.tf` files exist, and an optional image scan. A confirmed critical vulnerability blocks the release.
+The scan covers Python and JavaScript dependencies, lockfile SBOM inputs under `var/sbom/`, a secret-pattern grep, Terraform `fmt` / TFLint / Checkov when `.tf` files exist, and an optional image scan (`trivy`). A confirmed critical vulnerability blocks the release. `SCAN_SCOPE=sbom` writes only the bill of materials inputs.

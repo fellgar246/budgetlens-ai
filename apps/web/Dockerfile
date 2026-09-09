@@ -33,7 +33,17 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
 
 RUN pnpm --filter web build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.27-alpine AS release
+
+COPY apps/web/nginx.main.conf /etc/nginx/nginx.conf
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/out /usr/share/nginx/html
+
+RUN mkdir -p /var/cache/nginx /tmp/nginx \
+    && chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /tmp \
+    && chmod -R a+rX /usr/share/nginx/html
+
+USER nginx
 EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1

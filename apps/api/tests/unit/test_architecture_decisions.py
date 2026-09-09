@@ -29,6 +29,7 @@ def test_worker_reuses_the_api_package() -> None:
     assert "worker)" in entrypoint
     cli = (API_SRC / "cli.py").read_text(encoding="utf-8")
     assert "import-job" in cli
+    assert "run_worker_loop" in cli
     assert "budgetlens.application.imports" in cli
 
 

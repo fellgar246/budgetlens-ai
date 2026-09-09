@@ -12,21 +12,28 @@ import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useSession } from "@/features/session/SessionProvider";
 import { copy } from "@/lib/copy";
+import { baselineTypeLabel, scenarioStatusLabel } from "@/lib/labels";
 import { apiBaseUrl } from "@/lib/env";
 import { sessionAuth } from "@/lib/session-auth";
 
 export function ScenariosPage() {
-  const { userId, organizationId, capabilities } = useSession();
+  const { userId, organizationId, capabilities, generation } = useSession();
   const [items, setItems] = useState<Scenario[]>([]);
   const [error, setError] = useState<Error | string | null>(null);
   const hasSession = Boolean(userId && organizationId);
 
   useEffect(() => {
-    if (!userId || !organizationId) return;
+    if (!userId || !organizationId) {
+      setItems([]);
+      return;
+    }
     void listScenarios(apiBaseUrl(), sessionAuth(userId, organizationId))
-      .then((result) => setItems(result.data.items))
+      .then((result) => {
+        setItems(result.data.items);
+        setError(null);
+      })
       .catch((err: Error) => setError(err));
-  }, [organizationId, userId]);
+  }, [generation, organizationId, userId]);
 
   return (
     <CapabilityGate allowed={capabilities.can_create_scenario} hasSession={hasSession}>
@@ -67,8 +74,8 @@ export function ScenariosPage() {
                     {item.name}
                   </Link>
                 </td>
-                <td className="py-2">{item.baseline_type}</td>
-                <td className="py-2">{item.status}</td>
+                <td className="py-2">{baselineTypeLabel(item.baseline_type)}</td>
+                <td className="py-2">{scenarioStatusLabel(item.status)}</td>
               </tr>
             ))}
           </tbody>

@@ -6,12 +6,14 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { Variance } from "@/components/ui/Variance";
 import { VarianceBadge } from "@/components/ui/VarianceBadge";
 import { copy } from "@/lib/copy";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatPercent, localeForCurrency } from "@/lib/format";
 
 describe("financial display", () => {
   it("always includes currency in amounts", () => {
     expect(formatMoney("12500.2500", "MXN")).toContain("MXN");
     expect(formatMoney("-10.0000", "USD")).toContain("USD");
+    expect(localeForCurrency("USD")).toBe("en-US");
+    expect(formatMoney("1234.0000", "USD")).toMatch(/USD 1,234\.0000/);
     expect(formatMoney("9999999999999.1234", "MXN").replace(/[^\d.-]/g, "")).toBe(
       "9999999999999.1234",
     );

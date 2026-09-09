@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -90,6 +90,13 @@ from budgetlens.observability import metrics_registry
 from budgetlens.ports.imports import ImportExecutor
 from budgetlens.ports.parsing import WorkbookParser
 from budgetlens.ports.storage import ObjectStorage
+
+
+@dataclass(frozen=True, slots=True)
+class UploadTarget:
+    mode: str
+    method: str
+    url: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +232,29 @@ class ImportService:
         )
         return job
 
+    def upload_descriptor(self, context: TenantContext, job: ImportJob) -> UploadTarget:
+        key = job.object_key or self._storage.generate_key(
+            organization_id=context.organization_id,
+            namespace=f"imports/{job.id}",
+            name=job.original_filename,
+        )
+        self._storage.assert_tenant_key(key, organization_id=context.organization_id)
+        signed = self._storage.presign_put(
+            key,
+            organization_id=context.organization_id,
+            content_type="application/octet-stream",
+            expires_in=900,
+        )
+        if signed is None:
+            return UploadTarget(
+                mode="proxy",
+                method="PUT",
+                url=f"/api/v1/imports/{job.id}/content",
+            )
+        if job.object_key is None:
+            self._jobs(context.organization_id).save(replace(job, object_key=key))
+        return UploadTarget(mode="presigned", method=signed.method, url=signed.url)
+
     def upload_content(
         self,
         context: TenantContext,
@@ -255,11 +285,12 @@ class ImportService:
                 "UNSUPPORTED_FILE", "La huella del archivo no coincide con la declarada."
             )
         self._parser.parse(job.original_filename, content, media_type=media_type)
-        key = self._storage.generate_key(
+        key = job.object_key or self._storage.generate_key(
             organization_id=context.organization_id,
             namespace=f"imports/{job.id}",
             name=job.original_filename,
         )
+        self._storage.assert_tenant_key(key, organization_id=context.organization_id)
         self._storage.put(key, content, content_type=media_type or "application/octet-stream")
         updated = job.mark_uploaded(
             object_key=key,

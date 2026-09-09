@@ -69,7 +69,7 @@ def test_worker_is_an_optional_compose_profile() -> None:
     assert 'profiles: ["worker"]' in worker_block or "profiles:\n      - worker" in worker_block
     assert 'command: ["worker"]' in worker_block
     assert "  worker)" in ENTRYPOINT
-    assert "python -m budgetlens watchdog" in ENTRYPOINT
+    assert "python -m budgetlens worker" in ENTRYPOINT
 
 
 def test_api_entrypoint_reloads_only_when_requested_and_does_not_auto_seed() -> None:
@@ -104,6 +104,8 @@ def test_env_example_documents_local_defaults() -> None:
         "API_PORT=8000",
         "POSTGRES_PORT=5433",
         "budgetlens_local_only",
+        "NEXT_PUBLIC_AUTH_MODE=dev",
+        "NEXT_PUBLIC_OIDC_ISSUER=",
     ):
         assert token in ENV_EXAMPLE
     assert "development-only" in ENV_EXAMPLE

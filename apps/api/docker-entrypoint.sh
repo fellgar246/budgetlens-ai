@@ -24,11 +24,7 @@ case "${1:-api}" in
     exec uvicorn budgetlens.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 30
     ;;
   worker)
-    interval="${WORKER_POLL_SECONDS:-30}"
-    while true; do
-      python -m budgetlens watchdog
-      sleep "$interval"
-    done
+    exec python -m budgetlens worker
     ;;
   seed|eval-ai|watchdog|retain-files|import-job)
     exec python -m budgetlens "$@"

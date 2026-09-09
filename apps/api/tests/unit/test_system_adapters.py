@@ -58,6 +58,14 @@ class FakeS3Client:
     def delete_object(self, **kwargs: object) -> None:
         self.objects.pop(str(kwargs["Key"]), None)
 
+    def generate_presigned_url(
+        self, ClientMethod: str, Params: dict[str, object], ExpiresIn: int = 900
+    ) -> str:
+        return (
+            f"https://s3.example/{Params['Bucket']}/{Params['Key']}"
+            f"?method={ClientMethod}&expires={ExpiresIn}"
+        )
+
 
 class _MissingKey(Exception):
     response = {"Error": {"Code": "NoSuchKey"}}
@@ -131,6 +139,25 @@ def test_s3_adapter_without_client_or_sdk_is_unavailable() -> None:
     assert "archivo" in exc.value.message
 
 
+def test_stub_provider_does_not_import_aws_sdks(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+
+    real_import = importlib.import_module
+
+    def guarded(name: str, package: str | None = None) -> object:
+        if name in {"boto3", "botocore"}:
+            raise AssertionError(f"stub provider must not import {name}")
+        return real_import(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", guarded)
+    settings = _settings(ai_provider="stub")
+    provider = build_ai_provider(settings)
+    assert isinstance(provider, DeterministicAIProvider)
+    result = provider.complete(messages=[], question="resumen de enero", settings=settings)
+    assert result.model_id == "stub"
+    assert result.tool_requests[0].name == "get_variance_summary"
+
+
 def test_bedrock_parses_tool_use_and_maps_failures() -> None:
     class FakeBedrock:
         def converse(self, **kwargs: object) -> dict[str, object]:
@@ -160,7 +187,11 @@ def test_bedrock_parses_tool_use_and_maps_failures() -> None:
             raise RuntimeError("timeout")
 
     broken = BedrockAIProvider(
-        region="us-east-1", model_id="model", timeout_seconds=20, client=BrokenBedrock()
+        region="us-east-1",
+        model_id="model",
+        timeout_seconds=20,
+        client=BrokenBedrock(),
+        sleeper=lambda _: None,
     )
     with pytest.raises(DependencyUnavailableError) as exc:
         broken.complete(messages=[], question="resumen", settings=_settings())

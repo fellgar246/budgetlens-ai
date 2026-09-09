@@ -1,6 +1,14 @@
 import { copy } from "./copy";
 
-export function formatMoney(amount: string, currency: string, locale = "es-MX"): string {
+export function localeForCurrency(currency: string): string {
+  return currency === "USD" ? "en-US" : "es-MX";
+}
+
+export function formatMoney(
+  amount: string,
+  currency: string,
+  locale = localeForCurrency(currency),
+): string {
   const negative = amount.startsWith("-");
   const raw = negative ? amount.slice(1) : amount;
   const [whole = "0", fraction = ""] = raw.split(".");
@@ -12,7 +20,11 @@ export function formatMoney(amount: string, currency: string, locale = "es-MX"):
   return `${sign}${currency} ${grouped}.${decimals}`;
 }
 
-export function formatMoneyCompact(amount: string, currency: string, locale = "es-MX"): string {
+export function formatMoneyCompact(
+  amount: string,
+  currency: string,
+  locale = localeForCurrency(currency),
+): string {
   const negative = amount.startsWith("-");
   const raw = negative ? amount.slice(1) : amount;
   const [whole = "0"] = raw.split(".");

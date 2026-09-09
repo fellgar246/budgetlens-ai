@@ -103,7 +103,7 @@ def test_deploy_runs_migration_before_schema_dependent_traffic() -> None:
         assert "deploy_preflight.py" in text
         assert "environment: " in text
         migrate_at = text.index("run-migration-task.sh")
-        apply_at = text.index("terraform -chdir=\"${TF_ROOT}\" apply")
+        apply_at = text.index('terraform -chdir="${TF_ROOT}" apply')
         assert migrate_at < apply_at or "first apply" in text
 
 
@@ -112,7 +112,7 @@ def test_prod_requires_protected_environment_backup_and_same_digest() -> None:
     assert "environment: prod" in text
     assert "create-db-snapshot" in text
     assert "promote-image.sh" in text
-    assert "tags: [\"v*.*.*\"]" in text or "tags: [\"v*.*.*\"]" in text.replace("'", '"')
+    assert 'tags: ["v*.*.*"]' in text or 'tags: ["v*.*.*"]' in text.replace("'", '"')
 
 
 def test_codeowners_covers_infrastructure_migrations_and_auth() -> None:
@@ -194,9 +194,12 @@ def test_plan_guard_fails_unexpected_destroys_and_redacts_secrets() -> None:
 
 def test_public_env_review_rejects_secrets() -> None:
     review = _load("review_public_env")
-    assert review.review_public_env(
-        {"NEXT_PUBLIC_API_BASE_URL": "https://example.com", "NEXT_PUBLIC_APP_ENV": "dev"}
-    ) == []
+    assert (
+        review.review_public_env(
+            {"NEXT_PUBLIC_API_BASE_URL": "https://example.com", "NEXT_PUBLIC_APP_ENV": "dev"}
+        )
+        == []
+    )
     assert review.review_public_env({"NEXT_PUBLIC_API_BASE_URL": "AKIAIOSFODNN7EXAMPLE"}) != []
     assert review.review_public_env({"NEXT_PUBLIC_SECRET_TOKEN": "abc"}) != []
 
@@ -274,3 +277,5 @@ def test_release_scripts_exist_and_refuse_latest() -> None:
     scan = (SCRIPTS / "scan.sh").read_text(encoding="utf-8")
     assert "SCAN_SCOPE" in scan
     assert "scope_enabled" in scan
+    assert "sbom" in scan
+    assert "var/sbom" in scan

@@ -16,7 +16,7 @@ REQUIRED_FIELDS = (
     "Affected plans / requirements",
 )
 ALLOWED_STATUSES = frozenset({"proposed", "accepted", "superseded", "rejected"})
-EXPECTED_IDS = tuple(f"ADR-{index:03d}" for index in range(1, 13))
+EXPECTED_IDS = tuple(f"ADR-{index:03d}" for index in range(1, 14))
 HEADING = re.compile(r"^## (ADR-\d{3}) — (.+)$", re.MULTILINE)
 FIELD = re.compile(r"^- \*\*(.+?):\*\* (.+)$", re.MULTILINE)
 

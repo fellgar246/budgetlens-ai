@@ -1035,8 +1035,30 @@ export function listConversations(baseUrl: string, auth: AuthContext, query?: Pa
   );
 }
 
+export type ConversationTurn = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
 export function getConversation(baseUrl: string, auth: AuthContext, conversationId: string) {
   return requestJson<Conversation>(baseUrl, `${API_PREFIX}/conversations/${conversationId}`, {}, auth);
+}
+
+export function listConversationMessages(
+  baseUrl: string,
+  auth: AuthContext,
+  conversationId: string,
+  query?: PageQuery,
+) {
+  return requestJson<Paginated<ConversationTurn>>(
+    baseUrl,
+    `${API_PREFIX}/conversations/${conversationId}/messages` +
+      queryString({ cursor: query?.cursor, limit: query?.limit }),
+    {},
+    auth,
+  );
 }
 
 export function deleteConversation(baseUrl: string, auth: AuthContext, conversationId: string) {

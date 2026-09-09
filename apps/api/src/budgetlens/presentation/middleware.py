@@ -66,7 +66,8 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         settings = get_settings()
         if is_shutting_down() and request.method not in {"GET", "HEAD", "OPTIONS"}:
-            return JSONResponse(
+            trace_id = resolve_trace_id(request)
+            response = JSONResponse(
                 status_code=503,
                 content={
                     "error": {
@@ -75,9 +76,11 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
                         "field_errors": [],
                         "retryable": True,
                     },
-                    "trace_id": "shutdown",
+                    "trace_id": trace_id,
                 },
             )
+            response.headers[TRACE_HEADER] = trace_id
+            return response
         trace_id = resolve_trace_id(request)
         request_id = uuid.uuid4().hex
         request.state.trace_id = trace_id

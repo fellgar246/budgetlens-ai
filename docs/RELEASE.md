@@ -20,6 +20,7 @@ make portfolio-check
 - [x] Cost page lists sizes and refuses an invented price ([COST.md](COST.md))
 - [x] Decisions and limitations are linked ([DECISIONS.md](DECISIONS.md), [BACKLOG.md](BACKLOG.md), [RISKS.md](RISKS.md))
 - [x] Rollback and restore are documented ([OPERATIONS.md](OPERATIONS.md), [DEPLOYMENT.md](DEPLOYMENT.md), AC-025, AC-026)
+- [x] Local hardening: non-root images, healthchecks, read-only release Compose, scan/SBOM, watchdog, and sanitized logs ([OPERATIONS.md](OPERATIONS.md))
 - [x] Traceability maps requirement → test → implementation ([TRACEABILITY.md](TRACEABILITY.md))
 - [ ] Optional UI screenshots from the seeded dataset ([screenshots/README.md](screenshots/README.md))
 

@@ -21,6 +21,7 @@ export function FilterBar({
   onChange,
   onReset,
   showGroupBy = false,
+  showSort = true,
   eventName,
 }: {
   filters: AnalysisFilters;
@@ -31,6 +32,7 @@ export function FilterBar({
   onChange: (patch: Partial<AnalysisFilters>) => void;
   onReset: () => void;
   showGroupBy?: boolean;
+  showSort?: boolean;
   eventName?: "dashboard_filtered";
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -82,31 +84,17 @@ export function FilterBar({
             onChange={(patch) => emit(patch)}
           />
         </div>
-        <div className="hidden lg:block">
+        <div className="hidden gap-3 lg:grid">
           {showGroupBy ? (
-            <Select
-              label={copy.groupByLabel}
+            <GroupByField
+              id="group-by-desktop"
               value={filters.groupBy}
-              onChange={(event) => emit({ groupBy: event.target.value as GroupByDimension })}
-            >
-              <option value="department">{copy.groupByDepartment}</option>
-              <option value="account">{copy.groupByAccount}</option>
-              <option value="cost_center">{copy.groupByCostCenter}</option>
-            </Select>
-          ) : (
-            <Select
-              label={copy.filterSort}
-              value={filters.sort}
-              onChange={(event) =>
-                emit({
-                  sort: event.target.value === "variance_amount" ? "variance_amount" : "unfavorable",
-                })
-              }
-            >
-              <option value="unfavorable">{copy.sortUnfavorable}</option>
-              <option value="variance_amount">{copy.sortVariance}</option>
-            </Select>
-          )}
+              onChange={(groupBy) => emit({ groupBy })}
+            />
+          ) : null}
+          {showSort ? (
+            <SortField id="sort-desktop" value={filters.sort} onChange={(sort) => emit({ sort })} />
+          ) : null}
         </div>
       </div>
       <div className="mt-3 hidden grid-cols-3 gap-3 lg:grid">
@@ -172,6 +160,20 @@ export function FilterBar({
         }
       >
         <div className="space-y-3">
+          {showGroupBy ? (
+            <GroupByField
+              id="group-by-drawer"
+              value={draft.groupBy}
+              onChange={(groupBy) => setDraft((current) => ({ ...current, groupBy }))}
+            />
+          ) : null}
+          {showSort ? (
+            <SortField
+              id="sort-drawer"
+              value={draft.sort}
+              onChange={(sort) => setDraft((current) => ({ ...current, sort }))}
+            />
+          ) : null}
           <DimensionField
             label={copy.filterDepartment}
             value={draft.departmentId}
@@ -193,6 +195,53 @@ export function FilterBar({
         </div>
       </Drawer>
     </div>
+  );
+}
+
+function SortField({
+  id,
+  value,
+  onChange,
+}: {
+  id?: string;
+  value: AnalysisFilters["sort"];
+  onChange: (value: AnalysisFilters["sort"]) => void;
+}) {
+  return (
+    <Select
+      id={id}
+      label={copy.filterSort}
+      value={value}
+      onChange={(event) =>
+        onChange(event.target.value === "variance_amount" ? "variance_amount" : "unfavorable")
+      }
+    >
+      <option value="unfavorable">{copy.sortUnfavorable}</option>
+      <option value="variance_amount">{copy.sortVariance}</option>
+    </Select>
+  );
+}
+
+function GroupByField({
+  id,
+  value,
+  onChange,
+}: {
+  id?: string;
+  value: GroupByDimension;
+  onChange: (value: GroupByDimension) => void;
+}) {
+  return (
+    <Select
+      id={id}
+      label={copy.groupByLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value as GroupByDimension)}
+    >
+      <option value="department">{copy.groupByDepartment}</option>
+      <option value="account">{copy.groupByAccount}</option>
+      <option value="cost_center">{copy.groupByCostCenter}</option>
+    </Select>
   );
 }
 

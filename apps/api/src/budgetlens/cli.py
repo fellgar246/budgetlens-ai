@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -19,8 +22,14 @@ from budgetlens.adapters.persistence.repositories import (
     SqlMembershipRepository,
     SqlUserRepository,
 )
-from budgetlens.adapters.tenancy import apply_tenant_gucs
-from budgetlens.application.ai_eval import run_live_eval, run_stub_eval, write_eval_report
+from budgetlens.adapters.tenancy import apply_runtime_role, apply_tenant_gucs
+from budgetlens.application.ai_eval import (
+    format_eval_summary,
+    run_live_eval,
+    run_stub_eval,
+    write_eval_markdown,
+    write_eval_report,
+)
 from budgetlens.application.context import TenantContext
 from budgetlens.application.imports import ImportService
 from budgetlens.application.retention import (
@@ -33,13 +42,14 @@ from budgetlens.application.watchdog import timeout_stale_jobs
 from budgetlens.config import get_settings, reset_settings_cache
 from budgetlens.domain.errors import NotFoundError
 from budgetlens.domain.identities import SystemClock, Uuid4Factory
+from budgetlens.runtime import is_shutting_down, mark_shutting_down
 
 DEFAULT_EVAL_DATABASE_URL = (
     "postgresql+psycopg://budgetlens:budgetlens_local_only@127.0.0.1:5433/budgetlens"
 )
 USAGE = (
     "Usage: python -m budgetlens seed|eval-ai [--live] [--output PATH]|"
-    "watchdog|retain-files|import-job validate|apply <job-id>"
+    "watchdog|worker|retain-files|import-job validate|apply <job-id>"
 )
 
 
@@ -55,15 +65,10 @@ def main(argv: list[str] | None = None) -> None:
         _run_eval_ai(args[1:])
         return
     if args == ["watchdog"]:
-        settings = get_settings()
-        with session_scope() as session:
-            timed_out = timeout_stale_jobs(
-                session,
-                clock=SystemClock(),
-                ids=Uuid4Factory(),
-                settings=settings,
-            )
-        print(json.dumps({"timed_out": timed_out}, ensure_ascii=True))
+        print(json.dumps({"timed_out": _run_watchdog_once()}, ensure_ascii=True))
+        return
+    if args == ["worker"]:
+        run_worker_loop()
         return
     if args == ["retain-files"]:
         settings = get_settings()
@@ -97,6 +102,44 @@ def main(argv: list[str] | None = None) -> None:
     raise SystemExit(USAGE)
 
 
+def _run_watchdog_once() -> int:
+    settings = get_settings()
+    with session_scope() as session:
+        return timeout_stale_jobs(
+            session,
+            clock=SystemClock(),
+            ids=Uuid4Factory(),
+            settings=settings,
+        )
+
+
+def run_worker_loop(
+    *,
+    poll_seconds: float | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    on_tick: Callable[[], int] | None = None,
+) -> None:
+    interval = (
+        float(os.environ.get("WORKER_POLL_SECONDS", "30")) if poll_seconds is None else poll_seconds
+    )
+    sleep = sleeper or time.sleep
+    stop = should_stop or is_shutting_down
+    tick = on_tick or _run_watchdog_once
+
+    def handle(_signum: int, _frame: object | None) -> None:
+        mark_shutting_down()
+
+    signal.signal(signal.SIGTERM, handle)
+    signal.signal(signal.SIGINT, handle)
+    while not stop():
+        tick()
+        remaining = max(0.2, interval)
+        deadline = time.monotonic() + remaining
+        while time.monotonic() < deadline and not stop():
+            sleep(min(0.2, deadline - time.monotonic()))
+
+
 def _run_eval_ai(extra: list[str]) -> None:
     live = "--live" in extra
     output: str | None = None
@@ -114,12 +157,17 @@ def _run_eval_ai(extra: list[str]) -> None:
         result = run_live_eval(provider) if live else run_stub_eval(provider)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    print(format_eval_summary(result), end="")
     print(json.dumps(result, indent=2, ensure_ascii=True))
     if output:
-        write_eval_report(result, Path(output))
+        report_path = Path(output)
+        write_eval_report(result, report_path)
+        write_eval_markdown(result, report_path.with_suffix(".md"))
     elif live:
         sha = get_settings().git_sha
-        write_eval_report(result, Path("var") / "ai-eval" / f"{sha}-live.json")
+        live_path = Path("var") / "ai-eval" / f"{sha}-live.json"
+        write_eval_report(result, live_path)
+        write_eval_markdown(result, live_path.with_suffix(".md"))
     passed = result["passed"]
     total = result["total"]
     gates = result.get("gates")
@@ -143,6 +191,7 @@ def _run_import_job(*, operation: str, job_id: str) -> None:
         user = SqlUserRepository(session).get(job.created_by)
         if user is None:
             raise NotFoundError()
+        apply_runtime_role(session, settings.database_runtime_role, app_env=settings.app_env)
         apply_tenant_gucs(session, user_id=user.id, organization_id=job.organization_id)
         membership = SqlMembershipRepository(session, job.organization_id).get_for_user(user.id)
         if membership is None or not membership.is_active():

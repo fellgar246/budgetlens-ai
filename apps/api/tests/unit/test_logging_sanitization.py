@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 
+from fastapi.testclient import TestClient
+
 from budgetlens.logging import JsonLogFormatter
 from budgetlens.observability import hash_identifier, sanitize_log_payload
 
@@ -46,6 +48,44 @@ def test_json_formatter_omits_blocked_record_attributes() -> None:
     assert "should-not-appear" not in rendered
     assert "pregunta financiera" not in rendered
     assert "trace-001" in rendered
+
+
+def test_http_logs_omit_forbidden_values(client: TestClient) -> None:
+    captured: list[str] = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(JsonLogFormatter().format(record))
+
+    handler = _Handler()
+    logger = logging.getLogger("budgetlens.http")
+    logger.addHandler(handler)
+    try:
+        response = client.get(
+            "/api/v1/health/live",
+            headers={
+                "Authorization": "Bearer super-secret-token-value",
+                "Cookie": "session=cookie-secret",
+                "X-Organization-Id": "11111111-1111-4111-8111-111111111111",
+                "X-Trace-Id": "trace-log-001",
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+    assert response.status_code == 200
+    assert response.headers["x-trace-id"] == "trace-log-001"
+    assert captured
+    blob = "\n".join(captured)
+    assert "super-secret-token-value" not in blob
+    assert "cookie-secret" not in blob
+    assert "postgresql://" not in blob
+    assert "DATABASE_URL" not in blob
+    assert "11111111-1111-4111-8111-111111111111" not in blob
+    payload = json.loads(captured[-1])
+    assert payload["event"] == "http.request.completed"
+    assert payload["trace_id"] == "trace-log-001"
+    assert payload["organization_id_hash"]
+    assert payload["organization_id_hash"] != "11111111-1111-4111-8111-111111111111"
 
 
 def test_identifier_hash_is_stable_and_truncated() -> None:

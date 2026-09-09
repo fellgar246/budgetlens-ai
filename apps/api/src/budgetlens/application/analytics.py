@@ -28,6 +28,7 @@ from budgetlens.application.context import TenantContext
 from budgetlens.application.pagination import Page, offset_page
 from budgetlens.application.rate_limit import enforce_limit
 from budgetlens.config import get_settings
+from budgetlens.domain.audit import EXPORT_CREATED, EXPORT_DOWNLOAD_AUTHORIZED
 from budgetlens.domain.enums import (
     AnalyticsGroupBy,
     AnalyticsSort,
@@ -175,7 +176,7 @@ class AnalyticsService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="export.download_authorized",
+            action=EXPORT_DOWNLOAD_AUTHORIZED,
             resource_type="export_job",
             resource_id=job.id,
             trace_id=context.trace_id,
@@ -267,7 +268,7 @@ class AnalyticsService:
             ids=self._ids,
             organization_id=context.organization_id,
             actor_id=context.user.id,
-            action="export.created",
+            action=EXPORT_CREATED,
             resource_type="export_job",
             resource_id=job.id,
             trace_id=context.trace_id,

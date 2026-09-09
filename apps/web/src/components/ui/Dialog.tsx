@@ -26,7 +26,8 @@ export function Dialog({
     if (!open) {
       return;
     }
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previousFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const node = dialogRef.current;
     const focusable = node?.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
@@ -68,7 +69,9 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={cn("relative w-full max-w-lg rounded-surface border border-border bg-surface p-6 shadow-overlay")}
+        className={cn(
+          "relative w-full max-w-lg rounded-surface border border-border bg-surface p-6 shadow-overlay",
+        )}
       >
         <h2 id={titleId} className="text-lg font-semibold text-primary">
           {title}
@@ -76,7 +79,11 @@ export function Dialog({
         <div className="mt-4">{children}</div>
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           {footer ?? (
-            <button type="button" className="h-10 px-4 text-sm font-medium text-brand-600" onClick={onClose}>
+            <button
+              type="button"
+              className="h-10 px-4 text-sm font-medium text-brand-600"
+              onClick={onClose}
+            >
               {copy.close}
             </button>
           )}

@@ -15,6 +15,7 @@ from budgetlens.presentation.schemas_ops import (
     ImportJobListResponse,
     ImportJobResponse,
     ImportPreviewResponse,
+    ImportUploadInfo,
     ValidateImportRequest,
     import_error_group,
     import_error_item,
@@ -55,7 +56,11 @@ def create_import(
         sha256=payload.sha256,
         template_version=payload.template_version,
     )
-    return import_job_response(job, include_upload=True)
+    target = service.upload_descriptor(context, job)
+    return import_job_response(
+        job,
+        upload=ImportUploadInfo(mode=target.mode, method=target.method, url=target.url),
+    )
 
 
 @router.put(

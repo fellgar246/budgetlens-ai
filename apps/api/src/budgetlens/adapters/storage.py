@@ -3,15 +3,36 @@ from __future__ import annotations
 import hashlib
 import hmac
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from budgetlens.domain.errors import NotFoundError, ValidationError, storage_unavailable
+from budgetlens.application.resilience import (
+    CircuitBreaker,
+    RetryPolicy,
+    retry_with_jitter,
+    storage_circuit,
+)
+from budgetlens.domain.errors import (
+    CircuitOpenError,
+    DependencyUnavailableError,
+    NotFoundError,
+    ValidationError,
+    storage_unavailable,
+)
 from budgetlens.domain.text_safety import sanitize_filename
-from budgetlens.ports.storage import ObjectStorage
+from budgetlens.ports.storage import ObjectStorage, PresignedObject
 
-__all__ = ["LocalObjectStorage", "ObjectStorage", "S3ObjectStorage", "object_key", "tenant_prefix"]
+__all__ = [
+    "LocalObjectStorage",
+    "ObjectStorage",
+    "PresignedObject",
+    "S3ObjectStorage",
+    "object_key",
+    "require_tenant_object_key",
+    "tenant_prefix",
+]
 
 DEFAULT_KEY_PEPPER = "budgetlens-local-storage-pepper"
 
@@ -24,6 +45,10 @@ class _S3Client(Protocol):
     def delete_object(self, **kwargs: Any) -> Any: ...
 
     def head_object(self, **kwargs: Any) -> Any: ...
+
+    def generate_presigned_url(
+        self, ClientMethod: str, Params: dict[str, Any], ExpiresIn: int = 900
+    ) -> str: ...
 
 
 def tenant_prefix(organization_id: UUID, pepper: str) -> str:
@@ -51,6 +76,17 @@ def assert_safe_key(key: str) -> str:
     return key
 
 
+def key_belongs_to_organization(key: str, organization_id: UUID, pepper: str) -> bool:
+    return assert_safe_key(key).startswith(f"{tenant_prefix(organization_id, pepper)}/")
+
+
+def require_tenant_object_key(key: str, organization_id: UUID, pepper: str) -> str:
+    cleaned = assert_safe_key(key)
+    if not key_belongs_to_organization(cleaned, organization_id, pepper):
+        raise NotFoundError("No se encontró el archivo.")
+    return cleaned
+
+
 class LocalObjectStorage:
     def __init__(self, root: str, *, key_pepper: str = DEFAULT_KEY_PEPPER) -> None:
         self._root = Path(root).resolve()
@@ -64,6 +100,9 @@ class LocalObjectStorage:
             name=name,
             pepper=self._key_pepper,
         )
+
+    def assert_tenant_key(self, key: str, *, organization_id: UUID) -> None:
+        require_tenant_object_key(key, organization_id, self._key_pepper)
 
     def _path(self, key: str) -> Path:
         path = (self._root / assert_safe_key(key)).resolve()
@@ -111,6 +150,29 @@ class LocalObjectStorage:
         except OSError as exc:
             raise storage_unavailable() from exc
 
+    def presign_put(
+        self,
+        key: str,
+        *,
+        organization_id: UUID,
+        content_type: str,
+        expires_in: int = 900,
+    ) -> PresignedObject | None:
+        del content_type, expires_in
+        require_tenant_object_key(key, organization_id, self._key_pepper)
+        return None
+
+    def presign_get(
+        self,
+        key: str,
+        *,
+        organization_id: UUID,
+        expires_in: int = 900,
+    ) -> PresignedObject | None:
+        del expires_in
+        require_tenant_object_key(key, organization_id, self._key_pepper)
+        return None
+
 
 class S3ObjectStorage:
     def __init__(
@@ -122,6 +184,9 @@ class S3ObjectStorage:
         endpoint_url: str = "",
         client: _S3Client | None = None,
         key_pepper: str = DEFAULT_KEY_PEPPER,
+        retry: RetryPolicy | None = None,
+        circuit: CircuitBreaker | None = None,
+        sleeper: Callable[[float], None] | None = None,
     ) -> None:
         self._bucket = bucket.strip()
         self._region = region
@@ -129,6 +194,9 @@ class S3ObjectStorage:
         self._endpoint_url = endpoint_url.strip()
         self._client = client
         self._key_pepper = key_pepper
+        self._retry = retry or RetryPolicy()
+        self._circuit = circuit or storage_circuit()
+        self._sleeper = sleeper
 
     def generate_key(self, *, organization_id: UUID, namespace: str, name: str) -> str:
         return object_key(
@@ -137,6 +205,9 @@ class S3ObjectStorage:
             name=name,
             pepper=self._key_pepper,
         )
+
+    def assert_tenant_key(self, key: str, *, organization_id: UUID) -> None:
+        require_tenant_object_key(key, organization_id, self._key_pepper)
 
     def _object_key(self, key: str) -> str:
         cleaned = assert_safe_key(key)
@@ -155,8 +226,32 @@ class S3ObjectStorage:
         self._client = cast(_S3Client, _boto3_client("s3", **kwargs))
         return self._client
 
-    def put(self, key: str, data: bytes, *, content_type: str) -> None:
+    def _run[T](self, operation: Callable[[], T]) -> T:
+        def once() -> T:
+            try:
+                return operation()
+            except (NotFoundError, ValidationError, CircuitOpenError, DependencyUnavailableError):
+                raise
+            except Exception as exc:
+                if _is_missing_object(exc):
+                    raise NotFoundError("No se encontró el archivo.") from exc
+                raise
+
         try:
+            return self._circuit.call(
+                lambda: retry_with_jitter(
+                    once,
+                    policy=self._retry,
+                    sleeper=self._sleeper,
+                )
+            )
+        except (NotFoundError, ValidationError, CircuitOpenError, DependencyUnavailableError):
+            raise
+        except Exception as exc:
+            raise storage_unavailable() from exc
+
+    def put(self, key: str, data: bytes, *, content_type: str) -> None:
+        def write() -> None:
             self._require_client().put_object(
                 Bucket=self._bucket,
                 Key=self._object_key(key),
@@ -164,13 +259,11 @@ class S3ObjectStorage:
                 ContentType=content_type or "application/octet-stream",
                 ServerSideEncryption="AES256",
             )
-        except (NotFoundError, ValidationError):
-            raise
-        except Exception as exc:
-            raise storage_unavailable() from exc
+
+        self._run(write)
 
     def get(self, key: str) -> bytes:
-        try:
+        def read() -> bytes:
             response = self._require_client().get_object(
                 Bucket=self._bucket, Key=self._object_key(key)
             )
@@ -178,29 +271,81 @@ class S3ObjectStorage:
             if not isinstance(body, bytes):
                 raise storage_unavailable()
             return body
-        except (NotFoundError, ValidationError):
-            raise
-        except Exception as exc:
-            if _is_missing_object(exc):
-                raise NotFoundError("No se encontró el archivo.") from exc
-            raise storage_unavailable() from exc
+
+        return self._run(read)
 
     def exists(self, key: str) -> bool:
-        try:
-            self._require_client().head_object(Bucket=self._bucket, Key=self._object_key(key))
+        def head() -> bool:
+            try:
+                self._require_client().head_object(Bucket=self._bucket, Key=self._object_key(key))
+            except Exception as exc:
+                if _is_missing_object(exc):
+                    return False
+                raise
             return True
-        except Exception as exc:
-            if _is_missing_object(exc):
-                return False
-            raise storage_unavailable() from exc
+
+        return self._run(head)
 
     def delete(self, key: str) -> None:
-        try:
+        def remove() -> None:
             self._require_client().delete_object(Bucket=self._bucket, Key=self._object_key(key))
+
+        try:
+            self._run(remove)
+        except NotFoundError:
+            return
+
+    def presign_put(
+        self,
+        key: str,
+        *,
+        organization_id: UUID,
+        content_type: str,
+        expires_in: int = 900,
+    ) -> PresignedObject | None:
+        require_tenant_object_key(key, organization_id, self._key_pepper)
+        return self._presign(
+            "put_object",
+            key,
+            expires_in=expires_in,
+            extra={"ContentType": content_type or "application/octet-stream"},
+        )
+
+    def presign_get(
+        self,
+        key: str,
+        *,
+        organization_id: UUID,
+        expires_in: int = 900,
+    ) -> PresignedObject | None:
+        require_tenant_object_key(key, organization_id, self._key_pepper)
+        return self._presign("get_object", key, expires_in=expires_in)
+
+    def _presign(
+        self,
+        method: str,
+        key: str,
+        *,
+        expires_in: int,
+        extra: dict[str, str] | None = None,
+    ) -> PresignedObject:
+        params: dict[str, Any] = {"Bucket": self._bucket, "Key": self._object_key(key)}
+        if extra:
+            params.update(extra)
+        try:
+            url = self._run(
+                lambda: self._require_client().generate_presigned_url(
+                    method, Params=params, ExpiresIn=expires_in
+                )
+            )
+        except (NotFoundError, ValidationError, CircuitOpenError, DependencyUnavailableError):
+            raise
         except Exception as exc:
-            if _is_missing_object(exc):
-                return
             raise storage_unavailable() from exc
+        if not url:
+            raise storage_unavailable()
+        http_method = "PUT" if method == "put_object" else "GET"
+        return PresignedObject(method=http_method, url=url, expires_in=expires_in)
 
 
 def _is_missing_object(exc: Exception) -> bool:

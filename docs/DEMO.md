@@ -32,7 +32,7 @@ Budget and actuals arrive as spreadsheets. Spreadsheet formulas and chat answers
 
 1. On **Iniciar sesión**, choose **Ana Analyst**.
 2. Continue and enter organization **Alpha**.
-3. Confirm the header shows Alpha and a fiscal period in MXN.
+3. Confirm the header shows Alpha and a fiscal period in MXN. The summary selects the active budget version and keeps that scope in the URL.
 
 Authorization uses the selected identity, not the URL. Switching organization later clears filters and visible copilot state.
 

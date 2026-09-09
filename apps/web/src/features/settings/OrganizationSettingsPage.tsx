@@ -103,7 +103,9 @@ export function OrganizationSettingsPage() {
           <Button type="submit">{copy.saveOrganization}</Button>
         ) : null}
         {message && message !== copy.saveOrganization ? <ErrorBanner error={message} /> : null}
-        {message === copy.saveOrganization ? <p className="text-sm text-secondary">{message}</p> : null}
+        {message === copy.saveOrganization ? (
+          <p className="text-sm text-secondary">{message}</p>
+        ) : null}
       </form>
     </CapabilityGate>
   );

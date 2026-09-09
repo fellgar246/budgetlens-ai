@@ -91,7 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/settings/dimensions",
-        label: copy.navCatalog,
+        label: copy.navDimensions,
         visible: (capabilities) =>
           capabilities.can_view_dashboard || capabilities.can_manage_dimensions,
       },

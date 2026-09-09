@@ -9,6 +9,7 @@ from budgetlens.adapters.imports import build_import_executor
 from budgetlens.adapters.parsing import OpenpyxlWorkbookParser, ParseLimits
 from budgetlens.adapters.persistence.repositories import SqlUserRepository
 from budgetlens.adapters.storage import LocalObjectStorage, S3ObjectStorage
+from budgetlens.application.resilience import policy_from_settings, storage_circuit
 from budgetlens.config import Settings
 from budgetlens.ports.ai import AIProvider
 from budgetlens.ports.exports import ExportExecutor
@@ -20,12 +21,17 @@ from budgetlens.ports.storage import ObjectStorage
 
 def build_object_storage(settings: Settings) -> ObjectStorage:
     if settings.object_storage_backend == "s3":
+        circuit = storage_circuit()
+        circuit.failure_threshold = settings.dependency_circuit_failures
+        circuit.reset_seconds = settings.dependency_circuit_reset_seconds
         return S3ObjectStorage(
             bucket=settings.s3_bucket,
             region=settings.s3_region,
             prefix=settings.s3_prefix,
             endpoint_url=settings.s3_endpoint_url,
             key_pepper=settings.storage_key_pepper,
+            retry=policy_from_settings(settings),
+            circuit=circuit,
         )
     return LocalObjectStorage(settings.local_storage_path, key_pepper=settings.storage_key_pepper)
 

@@ -1,0 +1,109 @@
+name: budgetlens-release
+
+# Hardened local release candidate. Does not replace compose.yaml.
+# docker compose -f compose.release.yaml up --build
+# Writable paths: /tmp (tmpfs) and /var/lib/budgetlens/storage (bind mount).
+
+x-api-environment: &api-environment
+  APP_ENV: local
+  APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  GIT_SHA: ${GIT_SHA:-unknown}
+  BUILD_TIME: ${BUILD_TIME:-unknown}
+  DATABASE_URL: postgresql+psycopg://budgetlens:budgetlens_local_only@postgres:5432/budgetlens
+  OBJECT_STORAGE_BACKEND: local
+  LOCAL_STORAGE_PATH: /var/lib/budgetlens/storage
+  AUTH_MODE: dev
+  AI_PROVIDER: stub
+  IMPORT_EXECUTOR: ${IMPORT_EXECUTOR:-inline}
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+  DB_READY_TIMEOUT_SECONDS: ${DB_READY_TIMEOUT_SECONDS:-2}
+  JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-600}
+  API_RELOAD: "0"
+  RUN_MIGRATIONS_ON_START: "1"
+  PYTHONPATH: /app/src
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: budgetlens
+      POSTGRES_PASSWORD: budgetlens_local_only
+      POSTGRES_DB: budgetlens
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_release_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U budgetlens -d budgetlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./apps/api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      <<: *api-environment
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./var/storage:/var/lib/budgetlens/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: release
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-local}
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://127.0.0.1:3000/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_release_data:

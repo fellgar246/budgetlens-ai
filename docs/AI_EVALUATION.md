@@ -4,7 +4,7 @@ Dated: 2026-09-01. Synthetic Alpha FY2026 ledger only. This page publishes aggre
 
 ## Scope
 
-The copilot may call four read tools: variance summary, breakdown, period compare, and top unfavorable variances. There is no SQL tool, no file tool, and no mutation tool. Grounding checks extract amounts from the answer and compare them to the financial engine.
+The copilot may call five read tools: variance summary, breakdown, period compare, top unfavorable variances, and scenario preview. There is no SQL tool, no file tool, and no mutation tool. Grounding checks extract amounts from the answer and compare them to the financial engine.
 
 `make eval-ai` runs the stub dataset on every local or CI evaluation. Live Bedrock is a separate command (`python -m budgetlens eval-ai --live`) and stays behind gate M-04.
 

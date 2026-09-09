@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   createExport,
@@ -19,6 +20,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Table } from "@/components/ui/Table";
 import { Variance } from "@/components/ui/Variance";
 import { VarianceBadge } from "@/components/ui/VarianceBadge";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { CapabilityGate } from "@/components/layout/CapabilityGate";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -30,6 +32,8 @@ import { useSession } from "@/features/session/SessionProvider";
 import { withPathFilters, type GroupByDimension } from "@/lib/analysis-filters";
 import { trackEvent } from "@/lib/analytics";
 import { copy } from "@/lib/copy";
+import { exportScopeText } from "@/lib/export-scope";
+import { sortCaption } from "@/lib/labels";
 import { apiBaseUrl } from "@/lib/env";
 import { sessionAuth } from "@/lib/session-auth";
 import { formatPercent } from "@/lib/format";
@@ -39,8 +43,8 @@ const PAGE_SIZE = 50;
 
 export function VariancesPage() {
   const { userId, organizationId, selectedOrganization, capabilities } = useSession();
-  const { filters, update, reset } = useAnalysisFilters();
   const catalog = useCatalogOptions();
+  const { filters, update, reset } = useAnalysisFilters(catalog.versions);
   const hasSession = Boolean(userId && organizationId);
   const query = useMemo(
     () =>
@@ -64,7 +68,16 @@ export function VariancesPage() {
 
   const crumbs = [
     { href: withPathFilters("/dashboard", filters), label: copy.breadcrumbHome },
-    { href: withPathFilters("/variances", { ...filters, departmentId: "", accountId: "", costCenterId: "", groupBy: "department" }), label: copy.allAreas },
+    {
+      href: withPathFilters("/variances", {
+        ...filters,
+        departmentId: "",
+        accountId: "",
+        costCenterId: "",
+        groupBy: "department",
+      }),
+      label: copy.allAreas,
+    },
     filters.departmentId
       ? {
           href: withPathFilters("/variances", {
@@ -78,7 +91,11 @@ export function VariancesPage() {
       : null,
     filters.accountId
       ? {
-          href: withPathFilters("/variances", { ...filters, costCenterId: "", groupBy: "cost_center" }),
+          href: withPathFilters("/variances", {
+            ...filters,
+            costCenterId: "",
+            groupBy: "cost_center",
+          }),
           label: labelFor(catalog.accounts, filters.accountId, copy.filterAccount),
         }
       : null,
@@ -128,11 +145,14 @@ export function VariancesPage() {
   function drill(item: BreakdownItem) {
     trackEvent("variance_drilled_down", { group_by: groupBy });
     if (groupBy === "department") {
-      update({ departmentId: item.group_id, accountId: "", costCenterId: "", groupBy: "account" });
+      update(
+        { departmentId: item.group_id, accountId: "", costCenterId: "", groupBy: "account" },
+        "push",
+      );
     } else if (groupBy === "account") {
-      update({ accountId: item.group_id, costCenterId: "", groupBy: "cost_center" });
+      update({ accountId: item.group_id, costCenterId: "", groupBy: "cost_center" }, "push");
     } else {
-      update({ costCenterId: item.group_id });
+      update({ costCenterId: item.group_id }, "push");
     }
   }
 
@@ -144,9 +164,26 @@ export function VariancesPage() {
           title={copy.variancesTitle}
           description={copy.variancesDescription}
           actions={
-            <Button variant="secondary" disabled={!query || status !== "ready"} onClick={() => setExportOpen(true)}>
-              {copy.exportView}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {capabilities.can_use_copilot ? (
+                <Link
+                  className="inline-flex h-10 items-center rounded-control px-4 text-sm font-medium text-brand-600 hover:bg-canvas"
+                  href={withPathFilters("/copilot", filters)}
+                >
+                  {copy.askFromDashboard}
+                </Link>
+              ) : null}
+              {capabilities.can_export ? (
+                <Button
+                  variant="secondary"
+                  disabled={!query || status !== "ready"}
+                  title={status === "ready" ? copy.exportView : copy.exportDisabled}
+                  onClick={() => setExportOpen(true)}
+                >
+                  {copy.exportView}
+                </Button>
+              ) : null}
+            </div>
           }
         />
       </div>
@@ -159,10 +196,31 @@ export function VariancesPage() {
         onChange={update}
         onReset={reset}
         showGroupBy
+        showSort
       />
-      <p className="mt-3 text-xs text-secondary">{copy.sortOrderLabel}</p>
-      {status === "loading" ? <p className="mt-6 text-sm text-secondary">{copy.loadingFigures}</p> : null}
-      {status === "error" ? <ErrorBanner error={error ?? copy.figuresError} onRetry={() => update({})} /> : null}
+      <p className="mt-3 text-xs text-secondary">
+        {sortCaption(filters.sort)}
+        {query ? (
+          <>
+            {" · "}
+            <Link
+              className="font-medium text-brand-600"
+              href={withPathFilters("/dashboard", filters)}
+            >
+              {copy.monthlyCompare}
+            </Link>
+          </>
+        ) : null}
+      </p>
+      {status === "loading" ? (
+        <div className="mt-6 space-y-3" aria-busy="true" aria-label={copy.loadingFigures}>
+          <Skeleton className="h-10" />
+          <Skeleton className="h-48" />
+        </div>
+      ) : null}
+      {status === "error" ? (
+        <ErrorBanner error={error ?? copy.figuresError} onRetry={() => update({})} />
+      ) : null}
       {status === "ready" && summary && items.length > 0 ? (
         <section className="mt-6 rounded-surface border border-border bg-surface p-4 md:p-6">
           <p className="text-sm text-secondary">
@@ -178,7 +236,9 @@ export function VariancesPage() {
             <Table caption={copy.variancesTitle}>
               <thead className="sticky top-0 bg-surface">
                 <tr className="border-b border-border text-secondary">
-                  <th className="sticky left-0 bg-surface py-2 pr-4 font-medium">{copy.columnDimension}</th>
+                  <th className="sticky left-0 bg-surface py-2 pr-4 font-medium">
+                    {copy.columnDimension}
+                  </th>
                   <th className="py-2 pr-4 text-right font-medium">{copy.columnBudget}</th>
                   <th className="py-2 pr-4 text-right font-medium">{copy.columnActual}</th>
                   <th className="py-2 pr-4 text-right font-medium">{copy.columnVariance}</th>
@@ -202,7 +262,9 @@ export function VariancesPage() {
                     <td className="py-2 pr-4 text-right">
                       <Money value={item.metrics.variance_amount} currency={currency} />
                     </td>
-                    <td className="py-2 pr-4 text-right">{formatPercent(item.metrics.variance_percent)}</td>
+                    <td className="py-2 pr-4 text-right">
+                      {formatPercent(item.metrics.variance_percent)}
+                    </td>
                     <td className="py-2">
                       <VarianceBadge value={item.metrics.favorability} />
                     </td>
@@ -229,7 +291,8 @@ export function VariancesPage() {
                 </p>
                 {expanded === item.group_id ? (
                   <p className="mt-2 text-sm text-secondary">
-                    {copy.columnBudget}: <Money value={item.metrics.budget_amount} currency={currency} /> ·{" "}
+                    {copy.columnBudget}:{" "}
+                    <Money value={item.metrics.budget_amount} currency={currency} /> ·{" "}
                     {formatPercent(item.metrics.variance_percent)}
                   </p>
                 ) : null}
@@ -264,7 +327,12 @@ export function VariancesPage() {
       ) : null}
       <ExportDialog
         open={exportOpen}
-        scope={`${currency} · ${copy.groupByLabel}: ${groupBy} · ${copy.filterSort}: ${filters.sort}`}
+        scope={exportScopeText(
+          currency,
+          query ? `${query.period_from} – ${query.period_to}` : "",
+          groupBy,
+          filters.sort,
+        )}
         onClose={() => setExportOpen(false)}
         onConfirm={() => {
           if (!query || !userId || !organizationId) return;

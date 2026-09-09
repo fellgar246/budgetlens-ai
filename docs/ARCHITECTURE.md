@@ -82,6 +82,7 @@ Tenant isolation is enforced in the use case and again with PostgreSQL row-level
 | [ADR-006](DECISIONS.md#adr-006--postgresql-with-row-level-security) | Application auth plus RLS |
 | [ADR-007](DECISIONS.md#adr-007--ports-for-storage-identity-and-ai) | Local adapters; no AWS SDK in the domain |
 | [ADR-009](DECISIONS.md#adr-009--ci-assumes-aws-through-github-oidc) | CI uses OIDC, not permanent access keys |
+| [ADR-013](DECISIONS.md#adr-013--portable-in-process-metrics-and-w3c-traces) | In-process metrics and `traceparent`; no vendor telemetry SDK |
 
 Conversation persistence in `dev`/`prod` stays redacted until [ADR-012](DECISIONS.md#adr-012--conversation-persistence-policy) is accepted by a human.
 

@@ -12139,6 +12139,219 @@
       }
     },
     "/api/v1/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Persisted turns for a conversation owned by the caller.",
+        "operationId": "list_conversation_messages",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMessageListResponse"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated without permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found or hidden cross-tenant resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "IMPORT_VALIDATION_FAILED",
+                    "message": "El archivo contiene errores que deben corregirse.",
+                    "field_errors": [
+                      {
+                        "field": "period",
+                        "code": "INVALID_PERIOD",
+                        "message": "Periodo inv\u00e1lido."
+                      }
+                    ],
+                    "retryable": false
+                  },
+                  "trace_id": "01HZX4EXAMPLETRACE"
+                }
+              }
+            },
+            "headers": {
+              "X-Trace-Id": {
+                "description": "Request correlation identifier.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Persisted turns for a conversation owned by the caller. Permission: USE_AI.",
+        "x-permission": "USE_AI",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "conversations"
@@ -13437,6 +13650,62 @@
           "page"
         ],
         "title": "ConversationListResponse"
+      },
+      "ConversationMessageItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ConversationMessageItem"
+      },
+      "ConversationMessageListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessageItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "ConversationMessageListResponse"
       },
       "ConversationResponse": {
         "properties": {

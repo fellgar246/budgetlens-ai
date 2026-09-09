@@ -37,6 +37,7 @@ import {
   requiredMappingComplete,
   sampleValuesForHeader,
 } from "@/lib/import-mapping";
+import { importFieldLabel } from "@/lib/labels";
 import { isImportJobSettled, pollWithBackoff } from "@/lib/poll";
 import { sessionAuth } from "@/lib/session-auth";
 
@@ -66,6 +67,7 @@ export function ImportWizardPage() {
   const [sheetName, setSheetName] = useState("");
   const [amountLocale, setAmountLocale] = useState<"en" | "es">("es");
   const [createMissing, setCreateMissing] = useState(false);
+  const [understandReplace, setUnderstandReplace] = useState(false);
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState(false);
   const [longWait, setLongWait] = useState(false);
@@ -76,7 +78,9 @@ export function ImportWizardPage() {
   const auth = useMemo(() => sessionAuth(userId, organizationId), [organizationId, userId]);
   const draftVersions = catalog.versions.filter((item) => item.status === "draft");
   const mappingReady = requiredMappingComplete(mapping);
-  const commitEnabled = job?.status === "ready" && job.error_count === 0;
+  const replaceRequired = (preview?.replaced_records ?? 0) > 0;
+  const commitEnabled =
+    job?.status === "ready" && job.error_count === 0 && (!replaceRequired || understandReplace);
 
   useEffect(() => {
     if (!busy) {
@@ -183,6 +187,7 @@ export function ImportWizardPage() {
       setJob(settled);
       setPreview(nextPreview.data);
       setErrors(nextErrors.data.items);
+      setUnderstandReplace(false);
       trackEvent("import_validated", { import_type: importType });
       setStep(3);
       window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
@@ -346,14 +351,16 @@ export function ImportWizardPage() {
                 return (
                   <tr key={field} className="border-t border-border">
                     <td className="py-2 pr-4">
-                      {field} · {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
+                      {importFieldLabel(field)} ·{" "}
+                      {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
                     </td>
                     <td className="py-2 pr-4 text-secondary">
                       {header ? sampleValuesForHeader(sourceRows, header) : "—"}
                     </td>
                     <td className="py-2 pr-4">
                       <label className="sr-only" htmlFor={`map-${field}`}>
-                        {field} · {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
+                        {importFieldLabel(field)} ·{" "}
+                        {REQUIRED.has(field) ? copy.requiredField : copy.optionalField}
                       </label>
                       <select
                         id={`map-${field}`}
@@ -436,7 +443,7 @@ export function ImportWizardPage() {
           className="mt-6 space-y-4 rounded-surface border border-border bg-surface p-6 outline-none"
         >
           <div className="grid gap-3 md:grid-cols-4">
-            <Stat label={copy.periodLabel} value={String(job.row_count)} />
+            <Stat label={copy.rowCount} value={String(job.row_count)} />
             <Stat label={copy.validRows} value={String(job.valid_count)} />
             <Stat label={copy.warningRows} value={String(job.warning_count)} />
             <Stat label={copy.errorRows} value={String(job.error_count)} />
@@ -476,7 +483,7 @@ export function ImportWizardPage() {
                 {["period", "account_code", "department_code", "amount", "currency"].map(
                   (header) => (
                     <th key={header} className="pb-2 pr-4 font-medium">
-                      {header}
+                      {importFieldLabel(header)}
                     </th>
                   ),
                 )}
@@ -506,7 +513,20 @@ export function ImportWizardPage() {
             {preview.new_accounts + preview.new_departments + preview.new_cost_centers} ·{" "}
             {copy.matchingExisting} {preview.replaced_records}
           </Alert>
-          <p className="text-sm text-secondary">{copy.importAppendHint}</p>
+          <p className="text-sm text-secondary">
+            {replaceRequired ? copy.replaceWarning : copy.importAppendHint}
+          </p>
+          {replaceRequired ? (
+            <label className="flex items-start gap-2 text-sm text-primary">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4"
+                checked={understandReplace}
+                onChange={(event) => setUnderstandReplace(event.target.checked)}
+              />
+              <span>{copy.understandReplace}</span>
+            </label>
+          ) : null}
         </section>
       ) : null}
 

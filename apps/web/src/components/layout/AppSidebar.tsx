@@ -3,10 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { visibleNavGroups } from "@/lib/capabilities";
-import { copy } from "@/lib/copy";
-import { cn } from "@/lib/cn";
 import { useSession } from "@/features/session/SessionProvider";
+import { readStoredFilters, withPathFilters, withTrailingSlash } from "@/lib/analysis-filters";
+import { visibleNavGroups } from "@/lib/capabilities";
+import { cn } from "@/lib/cn";
+import { copy } from "@/lib/copy";
+
+function navHref(href: string, organizationId: string): string {
+  if (href === "/dashboard" || href === "/variances" || href === "/copilot") {
+    return withPathFilters(href, readStoredFilters(organizationId || null));
+  }
+  return withTrailingSlash(href);
+}
 
 export function AppSidebar({
   open,
@@ -20,7 +28,7 @@ export function AppSidebar({
   onToggleCollapsed: () => void;
 }) {
   const pathname = usePathname();
-  const { capabilities } = useSession();
+  const { capabilities, organizationId } = useSession();
   const groups = visibleNavGroups(capabilities);
 
   return (
@@ -38,7 +46,7 @@ export function AppSidebar({
         )}
       >
         <div className="flex h-14 items-center px-4 md:h-16">
-            <p className={cn("text-lg font-semibold tracking-tight", collapsed && "lg:sr-only")}>
+          <p className={cn("text-lg font-semibold tracking-tight", collapsed && "lg:sr-only")}>
             {copy.appName}
           </p>
           {collapsed ? (
@@ -70,7 +78,8 @@ export function AppSidebar({
                   return (
                     <li key={item.href}>
                       <Link
-                        href={item.href}
+                        href={navHref(item.href, organizationId)}
+                        title={item.label}
                         onClick={onClose}
                         className={cn(
                           "flex h-10 items-center rounded-control px-3 text-sm font-medium",

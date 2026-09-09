@@ -6,7 +6,13 @@ import { usePathname } from "next/navigation";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
 
-const AUTH_ROUTES = new Set(["/login", "/select-organization"]);
+const AUTH_ROUTES = new Set([
+  "/login",
+  "/select-organization",
+  "/callback",
+  "/logout",
+  "/auth/error",
+]);
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();

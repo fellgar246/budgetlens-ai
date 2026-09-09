@@ -133,6 +133,7 @@ def test_cross_tenant_idor_covers_jobs_scenarios_conversations_and_exports(
         f"{PREFIX}/imports/{job_id}/error-report",
         f"{PREFIX}/scenarios/{scenario_id}",
         f"{PREFIX}/conversations/{conversation_id}",
+        f"{PREFIX}/conversations/{conversation_id}/messages",
         f"{PREFIX}/exports/{export_id}/content",
     ):
         read = seeded_client.get(path, headers=_headers(ALPHA_ADMIN_ID, ALPHA_ORG_ID))

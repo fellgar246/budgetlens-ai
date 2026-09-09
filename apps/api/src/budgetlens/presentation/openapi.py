@@ -261,6 +261,9 @@ OPERATIONS: dict[str, OperationContract] = {
     "delete_conversation": OperationContract(
         "USE_AI", TENANT_ERRORS, "Logical delete of a conversation."
     ),
+    "list_conversation_messages": OperationContract(
+        "USE_AI", TENANT_ERRORS, "Persisted turns for a conversation owned by the caller."
+    ),
     "create_conversation_message": OperationContract(
         "USE_AI",
         RATE_LIMITED_MUTATION,

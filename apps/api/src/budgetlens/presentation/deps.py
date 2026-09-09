@@ -44,9 +44,10 @@ from budgetlens.ports.storage import ObjectStorage
 
 
 def get_db_session() -> Generator[Session, None, None]:
+    settings = get_settings()
     session = get_session_factory()()
     try:
-        apply_runtime_role(session, get_settings().database_runtime_role)
+        apply_runtime_role(session, settings.database_runtime_role, app_env=settings.app_env)
         yield session
         session.commit()
     except Exception:

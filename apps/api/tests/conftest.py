@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from budgetlens.adapters.db import reset_engine
 from budgetlens.application.rate_limit import limiter
+from budgetlens.application.resilience import reset_circuits
 from budgetlens.config import reset_settings_cache
 from budgetlens.observability import reset_metrics
 from budgetlens.presentation.app import create_app
@@ -21,8 +22,10 @@ DEFAULT_DATABASE_URL = (
 @pytest.fixture(autouse=True)
 def isolate_rate_limits() -> Iterator[None]:
     limiter().reset()
+    reset_circuits()
     yield
     limiter().reset()
+    reset_circuits()
 
 
 @pytest.fixture

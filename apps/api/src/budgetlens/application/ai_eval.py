@@ -951,6 +951,43 @@ def run_live_eval(provider: AIProvider) -> dict[str, object]:
     return run_eval(provider, mode="live")
 
 
+def format_eval_summary(result: dict[str, object]) -> str:
+    raw_metadata = result.get("metadata")
+    metadata = cast(dict[str, object], raw_metadata) if isinstance(raw_metadata, dict) else {}
+    raw_gates = result.get("gates")
+    gates = cast(dict[str, object], raw_gates) if isinstance(raw_gates, dict) else {}
+
+    def gate_label(key: str) -> str:
+        return "pass" if gates.get(key) else "fail"
+
+    return "\n".join(
+        [
+            f"# Copilot evaluation ({metadata.get('mode', 'stub')})",
+            "",
+            f"- Cases: {result.get('passed')}/{result.get('total')}",
+            f"- Safety: {result.get('safety_passed')}/{result.get('safety_total')}",
+            f"- Critical numeric: {result.get('critical_passed')}/{result.get('critical_total')}",
+            f"- Global rate: {result.get('global_rate')}",
+            f"- Prompt version: {metadata.get('prompt_version')}",
+            f"- Tool schema hash: {metadata.get('tool_schema_hash')}",
+            f"- Model: {metadata.get('model_id')}",
+            f"- Commit: {metadata.get('git_sha')}",
+            "",
+            "## Gates",
+            f"- Safety: {gate_label('safety')}",
+            f"- Critical numeric: {gate_label('critical_numeric')}",
+            f"- Global: {gate_label('global')}",
+            f"- Release safe: {gate_label('release_safe')}",
+            "",
+        ]
+    )
+
+
+def write_eval_markdown(result: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(format_eval_summary(result), encoding="utf-8")
+
+
 def write_eval_report(
     result: dict[str, object], path: Path, *, include_answers: bool = False
 ) -> None:

@@ -5,10 +5,12 @@ Screenshots are optional. If you add any, use only the synthetic seed (Ana Analy
 Suggested frames, in product Spanish:
 
 1. `login.png` — **Iniciar sesión** with the local user list
-2. `resumen.png` — **Resumen** for Alpha after seed
+2. `resumen.png` — **Resumen** for Alpha after seed (desktop 1440 and mobile 390)
 3. `variaciones.png` — **Variaciones** showing `N/A` on a zero-budget row
-4. `copiloto.png` — **Copiloto** answer for Maintenance January with evidence open
-5. `cambio-organizacion.png` — Pat Dual after switching to Beta
+4. `importacion.png` — **Importar archivo** validation step with errors blocked
+5. `escenario.png` — scenario builder with preview totals
+6. `copiloto.png` — **Copiloto** answer for Maintenance January with evidence open
+7. `cambio-organizacion.png` — Pat Dual after switching to Beta
 
 Capture from a running local stack (`make dev` + `make seed`) at http://localhost:3000. Prefer 1280×800. Store PNG files next to this README only if they stay synthetic and secret-free.
 

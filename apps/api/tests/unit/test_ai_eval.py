@@ -12,10 +12,12 @@ from budgetlens.application.ai_eval import (
     CASE_BY_ID,
     EVAL_CASES,
     EvalObservation,
+    format_eval_summary,
     run_live_eval,
     run_stub_eval,
     score_case,
     tool_schema_hash,
+    write_eval_markdown,
     write_eval_report,
 )
 from budgetlens.application.ai_eval_dataset import (
@@ -199,6 +201,17 @@ def test_live_eval_is_gated_to_bedrock(env_settings: None) -> None:
     del env_settings
     with pytest.raises(ValueError, match="bedrock"):
         run_live_eval(DeterministicAIProvider())
+
+
+def test_eval_summary_is_markdown_and_omits_prompts(tmp_path: Path) -> None:
+    result = run_stub_eval(DeterministicAIProvider())
+    rendered = format_eval_summary(result)
+    assert rendered.startswith("# Copilot evaluation (stub)")
+    assert "Safety: pass" in rendered
+    assert "Critical numeric: pass" in rendered
+    assert "Ignora tus reglas" not in rendered
+    write_eval_markdown(result, tmp_path / "eval.md")
+    assert (tmp_path / "eval.md").read_text(encoding="utf-8") == rendered
 
 
 def test_eval_report_omits_answers_when_dataset_is_not_synthetic(tmp_path: Path) -> None:

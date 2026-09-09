@@ -27,8 +27,12 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { personaLabel } from "@/lib/capabilities";
 import { copy } from "@/lib/copy";
+import { accountTypeLabel, dimensionStatusLabel, versionStatusLabel } from "@/lib/labels";
 import { getAccessToken } from "@/lib/access-token";
 import { readDevOrganizationId, readDevUserId } from "@/lib/dev-session";
 import { apiBaseUrl } from "@/lib/env";
@@ -55,7 +59,21 @@ function auth() {
   return { token, organizationId };
 }
 
-export function CatalogPage() {
+export function CatalogPage({ section = "all" }: { section?: "all" | "dimensions" | "versions" }) {
+  const showDimensions = section !== "versions";
+  const showVersions = section !== "dimensions";
+  const title =
+    section === "versions"
+      ? copy.versionsTitle
+      : section === "dimensions"
+        ? copy.dimensionsTitle
+        : copy.catalogTitle;
+  const description =
+    section === "versions"
+      ? copy.versionsDescription
+      : section === "dimensions"
+        ? copy.dimensionsDescription
+        : copy.catalogDescription;
   const [state, setState] = useState<CatalogState>({ kind: "idle" });
   const [accountForm, setAccountForm] = useState({ code: "", name: "", account_type: "expense" });
   const [departmentForm, setDepartmentForm] = useState({ code: "", name: "" });
@@ -125,8 +143,8 @@ export function CatalogPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
       <p className="text-sm font-medium text-secondary">{copy.appName}</p>
-      <h1 className="mt-2 text-[28px] font-semibold leading-9 text-primary">{copy.catalogTitle}</h1>
-      <p className="mt-2 max-w-3xl text-base text-secondary">{copy.catalogDescription}</p>
+      <h1 className="mt-2 text-[28px] font-semibold leading-9 text-primary">{title}</h1>
+      <p className="mt-2 max-w-3xl text-base text-secondary">{description}</p>
 
       {state.kind === "idle" ? (
         <section className="mt-8 rounded-surface border border-border bg-surface p-6">
@@ -142,25 +160,19 @@ export function CatalogPage() {
         >
           <p className="text-sm font-medium text-secondary">{copy.catalogLoading}</p>
           <div className="mt-6 space-y-3">
-            <div className="h-8 animate-pulse rounded bg-[#eaecf0]" />
-            <div className="h-24 animate-pulse rounded bg-[#eaecf0]" />
+            <div className="h-8 animate-pulse rounded bg-[var(--bl-neutral-100)]" />
+            <div className="h-24 animate-pulse rounded bg-[var(--bl-neutral-100)]" />
           </div>
         </section>
       ) : null}
 
       {state.kind === "error" ? (
-        <section className="mt-8 rounded-surface border border-border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-primary">{copy.catalogError}</h2>
-          <p className="mt-2 text-sm text-secondary">{state.message}</p>
-          {state.traceId ? (
-            <p className="mt-2 text-xs text-secondary">
-              {copy.traceLabel}: {state.traceId}
-            </p>
-          ) : null}
-          <div className="mt-4">
-            <Button onClick={() => void refresh()}>{copy.retry}</Button>
-          </div>
-        </section>
+        <ErrorBanner
+          error={
+            state.traceId ? new ApiRequestError(state.message, 500, state.traceId) : state.message
+          }
+          onRetry={() => void refresh()}
+        />
       ) : null}
 
       {state.kind === "ready" ? (
@@ -169,302 +181,337 @@ export function CatalogPage() {
             {state.me.display_name} · {copy.roleLabel}: {personaLabel(state.me.persona)} ·{" "}
             {copy.currencyLabel} en totales de la organización
           </p>
-          <CatalogTable
-            title={copy.accountsTitle}
-            empty={copy.emptyAccounts}
-            columns={[copy.code, copy.name, copy.type, copy.status]}
-            rows={state.accounts.map((item) => [
-              item.code,
-              item.name,
-              item.account_type,
-              item.status,
-            ])}
-            onArchive={
-              state.me.capabilities.can_manage_dimensions
-                ? (code) => {
-                    const item = state.accounts.find((account) => account.code === code);
-                    if (!item) return;
+          {showDimensions ? (
+            <>
+              <CatalogTable
+                title={copy.accountsTitle}
+                empty={copy.emptyAccounts}
+                columns={[copy.code, copy.name, copy.type, copy.status]}
+                rows={state.accounts.map((item) => [
+                  item.code,
+                  item.name,
+                  accountTypeLabel(item.account_type),
+                  dimensionStatusLabel(item.status),
+                ])}
+                onArchive={
+                  state.me.capabilities.can_manage_dimensions
+                    ? (code) => {
+                        const item = state.accounts.find((account) => account.code === code);
+                        if (!item) return;
+                        const context = auth();
+                        if (!context) return;
+                        void runMutation(() =>
+                          patchAccount(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                        );
+                      }
+                    : undefined
+                }
+              />
+              {state.me.capabilities.can_manage_dimensions ? (
+                <form
+                  className="grid gap-3 md:grid-cols-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
                     const context = auth();
-                    if (!context) return;
-                    void runMutation(() =>
-                      patchAccount(apiBaseUrl(), context, item.id, { status: "inactive" }),
-                    );
-                  }
-                : undefined
-            }
-          />
-          {state.me.capabilities.can_manage_dimensions ? (
-            <form
-              className="grid gap-3 md:grid-cols-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const context = auth();
-                if (!context) {
-                  return;
-                }
-                void runMutation(() => createAccount(apiBaseUrl(), context, accountForm));
-              }}
-            >
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.code}
-                value={accountForm.code}
-                onChange={(event) =>
-                  setAccountForm((current) => ({ ...current, code: event.target.value }))
-                }
-              />
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.name}
-                value={accountForm.name}
-                onChange={(event) =>
-                  setAccountForm((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-              <select
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                value={accountForm.account_type}
-                onChange={(event) =>
-                  setAccountForm((current) => ({ ...current, account_type: event.target.value }))
-                }
-              >
-                <option value="revenue">revenue</option>
-                <option value="expense">expense</option>
-                <option value="asset">asset</option>
-                <option value="liability">liability</option>
-                <option value="equity">equity</option>
-                <option value="other">other</option>
-              </select>
-              <Button type="submit">{copy.createAccount}</Button>
-            </form>
-          ) : null}
-
-          <CatalogTable
-            title={copy.departmentsTitle}
-            empty={copy.emptyDepartments}
-            columns={[copy.code, copy.name, copy.status]}
-            rows={state.departments.map((item) => [item.code, item.name, item.status])}
-            onArchive={
-              state.me.capabilities.can_manage_dimensions
-                ? (code) => {
-                    const item = state.departments.find((department) => department.code === code);
-                    if (!item) return;
-                    const context = auth();
-                    if (!context) return;
-                    void runMutation(() =>
-                      patchDepartment(apiBaseUrl(), context, item.id, { status: "inactive" }),
-                    );
-                  }
-                : undefined
-            }
-          />
-          {state.me.capabilities.can_manage_dimensions ? (
-            <form
-              className="grid gap-3 md:grid-cols-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const context = auth();
-                if (!context) {
-                  return;
-                }
-                void runMutation(() => createDepartment(apiBaseUrl(), context, departmentForm));
-              }}
-            >
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.code}
-                value={departmentForm.code}
-                onChange={(event) =>
-                  setDepartmentForm((current) => ({ ...current, code: event.target.value }))
-                }
-              />
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.name}
-                value={departmentForm.name}
-                onChange={(event) =>
-                  setDepartmentForm((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-              <Button type="submit">{copy.createDepartment}</Button>
-            </form>
-          ) : null}
-
-          <CatalogTable
-            title={copy.costCentersTitle}
-            empty={copy.emptyCostCenters}
-            columns={[copy.code, copy.name, copy.status]}
-            rows={state.costCenters.map((item) => [item.code, item.name, item.status])}
-            onArchive={
-              state.me.capabilities.can_manage_dimensions
-                ? (code) => {
-                    const item = state.costCenters.find((center) => center.code === code);
-                    if (!item) return;
-                    const context = auth();
-                    if (!context) return;
-                    void runMutation(() =>
-                      patchCostCenter(apiBaseUrl(), context, item.id, { status: "inactive" }),
-                    );
-                  }
-                : undefined
-            }
-          />
-          {state.me.capabilities.can_manage_dimensions ? (
-            <form
-              className="grid gap-3 md:grid-cols-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const context = auth();
-                if (!context) {
-                  return;
-                }
-                void runMutation(() => createCostCenter(apiBaseUrl(), context, costCenterForm));
-              }}
-            >
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.code}
-                value={costCenterForm.code}
-                onChange={(event) =>
-                  setCostCenterForm((current) => ({ ...current, code: event.target.value }))
-                }
-              />
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.name}
-                value={costCenterForm.name}
-                onChange={(event) =>
-                  setCostCenterForm((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-              <Button type="submit">{copy.createCostCenter}</Button>
-            </form>
-          ) : null}
-
-          <section>
-            <h2 className="text-lg font-semibold text-primary">{copy.versionsTitle}</h2>
-            {state.versions.length === 0 ? (
-              <p className="mt-3 text-sm text-secondary">{copy.emptyVersions}</p>
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {state.versions.map((version) => (
-                  <li
-                    key={version.id}
-                    className="rounded-surface border border-border bg-surface p-4"
+                    if (!context) {
+                      return;
+                    }
+                    void runMutation(() => createAccount(apiBaseUrl(), context, accountForm));
+                  }}
+                >
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.code}
+                    value={accountForm.code}
+                    onChange={(event) =>
+                      setAccountForm((current) => ({ ...current, code: event.target.value }))
+                    }
+                  />
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.name}
+                    value={accountForm.name}
+                    onChange={(event) =>
+                      setAccountForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                  />
+                  <Select
+                    label={copy.type}
+                    value={accountForm.account_type}
+                    onChange={(event) =>
+                      setAccountForm((current) => ({
+                        ...current,
+                        account_type: event.target.value,
+                      }))
+                    }
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-primary">{version.name}</p>
-                        <p className="text-sm text-secondary">
-                          {copy.fiscalYear} {version.fiscal_year} · {version.status}
-                          {version.is_active ? ` · ${copy.active}` : ""}
-                        </p>
-                      </div>
-                      {state.me.capabilities.can_manage_versions ? (
-                        <div className="flex flex-wrap gap-2">
-                          {version.status === "draft" ? (
-                            <Button
-                              variant="secondary"
-                              onClick={() =>
-                                setConfirm({
-                                  title: copy.confirmPublish,
-                                  action: () => {
-                                    const context = auth();
-                                    if (!context) return Promise.resolve();
-                                    return publishBudgetVersion(apiBaseUrl(), context, version.id);
-                                  },
-                                })
-                              }
-                            >
-                              {copy.publish}
-                            </Button>
-                          ) : null}
-                          {version.status === "published" && !version.is_active ? (
-                            <Button
-                              variant="secondary"
-                              onClick={() =>
-                                setConfirm({
-                                  title: copy.confirmActivate,
-                                  action: () => {
-                                    const context = auth();
-                                    if (!context) return Promise.resolve();
-                                    return activateBudgetVersion(apiBaseUrl(), context, version.id);
-                                  },
-                                })
-                              }
-                            >
-                              {copy.activate}
-                            </Button>
-                          ) : null}
-                          {version.status !== "archived" ? (
-                            <Button
-                              variant="ghost"
-                              onClick={() =>
-                                setConfirm({
-                                  title: copy.confirmArchive,
-                                  action: () => {
-                                    const context = auth();
-                                    if (!context) return Promise.resolve();
-                                    return archiveBudgetVersion(apiBaseUrl(), context, version.id);
-                                  },
-                                })
-                              }
-                            >
-                              {copy.archive}
-                            </Button>
+                    <option value="revenue">{copy.accountTypeRevenue}</option>
+                    <option value="expense">{copy.accountTypeExpense}</option>
+                    <option value="asset">{copy.accountTypeAsset}</option>
+                    <option value="liability">{copy.accountTypeLiability}</option>
+                    <option value="equity">{copy.accountTypeEquity}</option>
+                    <option value="other">{copy.accountTypeOther}</option>
+                  </Select>
+                  <Button type="submit">{copy.createAccount}</Button>
+                </form>
+              ) : null}
+
+              <CatalogTable
+                title={copy.departmentsTitle}
+                empty={copy.emptyDepartments}
+                columns={[copy.code, copy.name, copy.status]}
+                rows={state.departments.map((item) => [
+                  item.code,
+                  item.name,
+                  dimensionStatusLabel(item.status),
+                ])}
+                onArchive={
+                  state.me.capabilities.can_manage_dimensions
+                    ? (code) => {
+                        const item = state.departments.find(
+                          (department) => department.code === code,
+                        );
+                        if (!item) return;
+                        const context = auth();
+                        if (!context) return;
+                        void runMutation(() =>
+                          patchDepartment(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                        );
+                      }
+                    : undefined
+                }
+              />
+              {state.me.capabilities.can_manage_dimensions ? (
+                <form
+                  className="grid gap-3 md:grid-cols-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const context = auth();
+                    if (!context) {
+                      return;
+                    }
+                    void runMutation(() => createDepartment(apiBaseUrl(), context, departmentForm));
+                  }}
+                >
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.code}
+                    value={departmentForm.code}
+                    onChange={(event) =>
+                      setDepartmentForm((current) => ({ ...current, code: event.target.value }))
+                    }
+                  />
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.name}
+                    value={departmentForm.name}
+                    onChange={(event) =>
+                      setDepartmentForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                  />
+                  <Button type="submit">{copy.createDepartment}</Button>
+                </form>
+              ) : null}
+
+              <CatalogTable
+                title={copy.costCentersTitle}
+                empty={copy.emptyCostCenters}
+                columns={[copy.code, copy.name, copy.status]}
+                rows={state.costCenters.map((item) => [
+                  item.code,
+                  item.name,
+                  dimensionStatusLabel(item.status),
+                ])}
+                onArchive={
+                  state.me.capabilities.can_manage_dimensions
+                    ? (code) => {
+                        const item = state.costCenters.find((center) => center.code === code);
+                        if (!item) return;
+                        const context = auth();
+                        if (!context) return;
+                        void runMutation(() =>
+                          patchCostCenter(apiBaseUrl(), context, item.id, { status: "inactive" }),
+                        );
+                      }
+                    : undefined
+                }
+              />
+              {state.me.capabilities.can_manage_dimensions ? (
+                <form
+                  className="grid gap-3 md:grid-cols-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const context = auth();
+                    if (!context) {
+                      return;
+                    }
+                    void runMutation(() => createCostCenter(apiBaseUrl(), context, costCenterForm));
+                  }}
+                >
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.code}
+                    value={costCenterForm.code}
+                    onChange={(event) =>
+                      setCostCenterForm((current) => ({ ...current, code: event.target.value }))
+                    }
+                  />
+                  <input
+                    required
+                    className="h-10 rounded-control border border-border px-3 text-sm"
+                    placeholder={copy.name}
+                    value={costCenterForm.name}
+                    onChange={(event) =>
+                      setCostCenterForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                  />
+                  <Button type="submit">{copy.createCostCenter}</Button>
+                </form>
+              ) : null}
+            </>
+          ) : null}
+
+          {showVersions ? (
+            <>
+              <section>
+                <h2 className="text-lg font-semibold text-primary">{copy.versionsTitle}</h2>
+                {state.versions.length === 0 ? (
+                  <p className="mt-3 text-sm text-secondary">{copy.emptyVersions}</p>
+                ) : (
+                  <ul className="mt-3 space-y-3">
+                    {state.versions.map((version) => (
+                      <li
+                        key={version.id}
+                        className="rounded-surface border border-border bg-surface p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-primary">{version.name}</p>
+                            <p className="text-sm text-secondary">
+                              {copy.fiscalYear} {version.fiscal_year} ·{" "}
+                              {versionStatusLabel(version.status)}
+                              {version.is_active ? ` · ${copy.active}` : ""}
+                            </p>
+                          </div>
+                          {state.me.capabilities.can_manage_versions ? (
+                            <div className="flex flex-wrap gap-2">
+                              {version.status === "draft" ? (
+                                <Button
+                                  variant="secondary"
+                                  onClick={() =>
+                                    setConfirm({
+                                      title: copy.confirmPublish,
+                                      action: () => {
+                                        const context = auth();
+                                        if (!context) return Promise.resolve();
+                                        return publishBudgetVersion(
+                                          apiBaseUrl(),
+                                          context,
+                                          version.id,
+                                        );
+                                      },
+                                    })
+                                  }
+                                >
+                                  {copy.publish}
+                                </Button>
+                              ) : null}
+                              {version.status === "published" && !version.is_active ? (
+                                <Button
+                                  variant="secondary"
+                                  onClick={() =>
+                                    setConfirm({
+                                      title: copy.confirmActivate,
+                                      action: () => {
+                                        const context = auth();
+                                        if (!context) return Promise.resolve();
+                                        return activateBudgetVersion(
+                                          apiBaseUrl(),
+                                          context,
+                                          version.id,
+                                        );
+                                      },
+                                    })
+                                  }
+                                >
+                                  {copy.activate}
+                                </Button>
+                              ) : null}
+                              {version.status !== "archived" ? (
+                                <Button
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setConfirm({
+                                      title: copy.confirmArchive,
+                                      action: () => {
+                                        const context = auth();
+                                        if (!context) return Promise.resolve();
+                                        return archiveBudgetVersion(
+                                          apiBaseUrl(),
+                                          context,
+                                          version.id,
+                                        );
+                                      },
+                                    })
+                                  }
+                                >
+                                  {copy.archive}
+                                </Button>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-          {state.me.capabilities.can_manage_versions ? (
-            <form
-              className="grid gap-3 md:grid-cols-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const context = auth();
-                if (!context) {
-                  return;
-                }
-                void runMutation(() =>
-                  createBudgetVersion(apiBaseUrl(), context, {
-                    name: versionForm.name,
-                    fiscal_year: Number(versionForm.fiscal_year),
-                  }),
-                );
-              }}
-            >
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.name}
-                value={versionForm.name}
-                onChange={(event) =>
-                  setVersionForm((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-              <input
-                required
-                className="h-10 rounded-control border border-border px-3 text-sm"
-                placeholder={copy.fiscalYear}
-                value={versionForm.fiscal_year}
-                onChange={(event) =>
-                  setVersionForm((current) => ({ ...current, fiscal_year: event.target.value }))
-                }
-              />
-              <Button type="submit">{copy.createVersion}</Button>
-            </form>
+              {state.me.capabilities.can_manage_versions ? (
+                <form
+                  className="grid gap-3 md:grid-cols-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const context = auth();
+                    if (!context) {
+                      return;
+                    }
+                    void runMutation(() =>
+                      createBudgetVersion(apiBaseUrl(), context, {
+                        name: versionForm.name,
+                        fiscal_year: Number(versionForm.fiscal_year),
+                      }),
+                    );
+                  }}
+                >
+                  <Input
+                    id="version-name"
+                    required
+                    label={copy.name}
+                    value={versionForm.name}
+                    onChange={(event) =>
+                      setVersionForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                  />
+                  <Input
+                    id="version-fiscal-year"
+                    required
+                    type="number"
+                    label={copy.fiscalYear}
+                    value={versionForm.fiscal_year}
+                    onChange={(event) =>
+                      setVersionForm((current) => ({ ...current, fiscal_year: event.target.value }))
+                    }
+                  />
+                  <Button type="submit">{copy.createVersion}</Button>
+                </form>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}
@@ -483,7 +530,11 @@ export function CatalogPage() {
                 void runMutation(confirm.action).then(() => setConfirm(null));
               }}
             >
-              {confirm?.title.includes(copy.publish) ? copy.publish : copy.archive}
+              {confirm?.title === copy.confirmPublish
+                ? copy.publish
+                : confirm?.title === copy.confirmActivate
+                  ? copy.activate
+                  : copy.archive}
             </Button>
           </>
         }
@@ -517,29 +568,29 @@ function CatalogTable({
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-secondary">
-                  {columns.map((column) => (
-                    <th key={column} className="py-2 font-medium">
-                      {column}
-                    </th>
-                  ))}
-                  {onArchive ? <th className="py-2 font-medium">{copy.archiveDimension}</th> : null}
+                {columns.map((column) => (
+                  <th key={column} className="py-2 font-medium">
+                    {column}
+                  </th>
+                ))}
+                {onArchive ? <th className="py-2 font-medium">{copy.archiveDimension}</th> : null}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.join("-")} className="border-b border-border last:border-0">
-                    {row.map((cell) => (
-                      <td key={cell} className="py-2 text-primary">
-                        {cell}
-                      </td>
-                    ))}
-                    {onArchive ? (
-                      <td className="py-2">
-                        <Button variant="ghost" onClick={() => onArchive(row[0])}>
-                          {copy.archiveDimension}
-                        </Button>
-                      </td>
-                    ) : null}
+                  {row.map((cell) => (
+                    <td key={cell} className="py-2 text-primary">
+                      {cell}
+                    </td>
+                  ))}
+                  {onArchive ? (
+                    <td className="py-2">
+                      <Button variant="ghost" onClick={() => onArchive(row[0])}>
+                        {copy.archiveDimension}
+                      </Button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

@@ -114,3 +114,18 @@ def database_unavailable() -> DependencyUnavailableError:
         "DATABASE_UNAVAILABLE",
         "El servicio no está disponible. Inténtalo de nuevo.",
     )
+
+
+class CircuitOpenError(DependencyUnavailableError):
+    def __init__(self, dependency: str) -> None:
+        if dependency == "ai":
+            super().__init__(
+                "AI_UNAVAILABLE",
+                "El copiloto no está disponible. Inténtalo de nuevo.",
+            )
+        else:
+            super().__init__(
+                "STORAGE_UNAVAILABLE",
+                "No se pudo guardar o leer el archivo. Inténtalo de nuevo.",
+            )
+        self.dependency = dependency
