@@ -6,7 +6,6 @@ import { expect, test } from "@playwright/test";
 
 import {
   openVariances,
-  selectNamedVersion,
   signInAs,
   waitForExportReady,
   waitForSelectedVersion,
@@ -202,7 +201,6 @@ test("copilot answers Maintenance in January with matching evidence", async ({ p
 test("keyboard opens a table drill-down control", async ({ page }) => {
   await signInAs(page, "Ana Analyst", "Alpha");
   await openVariances(page);
-  await selectNamedVersion(page, "Alpha");
   const detail = page.getByRole("button", { name: "Abrir detalle" }).first();
   await expect(detail).toBeVisible({ timeout: 20_000 });
   await detail.focus();

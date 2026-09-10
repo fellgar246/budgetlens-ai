@@ -203,7 +203,8 @@ def test_live_eval_is_gated_to_bedrock(env_settings: None) -> None:
         run_live_eval(DeterministicAIProvider())
 
 
-def test_eval_summary_is_markdown_and_omits_prompts(tmp_path: Path) -> None:
+def test_eval_summary_is_markdown_and_omits_prompts(env_settings: None, tmp_path: Path) -> None:
+    del env_settings
     result = run_stub_eval(DeterministicAIProvider())
     rendered = format_eval_summary(result)
     assert rendered.startswith("# Copilot evaluation (stub)")

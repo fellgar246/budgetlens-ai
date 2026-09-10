@@ -59,6 +59,10 @@ def test_http_logs_omit_forbidden_values(client: TestClient) -> None:
 
     handler = _Handler()
     logger = logging.getLogger("budgetlens.http")
+    original_level = logger.level
+    original_disabled = logger.disabled
+    logger.setLevel(logging.INFO)
+    logger.disabled = False
     logger.addHandler(handler)
     try:
         response = client.get(
@@ -72,6 +76,8 @@ def test_http_logs_omit_forbidden_values(client: TestClient) -> None:
         )
     finally:
         logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.disabled = original_disabled
     assert response.status_code == 200
     assert response.headers["x-trace-id"] == "trace-log-001"
     assert captured

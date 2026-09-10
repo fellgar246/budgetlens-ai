@@ -3,10 +3,10 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 API="$ROOT/apps/api"
-if command -v pnpm >/dev/null 2>&1; then
-  PNPM="pnpm"
-else
+if command -v corepack >/dev/null 2>&1; then
   PNPM="corepack pnpm"
+else
+  PNPM="pnpm"
 fi
 REQUIRE_INTEGRATION="${REQUIRE_INTEGRATION:-${CI:-}}"
 REQUIRE_E2E="${REQUIRE_E2E:-}"

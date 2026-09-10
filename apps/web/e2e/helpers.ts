@@ -31,19 +31,6 @@ export async function signInAs(page: Page, userName: string, organizationName?: 
   }
 }
 
-export async function selectNamedVersion(page: Page, name: string) {
-  const version = page.getByLabel("Versión");
-  await expect(version).toBeVisible();
-  const options = version.locator("option");
-  await expect.poll(async () => options.count(), { timeout: 20_000 }).toBeGreaterThan(1);
-  const labels = await options.allTextContents();
-  const match = labels.find((label) => label.includes(name));
-  expect(match, `expected a version labelled ${name}`).toBeTruthy();
-  await version.selectOption({ label: match as string });
-  await expect(page).toHaveURL(/version=/, { timeout: 20_000 });
-  await expect(version).toHaveValue(/.+/);
-}
-
 export async function waitForSelectedVersion(page: Page) {
   const version = page.getByLabel("Versión");
   await expect(version).toBeVisible();

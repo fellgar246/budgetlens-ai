@@ -3,10 +3,10 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 API="$ROOT/apps/api"
-if command -v pnpm >/dev/null 2>&1; then
-  PNPM="pnpm"
-else
+if command -v corepack >/dev/null 2>&1; then
   PNPM="corepack pnpm"
+else
+  PNPM="pnpm"
 fi
 DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://budgetlens:budgetlens_local_only@127.0.0.1:5433/budgetlens}"
 API_PORT="${API_PORT:-8000}"

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { chooseUser, openVariances, selectNamedVersion, signInAs } from "./helpers";
+import { chooseUser, openVariances, signInAs } from "./helpers";
 
 test("status screen loads after a local operator session", async ({ page }) => {
   await chooseUser(page, "Oli Operator");
@@ -20,7 +20,6 @@ test("zero-budget percent shows N/A on variances", async ({ page }) => {
   await expect(groupBy).toBeVisible();
   await groupBy.selectOption("account");
   await expect(page).toHaveURL(/group_by=account/, { timeout: 20_000 });
-  await selectNamedVersion(page, "Alpha");
   await expect(page.getByRole("button", { name: "Abrir detalle" }).first()).toBeVisible({
     timeout: 20_000,
   });
@@ -30,7 +29,6 @@ test("zero-budget percent shows N/A on variances", async ({ page }) => {
 test("department drill-down keeps filters in the breadcrumb", async ({ page }) => {
   await signInAs(page, "Ana Analyst", "Alpha");
   await openVariances(page);
-  await selectNamedVersion(page, "Alpha");
   const detail = page.getByRole("button", { name: "Abrir detalle" }).first();
   await expect(detail).toBeVisible({ timeout: 20_000 });
   await detail.click();

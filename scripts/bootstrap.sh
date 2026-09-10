@@ -11,10 +11,10 @@ else
   echo ".env already exists"
 fi
 
-if command -v pnpm >/dev/null 2>&1; then
-  PNPM="pnpm"
-elif command -v corepack >/dev/null 2>&1; then
+if command -v corepack >/dev/null 2>&1; then
   PNPM="corepack pnpm"
+elif command -v pnpm >/dev/null 2>&1; then
+  PNPM="pnpm"
 else
   echo "pnpm is not available."
   echo "Enable the pinned package manager with:"
