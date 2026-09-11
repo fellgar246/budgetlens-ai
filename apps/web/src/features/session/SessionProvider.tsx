@@ -69,9 +69,23 @@ function SessionInner({ children }: { children: ReactNode }) {
       setUsers([]);
       return;
     }
+
+    let active = true;
     void getDevIdentities(apiBaseUrl())
-      .then((result) => setUsers(result.data.users))
-      .catch(() => setUsers([]));
+      .then((result) => {
+        if (active) {
+          setUsers(result.data.users);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUsers([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [auth.mode]);
 
   useEffect(() => {
@@ -80,20 +94,32 @@ function SessionInner({ children }: { children: ReactNode }) {
       setMe(null);
       return;
     }
+
+    let active = true;
     const loadOrganizations = () => {
       void listOrganizations(apiBaseUrl(), sessionAuth(userId))
         .then((result) => {
+          if (!active) {
+            return;
+          }
           setOrganizations(result.data.items);
           if (organizationId && !result.data.items.some((item) => item.id === organizationId)) {
             setOrganizationIdState("");
             writeDevSession(userId, null);
           }
         })
-        .catch(() => setOrganizations([]));
+        .catch(() => {
+          if (active) {
+            setOrganizations([]);
+          }
+        });
     };
     loadOrganizations();
     window.addEventListener("budgetlens-session", loadOrganizations);
-    return () => window.removeEventListener("budgetlens-session", loadOrganizations);
+    return () => {
+      active = false;
+      window.removeEventListener("budgetlens-session", loadOrganizations);
+    };
   }, [userId, organizationId]);
 
   useEffect(() => {
@@ -101,14 +127,27 @@ function SessionInner({ children }: { children: ReactNode }) {
       setMe(null);
       return;
     }
+
+    let active = true;
     const loadMe = () => {
       void getMe(apiBaseUrl(), sessionAuth(userId, organizationId || undefined))
-        .then((result) => setMe(result.data))
-        .catch(() => setMe(null));
+        .then((result) => {
+          if (active) {
+            setMe(result.data);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setMe(null);
+          }
+        });
     };
     loadMe();
     window.addEventListener("budgetlens-session", loadMe);
-    return () => window.removeEventListener("budgetlens-session", loadMe);
+    return () => {
+      active = false;
+      window.removeEventListener("budgetlens-session", loadMe);
+    };
   }, [userId, organizationId, generation]);
 
   const clearViewContext = useCallback(
