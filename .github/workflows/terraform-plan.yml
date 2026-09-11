@@ -33,7 +33,7 @@ jobs:
       TF_ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
       TF_ROOT: infrastructure/terraform/environments/${{ github.event.inputs.environment || 'dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: hashicorp/setup-terraform@v3
         with:

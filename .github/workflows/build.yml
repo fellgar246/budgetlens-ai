@@ -24,7 +24,7 @@ jobs:
       image_uri: ${{ steps.image.outputs.uri }}
       app_version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Reject latest as a deploy reference
         run: |
