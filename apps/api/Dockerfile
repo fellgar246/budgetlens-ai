@@ -20,7 +20,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
-RUN useradd --system --uid 10001 --create-home budgetlens \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home budgetlens \
     && mkdir -p /var/lib/budgetlens/storage
 
 WORKDIR /app

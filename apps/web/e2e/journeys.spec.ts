@@ -4,12 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
-import {
-  openVariances,
-  signInAs,
-  waitForExportReady,
-  waitForSelectedVersion,
-} from "./helpers";
+import { openVariances, signInAs, waitForExportReady, waitForSelectedVersion } from "./helpers";
 
 const sampleDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

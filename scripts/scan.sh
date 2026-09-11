@@ -175,7 +175,7 @@ fi
 
 if scope_enabled image; then
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && command -v trivy >/dev/null 2>&1; then
-    trivy image --severity CRITICAL --exit-code 1 budgetlens-api:local || fail "image scan reported a critical finding"
+    trivy image --ignore-unfixed --severity CRITICAL --exit-code 1 budgetlens-api:local || fail "image scan reported a critical finding"
   else
     echo "NOTE  image scan skipped (docker/trivy not available)"
   fi

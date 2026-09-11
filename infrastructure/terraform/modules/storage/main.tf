@@ -17,6 +17,7 @@ locals {
 resource "aws_s3_bucket" "logs" {
   # checkov:skip=CKV_AWS_18: This bucket is the access-log destination.
   # checkov:skip=CKV_AWS_144: Cross-region replication is omitted to control cost.
+  # checkov:skip=CKV_AWS_145: ALB and S3 server access logs require SSE-S3, not a customer KMS key.
   # checkov:skip=CKV2_AWS_62: Event notifications are not required for access logs.
   count = var.enable_access_logs ? 1 : 0
 
@@ -45,7 +46,6 @@ resource "aws_s3_bucket_versioning" "logs" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
-  # checkov:skip=CKV_AWS_145: ALB and S3 server access logs require SSE-S3, not a customer KMS key.
   count = var.enable_access_logs ? 1 : 0
 
   bucket = aws_s3_bucket.logs[0].id

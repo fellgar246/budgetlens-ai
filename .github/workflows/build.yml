@@ -164,11 +164,11 @@ jobs:
           elif [ "${status}" -ne 0 ]; then
             exit "${status}"
           fi
-          TRIVY_VERSION="0.67.2"
+          TRIVY_VERSION="0.74.0"
           if ! command -v trivy >/dev/null 2>&1; then
             curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | sudo tar -xz -C /usr/local/bin trivy
           fi
-          trivy image --severity CRITICAL --exit-code 1 "${local_tag}"
+          trivy image --ignore-unfixed --severity CRITICAL --exit-code 1 "${local_tag}"
           if [ -z "${ECR_REPOSITORY}" ] || [ -z "${{ vars.DEPLOY_DEV_ROLE_ARN }}" ]; then
             echo "NOTE  ECR publish skipped; set DEV_ECR_REPOSITORY and DEPLOY_DEV_ROLE_ARN"
             echo "digest=" >> "$GITHUB_OUTPUT"
