@@ -33,7 +33,7 @@ jobs:
       TF_ROOT: infrastructure/terraform/environments/dev
       AWS_REGION: ${{ vars.AWS_REGION }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
