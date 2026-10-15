@@ -213,7 +213,7 @@ jobs:
             --rollback-target "${{ steps.previous.outputs.task_definition }} snapshot=${snapshot:-none}" \
             --output "var/release-evidence-prod.json"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: release-evidence-prod-${{ steps.image.outputs.sha }}

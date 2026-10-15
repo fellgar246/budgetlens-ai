@@ -93,7 +93,7 @@ jobs:
           } >> plan-summary.md
 
       - name: Upload plan file as a restricted artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.sha }}
           path: |
